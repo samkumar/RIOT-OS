@@ -13,7 +13,7 @@ HEXFILE=$2
 FLASHADDR=0
 
 # setup JLink command file
-echo "speed 1000" >> $BINDIR/burn.seg
+echo "speed 1000" > $BINDIR/burn.seg
 echo "loadbin $HEXFILE $FLASHADDR" >> $BINDIR/burn.seg
 echo "r" >> $BINDIR/burn.seg
 echo "g" >> $BINDIR/burn.seg

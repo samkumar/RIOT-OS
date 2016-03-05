@@ -9,7 +9,7 @@
 BINDIR=$1
 
 # create JLink command file for resetting the board
-echo "r" >> $BINDIR/reset.seg
+echo "r" > $BINDIR/reset.seg
 echo "g" >> $BINDIR/reset.seg
 echo "exit" >> $BINDIR/reset.seg
 

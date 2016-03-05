@@ -17,7 +17,7 @@
  * @author      Thomas Eichinger <thomas.eichinger@fu-berlin.de>
  * @author      Hauke Petersen <hauke.petersen@fu-berlin.de>
  * @author      Peter Kietzmann <peter.kietzmann@haw-hamburg.de>
- * @author    Michael Andersen <m.andersen@berkeley.edu>
+ * @author      Michael Andersen <m.andersen@berkeley.edu>
  */
 
 #ifndef PERIPH_CONF_H_

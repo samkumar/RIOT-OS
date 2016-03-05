@@ -1,6 +1,6 @@
 # define the cpu used by Hamilton
 export CPU = samd21
-export CPU_MODEL = samr21e18a
+export CPU_MODEL = samr21x18a
 
 ## setup the boards dependencies
 include $(RIOTBOARD)/$(BOARD)/Makefile.dep
@@ -21,6 +21,3 @@ export RESET_FLAGS = $(BINDIR)
 
 export TERMPROG = JLinkRTTClient
 export OBJDUMPFLAGS += --disassemble --source --disassembler-options=force-thumb
-
-# include cortex defaults
-include $(RIOTBOARD)/Makefile.include.cortexm_common
