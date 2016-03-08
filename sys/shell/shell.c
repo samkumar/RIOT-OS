@@ -97,7 +97,7 @@ static void print_help(const shell_command_t *command_list)
     }
 }
 
-static void handle_input_line(const shell_command_t *command_list, char *line)
+void handle_input_line(const shell_command_t *command_list, char *line)
 {
     static const char *INCORRECT_QUOTING = "shell: incorrect quoting";
 
