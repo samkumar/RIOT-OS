@@ -51,7 +51,7 @@ void at86rf2xx_setup(at86rf2xx_t *dev, const at86rf2xx_params_t *params)
 
 void at86rf2xx_reset(at86rf2xx_t *dev)
 {
-#if CPUID_LEN
+#if CPUID_LEN && !defined(SERIAL)
 /* make sure that the buffer is always big enough to store a 64bit value */
 #   if CPUID_LEN < IEEE802154_LONG_ADDRESS_LEN
     uint8_t cpuid[IEEE802154_LONG_ADDRESS_LEN];
@@ -70,6 +70,8 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     dev->netdev.seq = 0;
     dev->netdev.flags = 0;
     /* set short and long address */
+
+#ifndef SERIAL
 #if CPUID_LEN
     /* in case CPUID_LEN < 8, fill missing bytes with zeros */
     memset(cpuid, 0, CPUID_LEN);
@@ -92,6 +94,10 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
 #else
     at86rf2xx_set_addr_long(dev, AT86RF2XX_DEFAULT_ADDR_LONG);
     at86rf2xx_set_addr_short(dev, AT86RF2XX_DEFAULT_ADDR_SHORT);
+#endif
+#else //serial
+     at86rf2xx_set_addr_long(dev, NTOHLL(0x00126d0300000000 | (SERIAL)));
+     at86rf2xx_set_addr_short(dev, NTOHS(SERIAL));
 #endif
     /* set default PAN id */
     at86rf2xx_set_pan(dev, AT86RF2XX_DEFAULT_PANID);
