@@ -78,5 +78,7 @@ void shell_run(const shell_command_t *commands, char *line_buf, int len) NORETUR
 }
 #endif
 
+void handle_input_line(const shell_command_t *command_list, char *line);
+
 #endif /* __SHELL_H */
 /** @} */
