@@ -262,7 +262,7 @@ int uart_stdio_read(char* buffer, int count) {
         }
         uint32_t last_wakeup = xtimer_now();
         while(1) {
-          xtimer_usleep_until(&last_wakeup, STDIO_POLL_INTERVAL);
+          xtimer_periodic_wakeup(&last_wakeup, STDIO_POLL_INTERVAL);
           res = rtt_read(buffer, count);
           if (res > 0)
             return res;
@@ -275,7 +275,7 @@ int uart_stdio_write(const char* buffer, int len) {
     int written = rtt_write(buffer, len);
     uint32_t last_wakeup = xtimer_now();
     while (blocking_stdout && written < len) {
-        xtimer_usleep_until(&last_wakeup, STDIO_POLL_INTERVAL);
+        xtimer_periodic_wakeup(&last_wakeup, STDIO_POLL_INTERVAL);
         written += rtt_write(&buffer[written], len-written);
     }
     return written;
