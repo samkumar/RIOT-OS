@@ -139,6 +139,12 @@ endif
 ifneq (,$(filter gnrc_tcp,$(USEMODULE)))
   DIRS += transport_layer/tcp
 endif
+ifneq (,$(filter gnrc_tcp_freebsd,$(USEMODULE)))
+    DIRS += transport_layer/tcp_freebsd
+endif
+ifneq (,$(filter gnrc_zep,$(USEMODULE)))
+    DIRS += application_layer/zep
+endif
 ifneq (,$(filter gnrc_tftp,$(USEMODULE)))
   DIRS += application_layer/tftp
 endif
