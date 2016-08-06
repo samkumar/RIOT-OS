@@ -112,6 +112,17 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     tmp |= (AT86RF2XX_TRX_CTRL_0_CLKM_CTRL__OFF);
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_CTRL_0, tmp);
 
+	/* This is set whether HARDWARE_CSMA_EN is 1 or 0, because we configure the
+     * backoff to be 0 when HARDWARE_CSMA_EN is 0 and then do our own backoff
+     * manually in software.
+     */
+    at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA, true);
+#if HARDWARE_CSMA_EN
+    at86rf2xx_set_max_retries(dev, HARDWARE_MAX_FRAME_RETRIES);
+#else
+    at86rf2xx_set_max_retries(dev, 0);
+#endif
+
     /* enable interrupts */
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK,
                         AT86RF2XX_IRQ_STATUS_MASK__TRX_END);
@@ -172,6 +183,7 @@ void at86rf2xx_tx_exec(at86rf2xx_t *dev)
 
     /* write frame length field in FIFO */
     at86rf2xx_sram_write(dev, 0, &(dev->tx_frame_len), 1);
+    
     /* trigger sending of pre-loaded frame */
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_STATE,
                         AT86RF2XX_TRX_STATE__TX_START);
