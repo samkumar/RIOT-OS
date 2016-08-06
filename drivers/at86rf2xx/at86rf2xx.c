@@ -146,6 +146,12 @@ void at86rf2xx_tx_prepare(at86rf2xx_t *dev)
     } while (state == AT86RF2XX_STATE_BUSY_RX_AACK ||
              state == AT86RF2XX_STATE_BUSY_TX_ARET);
     if (state != AT86RF2XX_STATE_TX_ARET_ON) {
+
+        /* If we send a packet, don't go back to sleep after that! */
+        if (state == AT86RF2XX_STATE_SLEEP) {
+            state = AT86RF2XX_STATE_RX_AACK_ON;
+        }
+
         dev->idle_state = state;
     }
     at86rf2xx_set_state(dev, AT86RF2XX_STATE_TX_ARET_ON);
