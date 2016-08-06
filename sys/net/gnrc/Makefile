@@ -127,6 +127,9 @@ endif
 ifneq (,$(filter gnrc_udp,$(USEMODULE)))
     DIRS += transport_layer/udp
 endif
+ifneq (,$(filter gnrc_tcp_freebsd,$(USEMODULE)))
+    DIRS += transport_layer/tcp_freebsd
+endif
 ifneq (,$(filter gnrc_zep,$(USEMODULE)))
     DIRS += application_layer/zep
 endif

@@ -80,6 +80,9 @@ typedef enum {
 #ifdef MODULE_GNRC_TCP
     GNRC_NETTYPE_TCP,           /**< Protocol is TCP */
 #endif
+#ifdef MODULE_GNRC_TCP_FREEBSD
+    GNRC_NETTYPE_TCP,           /**< Protocol is TCP */
+#endif
 #ifdef MODULE_GNRC_UDP
     GNRC_NETTYPE_UDP,           /**< Protocol is UDP */
 #endif
