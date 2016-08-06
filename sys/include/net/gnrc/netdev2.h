@@ -67,6 +67,14 @@ extern "C" {
  * @brief   Type for @ref msg_t if device updates dutycycle operation
  */
 #define GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_REMOVE_QUEUE (0x1237U)
+/**
+ * @brief   Type for @ref msg_t if a link-layer retransmission or CSMA attempt needs to be performed
+ */
+#define GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_LINK_RETRANSMIT (0x1238U)
+/**
+ * @brief   Type for @ref msg_t if a link-layer retransmission or CSMA attempt needs to be performed
+ */
+#define GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_CHECK_QUEUE (0x1239U)
 
 /**
  * @brief   Mask for @ref gnrc_mac_tx_feedback_t
@@ -95,6 +103,9 @@ typedef struct gnrc_netdev2 {
      * the underlying device understands and send it.
      */
     int (*send)(struct gnrc_netdev2 *dev, gnrc_pktsnip_t *snip);
+
+    int (*send_without_release)(struct gnrc_netdev2 *dev, gnrc_pktsnip_t *snip, bool set_pending_bit);
+    int (*resend_without_release)(struct gnrc_netdev2 *dev, gnrc_pktsnip_t *snip, bool set_pending_bit);
 
     /** hskim
      * @brief Send a beacon using this device

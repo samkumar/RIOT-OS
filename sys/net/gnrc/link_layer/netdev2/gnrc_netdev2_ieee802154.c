@@ -28,12 +28,16 @@
 
 static gnrc_pktsnip_t *_recv(gnrc_netdev2_t *gnrc_netdev2);
 static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt);
+static int _send_without_release(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt, bool set_pending_bit);
+static int _resend_without_release(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt, bool set_pending_bit);
 static int _send_beacon(gnrc_netdev2_t *gnrc_netdev2);
 
 int gnrc_netdev2_ieee802154_init(gnrc_netdev2_t *gnrc_netdev2,
                                  netdev2_ieee802154_t *dev)
 {
     gnrc_netdev2->send = _send;
+    gnrc_netdev2->send_without_release = _send_without_release;
+    gnrc_netdev2->resend_without_release = _resend_without_release;
     gnrc_netdev2->send_beacon = _send_beacon;
     gnrc_netdev2->recv = _recv;
     gnrc_netdev2->dev = (netdev2_t *)dev;
@@ -165,7 +169,7 @@ static gnrc_pktsnip_t *_recv(gnrc_netdev2_t *gnrc_netdev2)
     return pkt;
 }
 
-static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
+static int _send_impl(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt, bool retransmission, bool release_pkt, bool set_pending_bit)
 {
     netdev2_t *netdev = gnrc_netdev2->dev;
     netdev2_ieee802154_t *state = (netdev2_ieee802154_t *)gnrc_netdev2->dev;
@@ -186,6 +190,9 @@ static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
     if (pkt->type != GNRC_NETTYPE_NETIF) {
         DEBUG("_send_ieee802154: first header is not generic netif header\n");
         return -EBADMSG;
+    }
+    if (set_pending_bit) {
+        flags |= IEEE802154_FCF_FRAME_PEND;
     }
     netif_hdr = pkt->data;
     /* prepare destination address */
@@ -218,14 +225,17 @@ static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
  	//dst = (uint8_t*)&ddd;
 #endif
 #if ROUTER
- 	int16_t ddd = 0x1e17;
- 	dst = (uint8_t*)&ddd;
+ 	//int16_t ddd = 0x1e17;
+ 	//dst = (uint8_t*)&ddd;
 #endif
 #endif
+    if (!retransmission) {
+        state->seq++;
+    }
     /* fill MAC header, seq should be set by device */
     if ((res = ieee802154_set_frame_hdr(mhr, src, src_len,
                                         dst, dst_len, dev_pan,
-                                        dev_pan, flags, state->seq++)) == 0) {
+                                        dev_pan, flags, state->seq)) == 0) {
         DEBUG("_send_ieee802154: Error preperaring frame\n");
         return -EINVAL;
     }
@@ -255,9 +265,26 @@ static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
     else {
         return -ENOBUFS;
     }
+
+    /* If release_pkt is false, then only release the iovec, not the rest. */
+    if (!release_pkt) {
+        pkt->next = NULL;
+    }
     /* release old data */
     gnrc_pktbuf_release(pkt);
     return res;
+}
+
+static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt) {
+    return _send_impl(gnrc_netdev2, pkt, false, true, false);
+}
+
+static int _send_without_release(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt, bool set_pending_bit) {
+    return _send_impl(gnrc_netdev2, pkt, false, false, set_pending_bit);
+}
+
+static int _resend_without_release(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt, bool set_pending_bit) {
+    return _send_impl(gnrc_netdev2, pkt, true, false, set_pending_bit);
 }
 
 /* hskim: send Data Request MAC command for MAC operation */
@@ -282,7 +309,7 @@ static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
  	 /* ToDo: Current version does not use a neighbor discovery protocol, which cannot support unicast.
               We can manually set a destination (router's address) here */
      dst_len = IEEE802154_SHORT_ADDRESS_LEN;
- 	 int16_t ddd = 0x166d;;
+ 	 int16_t ddd = 0x7976;
  	 dst = (uint8_t*)&ddd;
 
      /* fill MAC header, seq should be set by device */
