@@ -339,6 +339,9 @@ typedef enum {
      * @brief   Enable/disable IQ inverted.
      */
     NETOPT_IQ_INVERT,
+     * @brief   en/disable radio duty-cycling
+     */
+   NETOPT_DUTYCYCLE,
 
     /* add more options if needed */
 
