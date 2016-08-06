@@ -72,6 +72,10 @@
 #include "net/gnrc/tcp.h"
 #endif
 
+#ifdef MODULE_GNRC_TCP_FREEBSD
+#include "net/gnrc/tcp_freebsd.h"
+#endif
+
 #ifdef MODULE_LWIP
 #include "lwip.h"
 #endif
@@ -143,6 +147,15 @@ void auto_init(void)
 #ifdef MODULE_GNRC_TCP
     DEBUG("Auto init TCP module\n");
     gnrc_tcp_init();
+#endif
+#ifdef MODULE_GNRC_TCP_FREEBSD
+    DEBUG("Auto init FreeBSD TCP module")
+    gnrc_tcp_freebsd_init();
+#endif
+#ifdef MODULE_DHT
+    DEBUG("Auto init DHT devices.\n");
+    extern void dht_auto_init(void);
+    dht_auto_init();
 #endif
 #ifdef MODULE_LWIP
     DEBUG("Bootstraping lwIP.\n");
