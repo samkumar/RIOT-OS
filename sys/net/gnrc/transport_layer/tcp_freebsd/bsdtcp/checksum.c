@@ -1,7 +1,10 @@
 /* This isn't from the BSD code.
  * This is taken from my implementation of TCP in PC userland.
  */
+#include "../gnrc_tcp_freebsd_internal.h"
 #include "tcp.h"
+
+#include <stdint.h>
 
 inline uint16_t deref_safe(uint16_t* unaligned) {
     return ((uint16_t) *((uint8_t*) unaligned))
@@ -13,7 +16,6 @@ uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
     uint32_t total;
     uint16_t* current;
     uint16_t* end;
-    uint8_t* currbuf;
     uint32_t currlen;
     int starthalf; // 1 if the end of the last iovec was not half-word aligned
     struct {
@@ -32,7 +34,7 @@ uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
     pseudoheader.reserved2 = 0;
     pseudoheader.protocol = 6; // TCP
     pseudoheader.tcplen = (uint32_t) htonl(len);
-    
+
     total = 0;
     for (current = (uint16_t*) &pseudoheader;
          current < (uint16_t*) (&pseudoheader + 1); current++) {
@@ -59,15 +61,15 @@ uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
             starthalf = 0;
         }
         while (current != end) {
-            // read the memory byte by byte, in case iovec isn't word-aligned 
+            // read the memory byte by byte, in case iovec isn't word-aligned
             total += deref_safe(current++);
         }
         tcpseg = tcpseg->iov_next;
     } while (tcpseg != NULL);
-        
+
     while (total >> 16) {
         total = (total & 0xFFFF) + (total >> 16);
     }
-    
+
     return ~((uint16_t) total);
 }

@@ -141,7 +141,7 @@ SYSCTL_INT(_net_inet_tcp_sack, OID_AUTO, maxholes, CTLFLAG_VNET | CTLFLAG_RW,
 VNET_DEFINE(int, tcp_sack_globalmaxholes) = 65536;
 #define	V_tcp_sack_globalmaxholes	VNET(tcp_sack_globalmaxholes)
 SYSCTL_INT(_net_inet_tcp_sack, OID_AUTO, globalmaxholes, CTLFLAG_VNET | CTLFLAG_RW,
-    &VNET_NAME(tcp_sack_globalmaxholes), 0, 
+    &VNET_NAME(tcp_sack_globalmaxholes), 0,
     "Global maximum number of TCP SACK holes");
 
 VNET_DEFINE(int, tcp_sack_globalholes) = 0;
@@ -151,6 +151,10 @@ SYSCTL_INT(_net_inet_tcp_sack, OID_AUTO, globalholes, CTLFLAG_VNET | CTLFLAG_RD,
     "Global number of TCP SACK holes currently allocated");
 #endif
 
+#include "tcp.h"
+#include "tcp_fsm.h"
+#include "tcp_seq.h"
+#include "tcp_timer.h"
 #include "tcp_var.h"
 #include "sys/queue.h"
 
@@ -169,12 +173,12 @@ uint8_t sackhole_bmp[SACKHOLE_BMP_SIZE];
 
 /* Initialize the pool of SACK holes. */
 void
-tcp_sack_init()
+tcp_sack_init(void)
 {
 	bmp_init(sackhole_bmp, SACKHOLE_BMP_SIZE);
 }
 
-struct sackhole* sackhole_alloc() {
+struct sackhole* sackhole_alloc(void) {
     size_t freeindex = bmp_countset(sackhole_bmp, SACKHOLE_BMP_SIZE, 0, SACKHOLE_BMP_SIZE);
     if (freeindex >= SACKHOLE_BMP_SIZE) {
     	return NULL; // all sackholes are allocated already!
@@ -482,18 +486,18 @@ tcp_sack_doack(struct tcpcb *tp, struct tcpopt *to, tcp_seq th_ack)
 			/* Go to the previous sack block. */
 			sblkp--;
 		} else {
-			/* 
-			 * We failed to add a new hole based on the current 
-			 * sack block.  Skip over all the sack blocks that 
+			/*
+			 * We failed to add a new hole based on the current
+			 * sack block.  Skip over all the sack blocks that
 			 * fall completely to the right of snd_fack and
 			 * proceed to trim the scoreboard based on the
 			 * remaining sack blocks.  This also trims the
 			 * scoreboard for th_ack (which is sack_blocks[0]).
 			 */
-			while (sblkp >= sack_blocks && 
+			while (sblkp >= sack_blocks &&
 			       SEQ_LT(tp->snd_fack, sblkp->start))
 				sblkp--;
-			if (sblkp >= sack_blocks && 
+			if (sblkp >= sack_blocks &&
 			    SEQ_LT(tp->snd_fack, sblkp->end))
 				tp->snd_fack = sblkp->end;
 		}

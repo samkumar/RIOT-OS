@@ -29,6 +29,14 @@
  *	@(#)tcp_subr.c	8.2 (Berkeley) 5/24/95
  */
 
+#include "tcp.h"
+#include "tcp_fsm.h"
+#include "tcp_seq.h"
+#include "tcp_timer.h"
+#include "tcp_var.h"
+
+#include "tcp_const.h"
+
 enum tcp_timewait_consts {
     V_nolocaltimewait = 0 // For now, to keep things simple
 };
@@ -66,7 +74,7 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 	char* bufreal;
 	int win = 0;
 	char* buf;
-	
+
 	to.to_flags = 0;
 
 	/*
@@ -79,7 +87,7 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 		to.to_tsecr = /*tw->t_recent*/tp->ts_recent;
 	}
 	optlen = tcp_addoptions(&to, opt);
-	
+
 	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + sizeof(struct ip_iovec);
 	bufreal = ip_malloc(alen + 3);
 	if (bufreal == NULL) {
@@ -114,12 +122,12 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 	nth->th_flags = flags;
 	nth->th_win = htons(tp->tw_last_win);
 	nth->th_urp = 0;
-	
+
 	memcpy(nth + 1, opt, optlen);
-	
+
 	send_message(tp, msg, nth, sizeof(struct tcphdr) + optlen);
 	ip_free(bufreal);
-	
+
 	return 0;
 #if 0
 //	struct inpcb *inp = tw->tw_inpcb;

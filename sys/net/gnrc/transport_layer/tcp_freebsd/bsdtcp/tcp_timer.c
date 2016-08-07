@@ -30,7 +30,16 @@
  * $FreeBSD$
  */
 
+#include <stdio.h>
+
+#include "../gnrc_tcp_freebsd_internal.h"
+#include "errno.h"
 #include "lbuf.h"
+#include "tcp_fsm.h"
+#include "tcp_timer.h"
+#include "tcp_var.h"
+
+#include "tcp_const.h"
 
 #if 0
 int V_tcp_pmtud_blackhole_detect = 0;
@@ -38,12 +47,6 @@ int V_tcp_pmtud_blackhole_failed = 0;
 int V_tcp_pmtud_blackhole_activated = 0;
 int V_tcp_pmtud_blackhole_activated_min_mss = 0;
 #endif
-
-enum tcp_timer_consts {
-//    V_tcp_v6pmtud_blackhole_mss = FRAMECAP_6LOWPAN - sizeof(struct ip6_hdr) - sizeof(struct tcphdr), // Doesn't matter unless blackhole_detect is 1.
-    tcp_rexmit_drop_options = 1, // drop options after a few retransmits
-    always_keepalive = 1,
-};
 
 /*
  * TCP timer processing.
@@ -271,7 +274,7 @@ tcp_timer_persist(struct tcpcb* tp)
 
 	tcp_setpersist(tp);
 	tp->t_flags |= TF_FORCEDATA;
-	printf("Persist output: %d bytes in sendbuf\n", lbuf_used_space(&tp->sendbuf));
+	printf("Persist output: %lu bytes in sendbuf\n", lbuf_used_space(&tp->sendbuf));
 	(void) tcp_output(tp);
 	tp->t_flags &= ~TF_FORCEDATA;
 
@@ -287,6 +290,7 @@ out:
 	INP_INFO_RUNLOCK(&V_tcbinfo);
 	CURVNET_RESTORE();
 #endif
+    return;
 }
 
 void
@@ -336,8 +340,8 @@ tcp_timer_2msl(struct tcpcb* tp)
 	 * If in TIME_WAIT state just ignore as this timeout is handled in
 	 * tcp_tw_2msl_scan(). (Sam: not anymore)
 	 *
-	 * If fastrecycle of FIN_WAIT_2, in FIN_WAIT_2 and receiver has closed, 
-	 * there's no point in hanging onto FIN_WAIT_2 socket. Just close it. 
+	 * If fastrecycle of FIN_WAIT_2, in FIN_WAIT_2 and receiver has closed,
+	 * there's no point in hanging onto FIN_WAIT_2 socket. Just close it.
 	 * Ignore fact that there were recent incoming segments.
 	 */
 #if 0
@@ -349,16 +353,16 @@ tcp_timer_2msl(struct tcpcb* tp)
 	}
 #endif
 	if (tcp_fast_finwait2_recycle && tp->t_state == TCPS_FIN_WAIT_2/* &&
-	    tp->t_inpcb && tp->t_inpcb->inp_socket && 
+	    tp->t_inpcb && tp->t_inpcb->inp_socket &&
 	    (tp->t_inpcb->inp_socket->so_rcv.sb_state & SBS_CANTRCVMORE)*/) {
 //		TCPSTAT_INC(tcps_finwait2_drops);
 		tp = tcp_close(tp);
 		connection_lost(tp, CONN_LOST_NORMAL);
-	} else if (tp->t_state = TCP6S_TIME_WAIT) { // Added by Sam
+	} else if (tp->t_state == TCP6S_TIME_WAIT) { // Added by Sam
 		/* Normally, this timer isn't used for sockets in the Time-wait state; instead the
 		   tcp_tw_2msl_scan method is called periodically on the slow timer, and expired
 		   tcbtw structs are closed and freed.
-		   
+
 		   Instead, I keep the socket around, so I just use this timer to do it. */
 		tp = tcp_close(tp);
 		connection_lost(tp, CONN_LOST_NORMAL);
@@ -396,7 +400,7 @@ tcp_timer_rexmt(struct tcpcb *tp)
 {
 //	CURVNET_SET(tp->t_vnet);
 	int rexmt;
-	int headlocked;
+	//int headlocked;
 	uint32_t ticks = get_ticks();
 	KASSERT(tpistimeractive(tp, TT_REXMT), ("Rexmt timer running, but unmarked\n"));
 	tpcleartimeractive(tp, TT_REXMT); // for our own bookkeeping of active timers
@@ -444,11 +448,11 @@ tcp_timer_rexmt(struct tcpcb *tp)
 
 		tp = tcp_drop(tp, tp->t_softerror ?
 			      tp->t_softerror : ETIMEDOUT);
-		headlocked = 1;
+		//headlocked = 1;
 		goto out;
 	}
 //	INP_INFO_RUNLOCK(&V_tcbinfo);
-	headlocked = 0;
+	//headlocked = 0;
 	if (tp->t_state == TCPS_SYN_SENT) {
 		/*
 		 * If the SYN was retransmitted, indicate CWND to be
@@ -525,7 +529,7 @@ tcp_timer_rexmt(struct tcpcb *tp)
 			optlen = tp->t_maxopd - tp->t_maxseg;
 			tp->t_pmtud_saved_maxopd = tp->t_maxopd;
 
-			/* 
+			/*
 			 * Reduce the MSS to blackhole value or to the default
 			 * in an attempt to retransmit.
 			 */
@@ -657,6 +661,7 @@ out:
 		INP_INFO_RUNLOCK(&V_tcbinfo);
 	CURVNET_RESTORE();
 #endif
+    return;
 }
 
 int
@@ -685,14 +690,14 @@ tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta) {
 		tos_timer = TOS_2MSL;
 		break;
 	default:
-		printf("Invalid timer 0x%x: skipping\n", timer_type);
+		printf("Invalid timer 0x%lx: skipping\n", timer_type);
 		return;
 	}
 	if (delta) {
 	    tpmarktimeractive(tp, timer_type);
 		if (tpistimeractive(tp, TT_REXMT) && tpistimeractive(tp, TT_PERSIST)) {
 		    char* msg = "TCP CRITICAL FAILURE: Retransmit and Persist timers are simultaneously running!\n";
-		    storm_write_payload(msg, strlen(msg));
+		    printf("%s\n", msg);
 		}
 		set_timer(tp, tos_timer, (uint32_t) delta);
 	} else {
@@ -714,4 +719,3 @@ tcp_cancel_timers(struct tcpcb* tp) {
 	tpcleartimeractive(tp, TOS_2MSL);
 	stop_timer(tp, TOS_2MSL);
 }
-

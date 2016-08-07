@@ -20,7 +20,10 @@
  */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <errno.h>
+
+#include "gnrc_tcp_freebsd_internal.h"
 
 #include "msg.h"
 #include "thread.h"
@@ -30,14 +33,16 @@
 #include "bsdtcp/tcp_fsm.h"
 #include "bsdtcp/tcp_var.h"
 
+#define SUCCESS 0
+
+static const int TRUE = 1;
+static const int FALSE = 0;
+
  /**
   * @brief   Save the TCP thread ID for later reference (just like the UDP
   *          implementation)
   */
 static kernel_pid_t _pid = KERNEL_PID_UNDEF;
-
-#define GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS 3
-#define GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS 3
 
 /**
  * @brief    Statically allocated pools of active and passive TCP sockets
@@ -123,4 +128,172 @@ int gnrc_tcp_freebsd_init(void)
         }
     }
     return _pid;
+}
+
+/* A helper function. PORT is in network byte order. */
+bool portisfree(uint16_t port)
+{
+    int i;
+    for (i = 0; i < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
+        if (tcbs[i].lport == port) {
+            return FALSE;
+        }
+    }
+    for (i = 0; i < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS; i++) {
+        if (tcbls[i].lport == port) {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+/* The external API. */
+
+int psock_getID(uint8_t psockid)
+{
+    return tcbls[psockid].index;
+}
+
+int asock_getID(uint8_t asockid)
+{
+    return tcbs[asockid].index;
+}
+
+int asock_getState(uint8_t asockid)
+{
+    return tcbs[asockid].t_state;
+}
+
+void asock_getPeerInfo(uint8_t asockid, struct in6_addr** addr, uint16_t** port)
+{
+    *addr = &tcbs[asockid].faddr;
+    *port = &tcbs[asockid].fport;
+}
+
+error_t asock_bind(uint8_t asockid, uint16_t port)
+{
+    uint16_t oldport = tcbs[asockid].lport;
+    port = htons(port);
+    tcbs[asockid].lport = 0;
+    if (port == 0 || portisfree(port)) {
+        tcbs[asockid].lport = port;
+        return SUCCESS;
+    }
+    tcbs[asockid].lport = oldport;
+    return EADDRINUSE;
+}
+
+error_t psock_bind(uint8_t psockid, uint16_t port)
+{
+    uint16_t oldport = tcbls[psockid].lport;
+    port = htons(port);
+    tcbls[psockid].lport = 0;
+    if (port == 0 || portisfree(port)) {
+        tcbls[psockid].lport = port;
+        return SUCCESS;
+    }
+    tcbls[psockid].lport = oldport;
+    return EADDRINUSE;
+}
+
+error_t psock_listenaccept(uint8_t psockid, int asockid, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
+{
+    tcbls[psockid].t_state = TCPS_LISTEN;
+    if (tcbs[asockid].t_state != TCPS_CLOSED) {
+        tcbls[psockid].t_state = TCPS_CLOSED;
+        return EISCONN;
+    }
+    initialize_tcb(&tcbs[asockid], tcbs[asockid].lport, recvbuf, recvbuflen, reassbmp);
+    tcbls[psockid].acceptinto = &tcbs[asockid];
+    return SUCCESS;
+}
+
+error_t asock_connect(uint8_t asockid, struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
+{
+    struct tcpcb* tp = &tcbs[asockid];
+    if (tp->t_state != TCPS_CLOSED) { // This is a check that I added
+        return (EISCONN);
+    }
+    initialize_tcb(tp, tp->lport, recvbuf, recvbuflen, reassbmp);
+    return tcp6_usr_connect(tp, addr);
+}
+
+error_t asock_send(uint8_t asockid, struct lbufent* data, int moretocome, int* status)
+{
+    struct tcpcb* tp = &tcbs[asockid];
+    return (error_t) tcp_usr_send(tp, moretocome, data, status);
+}
+
+error_t asock_receive(uint8_t asockid, uint8_t* buffer, uint32_t len, size_t* bytessent)
+{
+    struct tcpcb* tp = &tcbs[asockid];
+    *bytessent = cbuf_read(&tp->recvbuf, buffer, len, 1);
+    return (error_t) tcp_usr_rcvd(tp);
+}
+
+error_t asock_shutdown(uint8_t asockid, bool shut_rd, bool shut_wr)
+{
+    int error = SUCCESS;
+    if (shut_rd) {
+        cbuf_pop(&tcbs[asockid].recvbuf, cbuf_used_space(&tcbs[asockid].recvbuf)); // remove all data from the cbuf
+        // TODO We need to deal with bytes received out-of-order
+        // Our strategy is to "pretend" that we got those extra bytes and ACK them.
+        tpcantrcvmore(&tcbs[asockid]);
+    }
+    if (shut_wr) {
+        error = tcp_usr_shutdown(&tcbs[asockid]);
+    }
+    return error;
+}
+
+error_t psock_close(uint8_t psockid)
+{
+    tcbls[psockid].t_state = TCP6S_CLOSED;
+    tcbls[psockid].acceptinto = NULL;
+    return SUCCESS;
+}
+
+error_t asock_abort(uint8_t asockid)
+{
+    tcp_usr_abort(&tcbs[asockid]);
+    return SUCCESS;
+}
+
+/* The internal API. */
+
+void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen)
+{
+    /* TODO */
+}
+
+uint32_t get_ticks(void)
+{
+    /* TODO */
+    return 0;
+}
+
+uint32_t get_millis(void)
+{
+    /* TODO */
+    return 0;
+}
+
+void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay)
+{
+    /* TODO */
+}
+
+void stop_timer(struct tcpcb* tcb, uint8_t timer_id)
+{
+    /* TODO */
+}
+
+void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port)
+{
+    /* TODO */
+}
+
+void connection_lost(struct tcpcb* tcb, uint8_t errnum)
+{
+    /* TODO */
 }

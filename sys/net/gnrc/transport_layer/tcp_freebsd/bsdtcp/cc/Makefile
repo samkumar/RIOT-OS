@@ -1,3 +1,1 @@
-DIRS += cc
-
 include $(RIOTBASE)/Makefile.base

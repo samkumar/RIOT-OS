@@ -1,5 +1,12 @@
 /* BITMAP */
 
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "bitmap.h"
+
 void bmp_init(uint8_t* buf, size_t numbytes) {
     memset(buf, 0x00, numbytes);
 }
@@ -22,10 +29,10 @@ void bmp_setrange(uint8_t* buf, size_t start, size_t len) {
     uint8_t first_byte_mask, last_byte_mask;
     _bmp_getrangeinfo(buf, start, len, first_bit_id, first_byte_set,
                       last_bit_id, last_byte_set)
-    
+
     first_byte_mask = (uint8_t) (0xFF >> first_bit_id);
     last_byte_mask = (uint8_t) (0xFF << (8 - last_bit_id));
-    
+
     /* Set the bits. */
     if (first_byte_set == last_byte_set) {
         *first_byte_set |= (first_byte_mask & last_byte_mask);
@@ -47,10 +54,10 @@ void bmp_clrrange(uint8_t* buf, size_t start, size_t len) {
     uint8_t first_byte_mask, last_byte_mask;
     _bmp_getrangeinfo(buf, start, len, first_bit_id, first_byte_clear,
                       last_bit_id, last_byte_clear)
-                      
+
     first_byte_mask = (uint8_t) (0xFF << (8 - first_bit_id));
     last_byte_mask = (uint8_t) (0xFF >> last_bit_id);
-    
+
     /* Clear the bits. */
     if (first_byte_clear == last_byte_clear) {
         *first_byte_clear &= (first_byte_mask | last_byte_mask);
@@ -76,7 +83,7 @@ size_t bmp_countset(uint8_t* buf, size_t buflen, size_t start, size_t limit) {
     size_t curr_index = start >> 3;
     first_bit_id = start & 0x7;
     first_byte = *(buf + curr_index);
-    
+
     numset = 8 - first_bit_id; // initialize optimistically, assuming that the first byte will have all 1's in the part we care about
     ideal_first_byte = (uint8_t) (0xFF >> first_bit_id);
     first_byte &= ideal_first_byte;

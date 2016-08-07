@@ -35,6 +35,7 @@
  *	From: @(#)tcp_usrreq.c	8.2 (Berkeley) 1/3/94
  */
 
+#include "../gnrc_tcp_freebsd_internal.h"
 #include "sys/errno.h"
 #include "tcp.h"
 #include "tcp_fsm.h"
@@ -45,7 +46,9 @@
 #include "ip6.h"
 #include "lbuf.h"
 
-static void	tcp_disconnect(struct tcpcb *);
+#include "tcp_const.h"
+
+//static void	tcp_disconnect(struct tcpcb *);
 static void	tcp_usrclosed(struct tcpcb *);
 
 #if 0
@@ -171,7 +174,7 @@ The signature used to be
 static int
 tcp6_usr_connect(struct socket *so, struct sockaddr *nam, struct thread *td)
 */
-static int
+int
 tcp6_usr_connect(struct tcpcb* tp, struct sockaddr_in6* sin6p)
 {
 	int error = 0;
@@ -283,7 +286,7 @@ out:
 tcp_usr_send(struct socket *so, int flags, struct mbuf *m,
     struct sockaddr *nam, struct mbuf *control, struct thread *td)*/
 /* Returns error condition, and stores bytes sent into SENT. */
-static int tcp_usr_send(struct tcpcb* tp, int moretocome, struct lbufent* data, int* status)
+int tcp_usr_send(struct tcpcb* tp, int moretocome, struct lbufent* data, int* status)
 {
 	int error = 0;
 	*status = 0;
@@ -463,7 +466,7 @@ out:
 /*
  * After a receive, possibly send window update to peer.
  */
-static int
+int
 tcp_usr_rcvd(struct tcpcb* tp/*, int flags*/)
 {
 //	struct inpcb *inp;
@@ -498,6 +501,8 @@ out:
 //	INP_WUNLOCK(inp);
 	return (error);
 }
+
+#if 0
 
 /*
  * Initiate (or continue) disconnect.
@@ -538,10 +543,12 @@ tcp_disconnect(struct tcpcb *tp)
 	}
 }
 
+#endif
+
 /*
  * Mark the connection as being incapable of further output.
  */
-static int
+int
 tcp_usr_shutdown(struct tcpcb* tp)
 {
 	int error = 0;
@@ -642,6 +649,7 @@ tcp_usrclosed(struct tcpcb *tp)
 	}
 }
 
+#if 0
 /*
  * TCP socket is closed.  Start friendly disconnect.
  */
@@ -685,11 +693,12 @@ tcp_usr_close(struct tcpcb* tp/*struct socket *so*/)
 //	INP_WUNLOCK(inp);
 //	INP_INFO_RUNLOCK(&V_tcbinfo);
 }
+#endif
 
 /*
  * Abort the TCP.  Drop the connection abruptly.
  */
-static void
+void
 tcp_usr_abort(/*struct socket *so*/struct tcpcb* tp)
 {
 #if 0

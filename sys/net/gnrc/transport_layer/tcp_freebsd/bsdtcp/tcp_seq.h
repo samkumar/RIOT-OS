@@ -32,6 +32,9 @@
 
 #ifndef _NETINET_TCP_SEQ_H_
 #define _NETINET_TCP_SEQ_H_
+
+#include "../gnrc_tcp_freebsd_internal.h"
+
 /*
  * TCP sequence numbers are 32 bit integers operated
  * on with modular arithmetic.  These macros can be

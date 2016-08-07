@@ -70,10 +70,15 @@ __FBSDID("$FreeBSD$");
 #include <netinet/cc/cc_module.h>
 #endif
 
-#include <bsdtcp/cc.h>
-#include <bsdtcp/tcp_seq.h>
-#include <bsdtcp/tcp_var.h>
+#include "../cc.h"
+#include "../tcp.h"
+#include "../tcp_seq.h"
+#include "../tcp_var.h"
 #include "cc_module.h"
+
+#include "../tcp_const.h"
+
+static int min(int a, int b) { return (a < b) ? a : b; }
 
 static void	newreno_ack_received(struct cc_var *ccv, uint16_t type);
 static void	newreno_after_idle(struct cc_var *ccv);
@@ -202,7 +207,7 @@ newreno_cong_signal(struct cc_var *ccv, uint32_t type)
 
 	/* Catch algos which mistakenly leak private signal types. */
 	KASSERT((type & CC_SIGPRIVMASK) == 0,
-	    ("%s: congestion signal type 0x%08x is private\n", __func__, type));
+	    ("%s: congestion signal type 0x%08x is private\n", __func__, (unsigned int) type));
 
 	win = max(CCV(ccv, snd_cwnd) / 2 / CCV(ccv, t_maxseg), 2) *
 	    CCV(ccv, t_maxseg);

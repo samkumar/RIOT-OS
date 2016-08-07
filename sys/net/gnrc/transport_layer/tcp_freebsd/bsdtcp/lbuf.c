@@ -1,6 +1,7 @@
 /* LINKED BUFFER */
 
 #include "lbuf.h"
+#include <string.h>
 
 void lbuf_init(struct lbufhead* buffer) {
     memset(buffer, 0x00, sizeof(struct lbufhead));

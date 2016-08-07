@@ -64,11 +64,13 @@
 #ifndef _NETINET_IP6_H_
 #define _NETINET_IP6_H_
 
+#include "types.h"
+#include "netinet/in.h"
+
 /*
  * Definition for internet protocol version 6.
  * RFC 2460
  */
-#if 0 // Already defined in TinyOS library
 struct ip6_hdr {
 	union {
 		struct ip6_hdrctl {
@@ -82,7 +84,6 @@ struct ip6_hdr {
 	struct in6_addr ip6_src;	/* source address */
 	struct in6_addr ip6_dst;	/* destination address */
 } __packed;
-#endif
 
 #define ip6_vfc		ip6_ctlun.ip6_un2_vfc
 #define ip6_flow	ip6_ctlun.ip6_un1.ip6_un1_flow

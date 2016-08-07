@@ -77,8 +77,6 @@
 #define	TCPS_HAVEESTABLISHED(s)	((s) >= TCPS_ESTABLISHED)
 #define	TCPS_HAVERCVDFIN(s)	((s) >= TCPS_TIME_WAIT)
 
-// I will need to uncomment this once tcp_output is used!
-#if 0
 //#ifdef	TCPOUTFLAGS
 /*
  * Flags used when sending segments in tcp_output.  Basic flags (TH_RST,
@@ -86,7 +84,7 @@
  * that TH_FIN is sent only if all data queued for output is included in the
  * segment.
  */
-static u_char	tcp_outflags[TCP_NSTATES] = {
+u_char	tcp_outflags[TCP_NSTATES] = {
 	TH_RST|TH_ACK,		/* 0, CLOSED */
 	0,			/* 1, LISTEN */
 	TH_SYN,			/* 2, SYN_SENT */
@@ -100,7 +98,6 @@ static u_char	tcp_outflags[TCP_NSTATES] = {
 	TH_ACK,			/* 10, TIME_WAIT */
 };
 //#endif
-#endif
 
 #ifdef KPROF
 int	tcp_acounts[TCP_NSTATES][PRU_NREQ];

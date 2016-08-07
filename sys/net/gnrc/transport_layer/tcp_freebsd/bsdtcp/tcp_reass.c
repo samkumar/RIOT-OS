@@ -29,8 +29,12 @@
  *	@(#)tcp_input.c	8.12 (Berkeley) 5/24/95
  */
 
+#include "../gnrc_tcp_freebsd_internal.h"
 #include "bitmap.h"
 #include "cbuf.h"
+#include "tcp.h"
+#include "tcp_fsm.h"
+#include "tcp_seq.h"
 #include "tcp_var.h"
 
 /* Sam: Segments are only reassembled within the window; data outside the window
@@ -41,26 +45,26 @@
    going to use the empty space in the receive buffer for segment reassembly. A
    bitmap keeps track of which bytes represent partial segments, and which ones are
    free space.
-   
+
    I've kept the original function for reference, but I rewrote it to use my data
    structure for the reassembly buffer.
-   
+
    Looking at the usage of this function in tcp_input, this just has to set *tlenp
    to 0 if the received segment is already completely buffered; it does not need
    to update it if only part of the segment is trimmed off. */
-   
+
 int
 tcp_reass(struct tcpcb* tp, struct tcphdr* th, int* tlenp, uint8_t* data, uint8_t* signals)
 {
 	size_t mergeable, written;
 	size_t offset;
 	size_t start_index;
-	int added_fin;
+	//int added_fin;
 	size_t usedbefore;
 	int tlen = *tlenp;
 	size_t merged = 0;
 	int flags = 0;
-	
+
 	/*
 	 * Call with th==NULL after become established to
 	 * force pre-ESTABLISHED data up to user socket.
@@ -71,13 +75,13 @@ tcp_reass(struct tcpcb* tp, struct tcphdr* th, int* tlenp, uint8_t* data, uint8_
 	/* Insert the new segment queue entry into place. */
 	KASSERT(SEQ_GEQ(th->th_seq, tp->rcv_nxt), ("Adding past segment to the reassembly queue\n"));
 	offset = (size_t) (th->th_seq - tp->rcv_nxt);
-	
+
 	if (cbuf_reass_count_set(&tp->recvbuf, (size_t) offset, tp->reassbmp, tlen) >= tlen) {
 		*tlenp = 0;
 		goto present;
 	}
 	written = cbuf_reass_write(&tp->recvbuf, (size_t) offset, data, tlen, tp->reassbmp, &start_index);
-	
+
 	if ((th->th_flags & TH_FIN) && (tp->reass_fin_index == -1)) {
 		tp->reass_fin_index = (int16_t) start_index;
 	}
@@ -109,9 +113,9 @@ present:
 		   but the user hasn't yet emptied the buffer of its contents. */
 		KASSERT (tp->reass_fin_index == -2, ("Can't receive more, and data in buffer, but haven't received a FIN\n"));
 	}
-	
+
 	tp->rcv_nxt += mergeable;
-	
+
 	return flags;
 }
 #if 0

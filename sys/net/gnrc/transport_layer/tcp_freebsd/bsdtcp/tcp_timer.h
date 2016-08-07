@@ -143,16 +143,7 @@ int tcp_timer_active(struct tcpcb *tp, uint32_t timer_type);
 void tcp_timer_activate(struct tcpcb *tp, uint32_t timer_type, u_int delta);
 void tcp_cancel_timers(struct tcpcb* tp);
 
-/*
- * Force a time value to be in a certain range.
- */
-#define	TCPT_RANGESET(tv, value, tvmin, tvmax) do { \
-	(tv) = (value) + tcp_rexmit_slop; \
-	if ((u_long)(tv) < (u_long)(tvmin)) \
-		(tv) = (tvmin); \
-	if ((u_long)(tv) > (u_long)(tvmax)) \
-		(tv) = (tvmax); \
-} while(0)
+/* I moved the definition of TCPT_RANGESET to tcp_const.h. */
 
 static const int	tcp_syn_backoff[TCP_MAXRXTSHIFT + 1] =
     { 1, 1, 1, 1, 1, 2, 4, 8, 16, 32, 64, 64, 64 };
@@ -162,12 +153,16 @@ static const int	tcp_backoff[TCP_MAXRXTSHIFT + 1] =
 
 static const int tcp_totbackoff = 2559;	/* sum of tcp_backoff[] */
 
-extern int tcp_keepinit;		/* time to establish connection */
-extern int tcp_keepidle;		/* time before keepalive probes begin */
-extern int tcp_keepintvl;		/* time between keepalive probes */
-extern int tcp_keepcnt;			/* number of keepalives */
-extern int tcp_finwait2_timeout;
-extern int tcp_fast_finwait2_recycle;
+//extern int tcp_keepinit;		/* time to establish connection */
+//extern int tcp_keepidle;		/* time before keepalive probes begin */
+//extern int tcp_keepintvl;		/* time between keepalive probes */
+//extern int tcp_keepcnt;			/* number of keepalives */
+//extern int tcp_delacktime;		/* time before sending a delayed ACK */
+//extern int tcp_maxpersistidle;
+//extern int tcp_finwait2_timeout;
+//extern int tcp_fast_finwait2_recycle;
+//extern int tcp_rexmit_slop;
+//extern int tcp_msl;
 
 /* Copied from below, with modifications. */
 #define	TP_KEEPINIT(tp)	(/*(tp)->t_keepinit ? (tp)->t_keepinit :*/ tcp_keepinit)

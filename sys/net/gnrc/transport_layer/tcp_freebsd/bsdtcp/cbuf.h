@@ -5,7 +5,10 @@
    The circular buffer can be treated either as a buffer of bytes, or a buffer
    of TCP segments. Don't mix and match the functions unless you know what
    you're doing! */
-   
+
+   #include <stdint.h>
+   #include <stdlib.h>
+
 struct cbufhead {
     size_t r_index;
     size_t w_index;

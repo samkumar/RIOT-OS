@@ -34,13 +34,15 @@
 #define _NETINET_TCP_VAR_H_
 
 //#include <netinet/tcp.h>
+//#include "../gnrc_tcp_freebsd_internal.h"
 #include "bitmap.h"
-#include "cc.h"
 #include "cbuf.h"
+#include "cc.h"
 #include "lbuf.h"
 #include "tcp.h"
 #include "types.h"
 #include "netinet/in.h"
+#include "ip6.h"
 
 #include "sys/queue.h"
 
@@ -123,7 +125,7 @@ struct tcpcb_listen {
 /* These estimates are used to allocate sackholes (see tcp_sack.c). */
 #define AVG_SACKHOLES 2 // per TCB
 #define MAX_SACKHOLES 5 // per TCB
-#define SACKHOLE_POOL_SIZE AVG_SACKHOLES * NUMBSDTCPACTIVESOCKETS
+#define SACKHOLE_POOL_SIZE AVG_SACKHOLES * GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS
 #define SACKHOLE_BMP_SIZE BITS_TO_BYTES(SACKHOLE_POOL_SIZE)
 
 // You can set the maximum number of SACK blocks in tcp.h
@@ -304,6 +306,18 @@ void	 tcp_state_change(struct tcpcb *, int);
 tcp_seq tcp_new_isn(struct tcpcb *);
 struct tcpcb *tcp_close(struct tcpcb *);
 struct tcpcb *tcp_drop(struct tcpcb *, int);
+void
+tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
+    tcp_seq ack, tcp_seq seq, int flags);
+void	 tcp_setpersist(struct tcpcb *);
+void	cc_cong_signal(struct tcpcb *tp, struct tcphdr *th, uint32_t type);
+
+/* Added, since there is no header file for tcp_usrreq.c. */
+int tcp6_usr_connect(struct tcpcb* tp, struct sockaddr_in6* sinp6);
+int tcp_usr_send(struct tcpcb* tp, int moretocome, struct lbufent* data, int* status);
+int tcp_usr_rcvd(struct tcpcb* tp);
+int tcp_usr_shutdown(struct tcpcb* tp);
+void tcp_usr_abort(struct tcpcb* tp);
 
 /*
  * Flags and utility macros for the t_flags field.

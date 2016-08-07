@@ -2,6 +2,10 @@
 #include "cbuf.h"
 #include "bitmap.h"
 
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
 void cbuf_init(struct cbufhead* chdr, uint8_t* buf, size_t len) {
     chdr->r_index = 0;
     chdr->w_index = 0;
@@ -85,7 +89,7 @@ size_t cbuf_read_offset(struct cbufhead* chdr, uint8_t* data, size_t numbytes, s
     chdr->r_index = (chdr->r_index + offset) % chdr->size;
     cbuf_read_unsafe(chdr, data, numbytes, 0);
     chdr->r_index = oldpos;
-    return numbytes;    
+    return numbytes;
 }
 
 size_t cbuf_pop(struct cbufhead* chdr, size_t numbytes) {
