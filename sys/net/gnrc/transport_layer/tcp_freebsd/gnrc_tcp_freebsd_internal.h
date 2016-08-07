@@ -77,14 +77,8 @@ void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16
 void connection_lost(struct tcpcb* tcb, uint8_t errnum);
 
 /* For now */
-void ip_free(void* ptr)
-{
-    (void) ptr;
-}
+void ip_free(void* ptr);
 
-void* ip_malloc(size_t len)
-{
-    return NULL;
-}
+void* ip_malloc(size_t len);
 
 #endif // GNRC_TCP_FREEBSD_INTERNAL_H_

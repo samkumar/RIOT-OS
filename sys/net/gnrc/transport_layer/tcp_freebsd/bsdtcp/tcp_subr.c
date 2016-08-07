@@ -224,7 +224,7 @@ tcp_state_change(struct tcpcb *tp, int newstate)
 
  /* This is based on tcp_newtcb in tcp_subr.c, and tcp_usr_attach in tcp_usrreq.c.
     The length of the reassembly bitmap is fixed at ceil(0.125 * recvbuflen). */
-void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
+__attribute__((used)) void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
 	uint32_t ticks = get_ticks();
 	int initindex = tp->index;
 

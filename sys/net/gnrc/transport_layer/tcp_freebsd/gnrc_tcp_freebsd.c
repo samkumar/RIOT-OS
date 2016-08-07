@@ -115,7 +115,7 @@ int gnrc_tcp_freebsd_init(void)
                              "tcp_freebsd");
 
         /* Additional initialization work for TCP. */
-        tcp_init();
+        //tcp_init();
         for (i = 0; i < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
             tcbs[i].index = i;
             initialize_tcb(&tcbs[i], 0, NULL, 0, NULL);
@@ -296,4 +296,14 @@ void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16
 void connection_lost(struct tcpcb* tcb, uint8_t errnum)
 {
     /* TODO */
+}
+
+void ip_free(void* ptr)
+{
+    (void) ptr;
+}
+
+void* ip_malloc(size_t len)
+{
+    return NULL;
 }
