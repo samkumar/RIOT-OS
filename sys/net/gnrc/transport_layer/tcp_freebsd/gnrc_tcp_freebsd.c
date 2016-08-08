@@ -33,6 +33,9 @@
 #include "bsdtcp/tcp_fsm.h"
 #include "bsdtcp/tcp_var.h"
 
+#define ENABLE_DEBUG    (1)
+#include "debug.h"
+
 #define SUCCESS 0
 
 static const int TRUE = 1;
@@ -59,6 +62,140 @@ static char _stack[GNRC_TCP_FREEBSD_STACK_SIZE + THREAD_EXTRA_STACKSIZE_PRINTF];
 static char _stack[GNRC_TCP_FREEBSD_STACK_SIZE];
 #endif
 
+/**
+ *  @brief   Passes signals to the user of this module.
+ */
+void handle_signals(struct tcpcb* tp, uint8_t signals, uint32_t freedentries)
+{
+    (void) tp;
+    (void) signals;
+    (void) freedentries;
+    /* TODO implement this */
+}
+
+/**
+ * @brief   Called when a TCP segment is received and passed up from the IPv6
+ *          layer.
+ */
+static void _receive(gnrc_pktsnip_t* pkt)
+{
+    gnrc_pktsnip_t* tcp;
+    gnrc_pktsnip_t* ipv6;
+    struct tcphdr* th;
+    struct tcpcb* tcb;
+    struct tcpcb_listen* tcbl;
+    struct ip6_hdr* iph;
+
+    int i;
+    uint16_t sport;
+    uint16_t dport;
+    uint16_t packet_len;
+
+    /* Bitmask of signals that need to be sent to the user of this module. */
+    uint8_t signals = 0;
+
+    /* Number of lbuf entries that the user of this module can free. */
+    uint32_t freedentries = 0;
+
+    tcp = gnrc_pktbuf_start_write(pkt);
+    if (tcp == NULL) {
+        DEBUG("tcp_freebsd: unable to get write access to packet\n");
+        goto error;
+    }
+    pkt = tcp;
+
+    ipv6 = gnrc_pktsnip_search_type(pkt, GNRC_NETTYPE_IPV6);
+    assert(ipv6 != NULL);
+
+    iph = (struct ip6_hdr*) ipv6->data;
+
+    /* I'm actually not going to mark the TCP section. The tcp_input function
+     * is written to consider both the TCP section and the payload together,
+     * and specifically making it would just take up extra memory for the new
+     * pktsnip.
+     */
+#if 0
+    if ((pkt->next != NULL) && (pkt->next->type == GNRC_NETTYPE_TCP)) {
+        /* Someone already marked the TCP header, so we can just use it. */
+        tcp = pkt->next;
+    } else if (pkt->size >= sizeof(struct tcphdr)) {
+        /* The TCP header may include options, and therefore may have variable
+         * length. So we need to actually parse it first, in order to correctly
+         * mark it...
+         */
+         th = (struct tcphdr*) pkt->data;
+         if (th->th_off < 5 || th->th_off > 15) {
+             goto error;
+         }
+
+         /* This is the size of the TCP header, in bytes. */
+         size_t hdrlen = ((size_t) th->th_off) << 2;
+
+         tcp = gnrc_pktbuf_mark(pkt, hdrlen, GNRC_NETTYPE_TCP);
+         if (tcp == NULL) {
+             DEBUG("tcp_freebsd: error marking TCP header, dropping packet\n");
+             goto error;
+         }
+    } else {
+        goto error;
+    }
+
+    /* Mark payload as type UNDEF. */
+    pkt->type = GNRC_NETTYPE_UNDEF;
+#endif
+
+    th = (struct tcphdr*) tcp->data;
+
+    packet_len = iph->ip6_ctlun.ip6_un1.ip6_un1_plen;
+    if (packet_len != ipv6->size + tcp->size) {
+        DEBUG("Sizes don't add up: packet length is %" PRIu16 ", but got %zu\n", packet_len, ipv6->size + tcp->size);
+        goto error;
+    }
+    if (th->th_off < 5 || th->th_off > 15 || (((size_t) th->th_off) << 2) > tcp->size) {
+        DEBUG("Too many options: header claims %" PRIu8 " words (pktsnip has %zu bytes)\n", th->th_off, tcp->size);
+    }
+
+    /* TODO validate the checksum */
+
+    sport = th->th_sport; // network byte order
+    dport = th->th_dport; // network byte order
+    tcp_fields_to_host(th);
+
+    /* Actually do the work. */
+    for (i = 0; i < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
+        tcb = &tcbs[i];
+        if (tcb->t_state != TCP6S_CLOSED && dport == tcb->lport
+            && sport == tcb->fport
+            && !memcmp(&iph->ip6_src, &tcb->faddr, sizeof(iph->ip6_src))) {
+            DEBUG("Matches active socket %d\n", i);
+            if (RELOOKUP_REQUIRED == tcp_input(iph, th, &tcbs[i], NULL, &signals, &freedentries)) {
+                break;
+            } else {
+                handle_signals(&tcbs[i], signals, freedentries);
+            }
+            return;
+        }
+    }
+
+    for (i = 0; i < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS; i++) {
+        tcbl = &tcbls[i];
+        if (tcbl->t_state == TCP6S_LISTEN && dport == tcbl->lport) {
+            DEBUG("Matches passive socket %d\n", i);
+            tcp_input(iph, th, NULL, &tcbls[i], NULL, NULL);
+            return;
+        }
+    }
+
+    DEBUG("Does not match any socket\n");
+    tcp_dropwithreset(iph, th, NULL, tcp->size - (th->th_off << 2), ECONNREFUSED);
+
+    return;
+
+error:
+    gnrc_pktbuf_release(pkt);
+    return;
+}
+
 static void* _event_loop(void* arg)
 {
     (void) arg;
@@ -81,6 +218,7 @@ static void* _event_loop(void* arg)
         switch (msg.type) {
             case GNRC_NETAPI_MSG_TYPE_RCV:
                 printf("tcp_freebsd: got RCV message: %p\n", msg.content.ptr);
+                _receive(msg.content.ptr);
                 break;
             case GNRC_NETAPI_MSG_TYPE_SND:
                 /* Not sure what kind of protocol is going to pass a packet

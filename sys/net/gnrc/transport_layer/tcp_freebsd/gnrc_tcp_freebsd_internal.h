@@ -31,12 +31,15 @@
 #include "bsdtcp/tcp_timer.h"
 #include "bsdtcp/tcp_var.h"
 
-#define GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS 3
-#define GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS 3
+#define GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS 1
+#define GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS 1
+
+/* Possible return value from tcp_input. */
+#define RELOOKUP_REQUIRED -1
 
 #define IANA_TCP PROTNUM_TCP
 
-struct tcp_hdr {
+/*struct tcp_hdr {
   uint16_t srcport;
   uint16_t dstport;
   uint32_t seqno;
@@ -46,7 +49,7 @@ struct tcp_hdr {
   uint16_t window;
   uint16_t chksum;
   uint16_t urgent;
-};
+};*/
 
 #define hz 1000 // number of ticks per second
 #define MILLIS_PER_TICK 1 // number of milliseconds per tick

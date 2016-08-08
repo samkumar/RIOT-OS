@@ -1350,7 +1350,7 @@ send:
 		 * ip6_output() will set it properly; it's supposed to include
 		 * the option header lengths as well.
 		 */
-		ip6->ip6_plen = htons(len + optlen + sizeof(struct tcp_hdr));
+		ip6->ip6_plen = htons(len + optlen + sizeof(struct tcphdr));
 #if 0 // THIS SEEMS OPTIONAL, SO I'M GETTING RID OF IT
 		if (V_path_mtu_discovery && tp->t_maxopd > V_tcp_minmss)
 			tp->t_flags2 |= TF2_PLPMTU_PMTUD;
@@ -1379,7 +1379,7 @@ send:
 		RO_RTFREE(&ro);
 #endif
 		// Send packet the TinyOS way
-		send_message(tp, msg, th, len + optlen + sizeof(struct tcp_hdr));
+		send_message(tp, msg, th, len + optlen + sizeof(struct tcphdr));
 		ip_free(bufreal);
 
 		if (len) {

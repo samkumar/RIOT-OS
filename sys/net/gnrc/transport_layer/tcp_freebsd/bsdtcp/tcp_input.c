@@ -90,8 +90,6 @@
 
 // Copied from in.h
 #define IPPROTO_DONE 267
-// My own constant
-#define RELOOKUP_REQUIRED -1
 
 // Copied from sys/libkern.h
 static int imax(int a, int b) { return (a > b ? a : b); }
@@ -419,7 +417,7 @@ tcp_hc_getmtu(/*struct in_conninfo *inc*/ struct tcpcb* tp)
    static void tcp_dropwithreset(struct mbuf *m, struct tcphdr *th, struct tcpcb *tp,
     int tlen, int rstreason)
 */
-static void
+void
 tcp_dropwithreset(struct ip6_hdr* ip6, struct tcphdr *th, struct tcpcb *tp,
     int tlen, int rstreason)
 {

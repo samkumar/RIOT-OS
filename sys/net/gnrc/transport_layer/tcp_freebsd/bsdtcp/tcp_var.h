@@ -653,6 +653,10 @@ void	 tcp_twstart(struct tcpcb*);
 void	 tcp_twclose(struct /*tcptw*/tcpcb*, int);
 int	 tcp_twcheck(struct tcpcb*,/*struct inpcb *, struct tcpopt *,*/ struct tcphdr *,
 	    /*struct mbuf *,*/ int);
+void tcp_dropwithreset(struct ip6_hdr* ip6, struct tcphdr *th, struct tcpcb *tp,
+    int tlen, int rstreason);
+int tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb_listen* tpl,
+          uint8_t* signals, uint32_t* freedentries);
 int	 tcp_output(struct tcpcb *);
 struct tcptemp *
 	 tcpip_maketemplate(struct /*inp*/tcpcb *);
