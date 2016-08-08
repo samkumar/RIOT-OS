@@ -115,7 +115,7 @@ int gnrc_tcp_freebsd_init(void)
                              "tcp_freebsd");
 
         /* Additional initialization work for TCP. */
-        //tcp_init();
+        tcp_init();
         for (i = 0; i < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
             tcbs[i].index = i;
             initialize_tcb(&tcbs[i], 0, NULL, 0, NULL);
