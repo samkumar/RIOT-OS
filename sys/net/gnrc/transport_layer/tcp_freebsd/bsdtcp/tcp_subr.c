@@ -457,18 +457,18 @@ tcp_close(struct tcpcb *tp)
  * use for this function is in keepalives, which use tcp_respond.
  */
  // NOTE: I CHANGED THE SIGNATURE OF THIS FUNCTION
-struct tcptemp *
-tcpip_maketemplate(struct tcpcb* tp)
+void
+tcpip_maketemplate(struct tcpcb* tp, struct tcptemp* t)
 {
-	struct tcptemp *t;
+	//struct tcptemp *t;
 #if 0
 	t = malloc(sizeof(*t), M_TEMP, M_NOWAIT);
 #endif
-	t = ip_malloc(sizeof(struct tcptemp));
-	if (t == NULL)
-		return (NULL);
+	//t = ip_malloc(sizeof(struct tcptemp));
+	//if (t == NULL)
+	//	return (NULL);
 	tcpip_fillheaders(tp, (void *)&t->tt_ipgen, (void *)&t->tt_t);
-	return (t);
+	//return (t);
 }
 
 /*

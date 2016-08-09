@@ -658,8 +658,7 @@ void tcp_dropwithreset(struct ip6_hdr* ip6, struct tcphdr *th, struct tcpcb *tp,
 int tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb_listen* tpl,
           uint8_t* signals, uint32_t* freedentries);
 int	 tcp_output(struct tcpcb *);
-struct tcptemp *
-	 tcpip_maketemplate(struct /*inp*/tcpcb *);
+void tcpip_maketemplate(struct /*inp*/tcpcb *, struct tcptemp*);
 void	 tcpip_fillheaders(struct /*inp*/tcpcb *, void *, void *);
 u_long	 tcp_maxmtu6(/*struct in_conninfo **/ struct tcpcb*, struct tcp_ifcap *);
 int	 tcp_addoptions(struct tcpopt *, u_char *);

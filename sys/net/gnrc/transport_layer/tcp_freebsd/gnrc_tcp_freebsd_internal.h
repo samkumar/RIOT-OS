@@ -84,9 +84,4 @@ void connection_lost(struct tcpcb* tcb, uint8_t errnum);
 
 uint16_t get_tcp_checksum(gnrc_pktsnip_t *tcpsnip, gnrc_pktsnip_t *ip6snip);
 
-/* For now */
-void ip_free(void* ptr);
-
-void* ip_malloc(size_t len);
-
 #endif // GNRC_TCP_FREEBSD_INTERNAL_H_

@@ -454,23 +454,26 @@ error_t asock_abort(uint8_t asockid)
 
 void send_message(gnrc_pktsnip_t* pkt)
 {
-    /* TODO */
-}
-
-uint32_t get_ticks(void)
-{
-    /* TODO */
-    return 0;
+    if (!gnrc_netapi_dispatch_send(pkt->type, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
+        DEBUG("udp: cannot send packet: network layer not found\n");
+        gnrc_pktbuf_release(pkt);
+    }
 }
 
 uint32_t get_millis(void)
 {
-    /* TODO */
-    return 0;
+    uint64_t micros = xtimer_now64();
+    return micros / 1000;
+}
+
+uint32_t get_ticks(void)
+{
+    return get_millis();
 }
 
 void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay)
 {
+    //uint32_t tid = ((uint32_t) (((uint32_t) tcb->index) << 2)) | (uint32_t) timer_id;
     /* TODO */
 }
 
@@ -479,22 +482,18 @@ void stop_timer(struct tcpcb* tcb, uint8_t timer_id)
     /* TODO */
 }
 
+/**
+ * Called when a passive socket accepts a connection.
+ */
 void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port)
 {
     /* TODO */
 }
 
+/**
+ * Called when an active socket loses a connection.
+ */
 void connection_lost(struct tcpcb* tcb, uint8_t errnum)
 {
     /* TODO */
-}
-
-void ip_free(void* ptr)
-{
-    (void) ptr;
-}
-
-void* ip_malloc(size_t len)
-{
-    return NULL;
 }

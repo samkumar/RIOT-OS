@@ -93,7 +93,8 @@ void
 tcp_timer_keep(struct tcpcb* tp)
 {
     uint32_t ticks = get_ticks();
-	struct tcptemp *t_template;
+	/*struct tcptemp *t_template;*/
+    struct tcptemp t_template;
 	KASSERT(tpistimeractive(tp, TT_KEEP), ("Keep timer running, but unmarked\n"));
 	tpcleartimeractive(tp, TT_KEEP); // for our own internal bookkeeping
 #if 0 // I already cancel this invocation if it was rescheduled meanwhile
@@ -151,14 +152,14 @@ tcp_timer_keep(struct tcpcb* tp)
 		 * correspondent TCP to respond.
 		 */
 //		TCPSTAT_INC(tcps_keepprobe);
-		t_template = tcpip_maketemplate(/*inp*/tp);
-		if (t_template) {
-			tcp_respond(tp, (struct ip6_hdr*) t_template->tt_ipgen,
-				    &t_template->tt_t,/* (struct mbuf *)NULL,*/
+		tcpip_maketemplate(/*inp*/tp, &t_template);
+		//if (t_template) {
+			tcp_respond(tp, (struct ip6_hdr*) t_template.tt_ipgen,
+				    &t_template.tt_t,/* (struct mbuf *)NULL,*/
 				    tp->rcv_nxt, tp->snd_una - 1, 0);
 			//free(t_template, M_TEMP);
-			ip_free(t_template);
-		}
+			//ip_free(t_template);
+		//}
 #if 0
 		if (!callout_reset(&tp->t_timers->tt_keep, TP_KEEPINTVL(tp),
 		    tcp_timer_keep, tp)) {
