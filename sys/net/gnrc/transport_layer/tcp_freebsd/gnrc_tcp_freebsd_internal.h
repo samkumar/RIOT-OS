@@ -30,9 +30,12 @@
 #include "bsdtcp/tcp_fsm.h"
 #include "bsdtcp/tcp_timer.h"
 #include "bsdtcp/tcp_var.h"
+#include "net/gnrc/pkt.h"
 
 #define GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS 1
 #define GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS 1
+
+#define TIMERS_PER_ACTIVE_SOCKET 4
 
 /* Possible return value from tcp_input. */
 #define RELOOKUP_REQUIRED -1
@@ -71,13 +74,15 @@ struct ip6_packet {
     struct ip_iovec* ip6_data;
 };
 
-void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen);
+void send_message(gnrc_pktsnip_t* pkt);
 uint32_t get_ticks(void);
 uint32_t get_millis(void);
 void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
 void stop_timer(struct tcpcb* tcb, uint8_t timer_id);
 void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port);
 void connection_lost(struct tcpcb* tcb, uint8_t errnum);
+
+uint16_t get_tcp_checksum(gnrc_pktsnip_t *tcpsnip, gnrc_pktsnip_t *ip6snip);
 
 /* For now */
 void ip_free(void* ptr);

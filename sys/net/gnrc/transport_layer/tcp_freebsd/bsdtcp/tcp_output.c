@@ -42,6 +42,8 @@
 
 #include "tcp_const.h"
 
+#include "net/gnrc/pktbuf.h"
+
 // From ip_compat.h
 #define	bcopy(a,b,c)	memmove(b,a,c)
 
@@ -137,17 +139,17 @@ tcp_output(struct tcpcb *tp)
 	int sack_rxmit, sack_bytes_rxmt;
 	struct sackhole* p;
 	unsigned ipoptlen, optlen, hdrlen;
-	int alen;
-	char* buf, * bufreal; // Added by Sam
-	struct ip6_packet* msg;
-  	struct ip_iovec* iov;
+	//int alen;
+	//char* buf, * bufreal; // Added by Sam
+	//struct ip6_packet* msg;
+  	//struct ip_iovec* iov;
   	struct tcpopt to;
-  	struct ip_iovec startvec; // Added by Sam (this and the next few fields)
-  	struct ip_iovec endvec;
-  	struct lbufent* startptr = NULL;
-  	struct lbufent* endptr = NULL;
-  	uint32_t startoffset;
-  	uint32_t endextra;
+  	//struct ip_iovec startvec; // Added by Sam (this and the next few fields)
+  	//struct ip_iovec endvec;
+  	//struct lbufent* startptr = NULL;
+  	//struct lbufent* endptr = NULL;
+  	//uint32_t startoffset;
+  	//uint32_t endextra;
   	u_char opt[TCP_MAXOLEN];
   	uint32_t ticks = get_ticks();
 #if 0
@@ -1025,8 +1027,56 @@ send:
 	}
 #endif
 	/* Instead of the previous code that "grabs an mbuf", we need to do this the
-	   TinyOS way, where we ip_malloc a buffer. */
+	   RIOT OS way, where we allocate a gnrc_pktsnip_t. */
 	// Need to ip_malloc an extra three bytes so that we can word-align the packet
+	gnrc_pktsnip_t* payload = gnrc_pktbuf_add(NULL, NULL, len, GNRC_NETTYPE_UNDEF);
+	if (payload == NULL) {
+		goto memsendfail;
+	}
+	gnrc_pktsnip_t* tcpsnip = gnrc_pktbuf_add(payload, NULL, sizeof(struct tcphdr) + optlen, GNRC_NETTYPE_TCP);
+	if (tcpsnip == NULL) {
+		gnrc_pktbuf_release(payload);
+		goto memsendfail;
+	}
+	gnrc_pktsnip_t* ip6snip = gnrc_pktbuf_add(tcpsnip, NULL, sizeof(struct ip6_hdr) + ipoptlen, GNRC_NETTYPE_IPV6);
+	if (ip6snip == NULL) {
+		gnrc_pktbuf_release(tcpsnip);
+memsendfail:
+		error = ENOBUFS;
+		sack_rxmit = 0;
+		goto out;
+	}
+	if (len) {
+	    uint32_t used_space = lbuf_used_space(&tp->sendbuf);
+
+		/*
+		 * The TinyOS version has a way to avoid the copying we have to do here.
+		 * Because it is possible to send iovecs directly in the BLIP stack, and
+		 * an lbuf is made of iovecs, we could just "save" the starting and ending
+		 * iovecs, modify them to get exactly the slice we want, call "send" on
+		 * the resulting chain, and then restore the starting and ending iovecs
+		 * once "send" returns.
+		 *
+		 * In RIOT, pktsnips have additional behavior regarding memory management
+		 * that precludes this optimization.
+		 */
+		int written = iov_read(lbuf_to_iovec(&tp->sendbuf), off, len, payload->data);
+ 		KASSERT(written == len, ("Reading send buffer out of range!\n"));
+
+		/*
+		 * If we're sending everything we've got, set PUSH.
+		 * (This will keep happy those implementations which only
+		 * give data to the user when a buffer fills or
+		 * a PUSH comes in.)
+		 */
+		if (off + len == /*sbused(&so->so_snd)*/used_space)
+			flags |= TH_PUSH;
+	}
+
+	ip6 = (struct ip6_hdr*) ip6snip->data;
+	th = (struct tcphdr*) tcpsnip->data;
+
+#if 0 // The TinyOS code
 	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + ipoptlen + sizeof(struct ip_iovec);
 	bufreal = ip_malloc(alen + 3);
 	if (bufreal == NULL) {
@@ -1072,7 +1122,7 @@ send:
 
 	ip6 = (struct ip6_hdr*) &msg->ip6_hdr;
 	th = (struct tcphdr*) ((char*) (ip6 + 1) + ipoptlen);
-
+#endif
 	tcpip_fillheaders(tp, ip6, th);
 
 	//SOCKBUF_UNLOCK_ASSERT(&so->so_snd);
@@ -1378,6 +1428,8 @@ send:
 			mtu = ro.ro_rt->rt_mtu;
 		RO_RTFREE(&ro);
 #endif
+		send_message(ip6snip);
+#if 0 // The TinyOS code
 		// Send packet the TinyOS way
 		send_message(tp, msg, th, len + optlen + sizeof(struct tcphdr));
 		ip_free(bufreal);
@@ -1387,6 +1439,7 @@ send:
 			memcpy(&startptr->iov, &startvec, sizeof(struct ip_iovec));
 			memcpy(&endptr->iov, &endvec, sizeof(struct ip_iovec));
 		}
+#endif
 //	}
 //#endif /* INET6 */
 #if 0

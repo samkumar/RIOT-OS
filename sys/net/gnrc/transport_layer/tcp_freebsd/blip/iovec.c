@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
-#include "lib6lowpan.h"
 #include "iovec.h"
 
 #define MIN(X,Y) ((X) < (Y) ? (X) : (Y))

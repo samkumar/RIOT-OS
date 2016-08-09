@@ -55,20 +55,20 @@ extern "C" {
 #define GNRC_TCP_FREEBSD_STACK_SIZE     (THREAD_STACKSIZE_DEFAULT)
 #endif
 
-#if 0
 /**
- * @brief   Calculate the checksum for the given packet
+ * @brief   Calculate the TCP checksum for the given packet
  *
- * @param[in] hdr           Pointer to the UDP header
+ * @param[in] hdr           Pointer to the TCP header
  * @param[in] pseudo_hdr    Pointer to the network layer header
  *
  * @return  0 on success
- * @return  -EBADMSG if @p hdr is not of type GNRC_NETTYPE_UDP
+ * @return  -EBADMSG if @p hdr is not of type GNRC_NETTYPE_TCP
  * @return  -EFAULT if @p hdr or @p pseudo_hdr is NULL
  * @return  -ENOENT if gnrc_pktsnip_t::type of @p pseudo_hdr is not known
  */
-int gnrc_udp_calc_csum(gnrc_pktsnip_t *hdr, gnrc_pktsnip_t *pseudo_hdr);
+int gnrc_tcp_calc_csum(gnrc_pktsnip_t *hdr, gnrc_pktsnip_t *pseudo_hdr);
 
+#if 0
 /**
  * @brief   Allocate and initialize a fresh UDP header in the packet buffer
  *

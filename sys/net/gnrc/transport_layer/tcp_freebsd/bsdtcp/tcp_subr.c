@@ -46,6 +46,8 @@
 
 #include "tcp_const.h"
 
+#include "net/gnrc/pktbuf.h"
+
 /* EXTERN DECLARATIONS FROM TCP_TIMER.H */
 #if 0 // I put these in the enum below
 int tcp_keepinit;		/* time to establish connection */
@@ -563,6 +565,44 @@ void
 tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
     tcp_seq ack, tcp_seq seq, int flags)
 {
+    /* Again, I rewrote this function for the RIOT port of the code. */
+    gnrc_pktsnip_t* tcpsnip = gnrc_pktbuf_add(NULL, NULL, sizeof(struct tcphdr), GNRC_NETTYPE_TCP);
+    if (tcpsnip == NULL) {
+        return; // drop the message;
+    }
+    gnrc_pktsnip_t* ip6snip = gnrc_pktbuf_add(tcpsnip, NULL, sizeof(struct ip6_hdr), GNRC_NETTYPE_IPV6);
+    if (ip6snip == NULL) {
+        return; // drop the message;
+    }
+    struct tcphdr* nth = tcpsnip->data;
+    struct ip6_hdr* ip6 = ip6snip->data;
+    int win = 0;
+    if (tp != NULL) {
+		if (!(flags & TH_RST)) {
+			win = cbuf_free_space(&tp->recvbuf);
+			if (win > (long)TCP_MAXWIN << tp->rcv_scale)
+				win = (long)TCP_MAXWIN << tp->rcv_scale;
+		}
+	}
+    ip6->ip6_nxt = IANA_TCP;
+	ip6->ip6_plen = htons(sizeof(struct tcphdr));
+	ip6->ip6_src = ip6gen->ip6_dst;
+	ip6->ip6_dst = ip6gen->ip6_src;
+	nth->th_sport = thgen->th_dport;
+	nth->th_dport = thgen->th_sport;
+	nth->th_seq = htonl(seq);
+	nth->th_ack = htonl(ack);
+	nth->th_x2 = 0;
+	nth->th_off = sizeof(struct tcphdr) >> 2;
+	nth->th_flags = flags;
+	if (tp != NULL)
+		nth->th_win = htons((u_short) (win >> tp->rcv_scale));
+	else
+		nth->th_win = htons((u_short)win);
+	nth->th_urp = 0;
+
+    send_message(ip6snip);
+#if 0
 	/* Essentially all the code needs to be discarded because I need to send packets the TinyOS way.
 	   There are some parts that I copied; I didn't want to comment out everything except the few
 	   lines I needed since I felt that this would be cleaner. */
@@ -612,6 +652,7 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 	nth->th_urp = 0;
 	send_message(tp, msg, nth, sizeof(struct tcphdr));
 	ip_free(bufreal);
+#endif
 #if 0
 	int tlen;
 	int win = 0;

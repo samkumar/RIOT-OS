@@ -1,9 +1,28 @@
-/* This isn't from the BSD code.
- * This is taken from my implementation of TCP in PC userland.
+/*
+ * Copyright (C) 2016 University of California, Berkeley
+ *
+ * This file is subject to the terms and conditions of the GNU Lesser
+ * General Public License v2.1. See the file LICENSE in the top level
+ * directory for more details.
  */
-#include "../gnrc_tcp_freebsd_internal.h"
-#include "tcp.h"
 
+/**
+ * @ingroup     net_gnrc_tcp_freebsd
+ * @{
+ *
+ * @file
+ * @brief       TCP checksum calculation for GNRC
+ *
+ * @author      Sam Kumar <samkumar@berkeley.edu>
+ *
+ * Unlike the other files in this directory, this is is not taken from the
+ * FreeBSD TCP stack.
+ * @}
+ */
+#include "gnrc_tcp_freebsd_internal.h"
+#include "bsdtcp/tcp.h"
+
+#include <errno.h>
 #include <stdint.h>
 
 inline uint16_t deref_safe(uint16_t* unaligned) {
@@ -11,8 +30,27 @@ inline uint16_t deref_safe(uint16_t* unaligned) {
         | (((uint16_t) *(((uint8_t*) unaligned) + 1)) << 8);
 }
 
-uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
-                      struct ip_iovec* tcpseg, uint32_t len) {
+int gnrc_tcp_calc_csum(gnrc_pktsnip_t *hdr, gnrc_pktsnip_t *pseudo_hdr)
+{
+    if (hdr == NULL || pseudo_hdr == NULL) {
+        return -EFAULT;
+    } else if (hdr->type != GNRC_NETTYPE_TCP) {
+        return -EBADMSG;
+    } else if (pseudo_hdr->type != GNRC_NETTYPE_IPV6) {
+        return -ENOENT;
+    }
+
+    struct tcphdr* th = hdr->data;
+    th->th_sum = 0;
+
+    uint32_t csum = get_tcp_checksum(hdr, pseudo_hdr);
+    th->th_sum = csum;
+
+    return 0;
+}
+
+static uint16_t _calc_checksum(struct in6_addr* src, struct in6_addr* dest,
+                               gnrc_pktsnip_t* tcpseg, uint32_t len) {
     uint32_t total;
     uint16_t* current;
     uint16_t* end;
@@ -43,8 +81,8 @@ uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
 
     starthalf = 0;
     do {
-        current = (uint16_t*) tcpseg->iov_base;
-        currlen = (uint32_t) tcpseg->iov_len;
+        current = (uint16_t*) tcpseg->data;
+        currlen = (uint32_t) tcpseg->size;
         if (starthalf && currlen > 0) {
             total += ((uint32_t) *((uint8_t*) current)) << 8;
             current = (uint16_t*) (((uint8_t*) current) + 1);
@@ -64,7 +102,7 @@ uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
             // read the memory byte by byte, in case iovec isn't word-aligned
             total += deref_safe(current++);
         }
-        tcpseg = tcpseg->iov_next;
+        tcpseg = tcpseg->next;
     } while (tcpseg != NULL);
 
     while (total >> 16) {
@@ -72,4 +110,11 @@ uint16_t get_checksum(struct in6_addr* src, struct in6_addr* dest,
     }
 
     return ~((uint16_t) total);
+}
+
+uint16_t get_tcp_checksum(gnrc_pktsnip_t *tcpsnip, gnrc_pktsnip_t *ip6snip)
+{
+    struct ip6_hdr* ip6 = ip6snip->data;
+    return _calc_checksum(&ip6->ip6_src, &ip6->ip6_dst, tcpsnip,
+                          (uint32_t) ip6->ip6_plen);
 }

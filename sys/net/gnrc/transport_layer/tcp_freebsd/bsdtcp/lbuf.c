@@ -7,6 +7,14 @@ void lbuf_init(struct lbufhead* buffer) {
     memset(buffer, 0x00, sizeof(struct lbufhead));
 }
 
+struct ip_iovec* lbuf_to_iovec(struct lbufhead* buffer) {
+    if (buffer == NULL || buffer->head == NULL) {
+        return NULL;
+    } else {
+        return &buffer->head->iov;
+    }
+}
+
 int lbuf_append(struct lbufhead* buffer, struct lbufent* newentry) {
     struct lbufent* tail = buffer->tail;
     if (tail == NULL) {

@@ -27,25 +27,31 @@
 
 #include "msg.h"
 #include "thread.h"
+#include "net/gnrc/pkt.h"
 #include "net/gnrc/tcp_freebsd.h"
 
 #include "bsdtcp/tcp.h"
 #include "bsdtcp/tcp_fsm.h"
 #include "bsdtcp/tcp_var.h"
 
+#include "xtimer.h"
+
 #define ENABLE_DEBUG    (1)
 #include "debug.h"
 
 #define SUCCESS 0
 
+static const uint32_t NUM_TIMERS = GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS * TIMERS_PER_ACTIVE_SOCKET;
+
 static const int TRUE = 1;
 static const int FALSE = 0;
 
  /**
-  * @brief   Save the TCP thread ID for later reference (just like the UDP
+  * @brief   Save the TCP thread IDs for later reference (just like the UDP
   *          implementation)
   */
-static kernel_pid_t _pid = KERNEL_PID_UNDEF;
+static kernel_pid_t _packet_pid = KERNEL_PID_UNDEF;
+static kernel_pid_t _timer_pid = KERNEL_PID_UNDEF;
 
 /**
  * @brief    Statically allocated pools of active and passive TCP sockets
@@ -54,12 +60,25 @@ struct tcpcb tcbs[GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS];
 struct tcpcb_listen tcbls[GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS];
 
 /**
+ * @brief    Timers used for TCP. Each active socket requires four timers.
+ */
+struct tcp_timer {
+    xtimer_t timer;
+    msg_t msg;
+    bool running;
+};
+
+//struct tcp_timer tcp_timers[NUM_TIMERS];
+
+/**
  * @brief   Allocate memory for the TCP thread's stack
  */
 #if ENABLE_DEBUG
-static char _stack[GNRC_TCP_FREEBSD_STACK_SIZE + THREAD_EXTRA_STACKSIZE_PRINTF];
+static char _packet_stack[GNRC_TCP_FREEBSD_STACK_SIZE + THREAD_EXTRA_STACKSIZE_PRINTF];
+static char _timer_stack[GNRC_TCP_FREEBSD_STACK_SIZE + THREAD_EXTRA_STACKSIZE_PRINTF];
 #else
-static char _stack[GNRC_TCP_FREEBSD_STACK_SIZE];
+static char _packet_stack[GNRC_TCP_FREEBSD_STACK_SIZE];
+static char _timer_stack[GNRC_TCP_FREEBSD_STACK_SIZE];
 #endif
 
 /**
@@ -196,7 +215,38 @@ error:
     return;
 }
 
-static void* _event_loop(void* arg)
+/**
+ * @brief Event loop for timer events.
+ */
+static void* _timer_loop(void* arg)
+{
+    (void) arg;
+    msg_t msg;
+    /*
+     * We need to make the queue sufficiently large that no timer can ever be
+     * dropped (since that would be catastrophic).
+     */
+    msg_t msg_queue[NUM_TIMERS];
+    //struct tcpcb* tp;
+    //uint32_t timer_id;
+
+    msg_init_queue(msg_queue, sizeof(msg_queue));
+
+    for (;;) {
+        msg_receive(&msg);
+
+
+        //timer_id = msg.content.value & 0x3;
+    }
+
+    /* not reached */
+    return NULL;
+}
+
+/**
+ * @brief Event loop for received TCP segments.
+ */
+static void* _packet_loop(void* arg)
 {
     (void) arg;
     msg_t msg;
@@ -247,10 +297,13 @@ int gnrc_tcp_freebsd_init(void)
 {
     int i;
 
-    if (_pid == KERNEL_PID_UNDEF) {
-        _pid = thread_create(_stack, sizeof(_stack), GNRC_TCP_FREEBSD_PRIO,
-                             THREAD_CREATE_STACKTEST, _event_loop, NULL,
-                             "tcp_freebsd");
+    if (_packet_pid == KERNEL_PID_UNDEF) {
+        _packet_pid = thread_create(_packet_stack, sizeof(_packet_stack),
+                             GNRC_TCP_FREEBSD_PRIO, THREAD_CREATE_STACKTEST,
+                             _packet_loop, NULL, "tcp_freebsd");
+        _timer_pid = thread_create(_timer_stack, sizeof(_timer_stack),
+                            GNRC_TCP_FREEBSD_PRIO, THREAD_CREATE_STACKTEST,
+                            _timer_loop, NULL, "tcp_freebsd timers");
 
         /* Additional initialization work for TCP. */
         tcp_init();
@@ -265,7 +318,7 @@ int gnrc_tcp_freebsd_init(void)
             tcbls[i].acceptinto = NULL;
         }
     }
-    return _pid;
+    return _packet_pid;
 }
 
 /* A helper function. PORT is in network byte order. */
@@ -399,7 +452,7 @@ error_t asock_abort(uint8_t asockid)
 
 /* The internal API. */
 
-void send_message(struct tcpcb* tp, struct ip6_packet* msg, struct tcphdr* th, uint32_t tlen)
+void send_message(gnrc_pktsnip_t* pkt)
 {
     /* TODO */
 }

@@ -36,6 +36,7 @@
 #include "tcp_var.h"
 
 #include "tcp_const.h"
+#include "net/gnrc/pktbuf.h"
 
 enum tcp_timewait_consts {
     V_nolocaltimewait = 0 // For now, to keep things simple
@@ -62,18 +63,20 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 {
 	/* Essentially all the code needs to be discarded because I need to send packets the TinyOS way.
 	   There are some parts that I copied; I didn't want to comment out everything except the few
-	   lines I needed since I felt that this would be cleaner. */
-	struct ip6_packet* msg;
+	   lines I needed since I felt that this would be cleaner.
+
+       Update: I just made inline updates for the RIOT OS version. */
+	//struct ip6_packet* msg;
 	struct ip6_hdr* ip6;
 	struct tcphdr* nth;
-	struct ip_iovec* iov;
+	//struct ip_iovec* iov;
 	struct tcpopt to;
 	u_int optlen = 0;
 	u_char opt[TCP_MAXOLEN];
-	int alen;
-	char* bufreal;
+	//int alen;
+	//char* bufreal;
 	int win = 0;
-	char* buf;
+	//char* buf;
 
 	to.to_flags = 0;
 
@@ -88,11 +91,25 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 	}
 	optlen = tcp_addoptions(&to, opt);
 
+    gnrc_pktsnip_t* tcpsnip = gnrc_pktbuf_add(NULL, NULL, sizeof(struct tcphdr) + optlen, GNRC_NETTYPE_TCP);
+    if (tcpsnip == NULL) {
+        return 0; // drop the message;
+    }
+    gnrc_pktsnip_t* ip6snip = gnrc_pktbuf_add(tcpsnip, NULL, sizeof(struct ip6_hdr), GNRC_NETTYPE_IPV6);
+    if (ip6snip == NULL) {
+        return 0; // drop the message;
+    }
+
+    nth = tcpsnip->data;
+    ip6 = ip6snip->data;
+
+    #if 0
 	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + sizeof(struct ip_iovec);
 	bufreal = ip_malloc(alen + 3);
 	if (bufreal == NULL) {
 		return 0; // drop the message
 	}
+    #endif
 	if (tp != NULL) {
 		if (!(flags & TH_RST)) {
 			win = cbuf_free_space(&tp->recvbuf);
@@ -100,6 +117,7 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 				win = (long)TCP_MAXWIN << tp->rcv_scale;
 		}
 	}
+    #if 0
 	buf = (char*) (((uint32_t) (bufreal + 3)) & 0xFFFFFFFCu);
 	memset(buf, 0, alen); // for safe measure
 	msg = (struct ip6_packet*) buf;
@@ -109,6 +127,7 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 	iov->iov_base = (void*) (msg + 1);
 	msg->ip6_data = iov;
 	ip6 = &msg->ip6_hdr;
+    #endif
 	ip6->ip6_nxt = IANA_TCP;
 	ip6->ip6_plen = htons(sizeof(struct tcphdr) + optlen);
 	ip6->ip6_dst = tp->faddr;
@@ -125,8 +144,7 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 
 	memcpy(nth + 1, opt, optlen);
 
-	send_message(tp, msg, nth, sizeof(struct tcphdr) + optlen);
-	ip_free(bufreal);
+	send_message(ip6snip);
 
 	return 0;
 #if 0

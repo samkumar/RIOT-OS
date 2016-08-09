@@ -1,7 +1,7 @@
 #ifndef LBUF_H_
 #define LBUF_H_
 
-#include "iovec/iovec.h"
+#include "../blip/iovec.h"
 
 /* LINKED BUFFER */
 
@@ -22,6 +22,10 @@ struct lbufent {
 
 /* Initializes a linked buffer. */
 void lbuf_init(struct lbufhead* buffer);
+
+/* Returns the contents of the buffer as an iovec, or NULL if the buffer has
+   no head. */
+struct ip_iovec* lbuf_to_iovec(struct lbufhead* buffer);
 
 /* Adds the contents to NEWENTRY to the buffer. This may happen in one of
    two ways: (1) a reference to NEWENTRY is maintained by the buffer, or
