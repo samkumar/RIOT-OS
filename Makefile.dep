@@ -82,6 +82,7 @@ endif
 
 ifneq (,$(filter gnrc_tcp_freebsd,$(USEMODULE)))
   USEMODULE += gnrc_tcp_freebsd_internal
+  USEMODULE += gnrc_tcp_freebsd_blip
 endif
 
 ifneq (,$(filter gnrc_tcp_freebsd_internal,$(USEMODULE)))

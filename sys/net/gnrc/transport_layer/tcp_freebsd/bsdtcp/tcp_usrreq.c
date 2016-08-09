@@ -35,8 +35,9 @@
  *	From: @(#)tcp_usrreq.c	8.2 (Berkeley) 1/3/94
  */
 
+#include <errno.h>
+
 #include "../gnrc_tcp_freebsd_internal.h"
-#include "sys/errno.h"
 #include "tcp.h"
 #include "tcp_fsm.h"
 #include "tcp_seq.h"
@@ -303,8 +304,13 @@ int tcp_usr_send(struct tcpcb* tp, int moretocome, struct lbufent* data, int* st
 		goto out;
 	}
 
+    /* For the TinyOS version I used ESHUTDOWN, but apparently it doesn't
+     * come by default when you include errno.h: you need to also #define
+     * __LINUX_ERRNO_EXTENSIONS__. So I switched to EPIPE.
+     */
 	if (tpiscantsend(tp)) {
-		error = ESHUTDOWN;
+		//error = ESHUTDOWN;
+        error = EPIPE;
 		goto out;
 	}
 

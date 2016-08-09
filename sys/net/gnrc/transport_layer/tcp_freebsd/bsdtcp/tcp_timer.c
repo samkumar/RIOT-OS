@@ -30,10 +30,10 @@
  * $FreeBSD$
  */
 
+#include <errno.h>
 #include <stdio.h>
 
 #include "../gnrc_tcp_freebsd_internal.h"
-#include "errno.h"
 #include "lbuf.h"
 #include "tcp_fsm.h"
 #include "tcp_timer.h"
