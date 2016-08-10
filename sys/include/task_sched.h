@@ -35,14 +35,16 @@
 
 struct task {
     /* All fields are for internal use by the task_sched module. */
-    uint64_t _exec_time;
+    uint64_t _min_exec_time;
+    uint64_t _req_exec_time;
     int _next;
     int _prev;
 };
 
 struct task_sched {
     /* These fields must be set before calling start_task_sched. */
-    int64_t coalesce_thresh;
+    int coalesce_shift;
+    int64_t max_coalesce_time_delta;
     struct task* tasks;
     int num_tasks;
     char* thread_stack;

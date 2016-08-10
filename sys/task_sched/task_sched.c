@@ -36,6 +36,8 @@
 #include <thread.h>
 #include <xtimer.h>
 
+#define ENABLE_DEBUG (0)
+
 #include "debug.h"
 
 msg_t expired = { 0, 0, { 0 } };
@@ -43,7 +45,6 @@ msg_t expired = { 0, 0, { 0 } };
 void* _task_sched(void* arg)
 {
     struct task_sched* sched = arg;
-    int64_t until_next = 0;
 
     msg_t msg;
     msg_t msg_queue[1];
@@ -52,17 +53,24 @@ void* _task_sched(void* arg)
 
     while (1) {
         msg_receive(&msg);
+        DEBUG("Woke up\n");
 
         mutex_lock(&sched->_lock);
         sched->_in_process_loop = true;
 
-        while (sched->_first != -1 && (until_next =
-            (int64_t) (sched->tasks[sched->_first]._exec_time - xtimer_now64()))
-                        <= sched->coalesce_thresh) {
+        while (sched->_first != -1
+                && 0 <= (int64_t) (xtimer_now64() - sched->tasks[sched->_first]._min_exec_time)) {
             int taskid = sched->_first;
             struct task* t = &sched->tasks[sched->_first];
-            assert(t->_prev == -1);
+
+            DEBUG("Setting first to %d\n", t->_next);
             sched->_first = t->_next;
+            if (sched->_first != -1) {
+                assert(sched->tasks[sched->_first]._prev == taskid);
+            }
+            sched->tasks[sched->_first]._prev = -1;
+
+            assert(t->_prev == -1);
             t->_next = -1;
 
             /* Process the task. */
@@ -74,8 +82,9 @@ void* _task_sched(void* arg)
         /* Schedule the next timer, if any. */
         xtimer_remove(&sched->_timer);
         if (sched->_first != -1) {
-            xtimer_set_msg64(&sched->_timer, (uint64_t) until_next, &expired,
-                             sched->_pid);
+            uint64_t until_next = (uint64_t)
+                (sched->tasks[sched->_first]._req_exec_time - xtimer_now64());
+            xtimer_set_msg64(&sched->_timer, until_next, &expired, sched->_pid);
         }
 
         sched->_in_process_loop = false;
@@ -134,7 +143,7 @@ static int _sched_task(struct task_sched* sched, int taskid, bool cancel,
     /* Remove the task from the queue. */
     if (t->_prev != -1) {
         sched->tasks[t->_prev]._next = t->_next;
-    } else {
+    } else if (sched->_first == taskid) {
         sched->_first = t->_next;
     }
     if (t->_next != -1) {
@@ -150,16 +159,20 @@ static int _sched_task(struct task_sched* sched, int taskid, bool cancel,
 
     } else {
 
+        int64_t coalesce_delta;
         int curr;
         int prev = -1;
 
         /* Find the correct place in the queue. */
+        DEBUG("Finding the spot. _first is %d\n", oldfirst);
         for (curr = sched->_first; curr != -1; curr = sched->tasks[curr]._next) {
-            if (delay > (int64_t) (sched->tasks[curr]._exec_time - now)) {
+            DEBUG("Iterating: prev = %d, curr = %d\n", prev, curr);
+            if (delay < (int64_t) (sched->tasks[curr]._req_exec_time - now)) {
                 break;
             }
             prev = curr;
         }
+        DEBUG("Found the spot. prev = %d, curr = %d\n", prev, curr);
 
         /* Put the task at the correct place in the queue. */
         t->_prev = prev;
@@ -174,7 +187,13 @@ static int _sched_task(struct task_sched* sched, int taskid, bool cancel,
         }
 
         /* Correctly set the exec time. */
-        t->_exec_time = now + (uint64_t) delay;
+        t->_req_exec_time = now + (uint64_t) delay;
+        coalesce_delta = delay >> sched->coalesce_shift;
+        if (sched->max_coalesce_time_delta >= 0
+                && coalesce_delta > sched->max_coalesce_time_delta) {
+            coalesce_delta = sched->max_coalesce_time_delta;
+        }
+        t->_min_exec_time = t->_req_exec_time - (uint64_t) coalesce_delta;
     }
 
     /*
@@ -187,10 +206,13 @@ static int _sched_task(struct task_sched* sched, int taskid, bool cancel,
         && (sched->_first == taskid || oldfirst == taskid)) {
 
         // If the next event is sufficiently close, just fire it.
-        int64_t delay_to_first = sched->tasks[sched->_first]._exec_time - now;
-        if (delay_to_first <= sched->coalesce_thresh) {
+        if (now <= sched->tasks[sched->_first]._min_exec_time) {
+            DEBUG("Firing immediately\n");
             msg_try_send(&expired, sched->_pid);
         } else {
+            uint64_t delay_to_first = (uint64_t)
+                (sched->tasks[sched->_first]._req_exec_time - now);
+            DEBUG("Scheduled in %d milliseconds\n", (int) (delay_to_first / 1000));
             xtimer_set_msg64(&sched->_timer, delay_to_first, &expired,
                              sched->_pid);
         }

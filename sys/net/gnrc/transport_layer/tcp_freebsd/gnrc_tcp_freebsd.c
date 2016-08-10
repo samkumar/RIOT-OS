@@ -314,7 +314,8 @@ int gnrc_tcp_freebsd_init(void)
         _packet_pid = thread_create(_packet_stack, sizeof(_packet_stack),
                              GNRC_TCP_FREEBSD_PRIO, THREAD_CREATE_STACKTEST,
                              _packet_loop, NULL, "tcp_freebsd");
-        tcp_timer_sched.coalesce_thresh = 200000; // 200 ms
+        tcp_timer_sched.coalesce_shift = 64;
+        tcp_timer_sched.max_coalesce_time_delta = 0; // no coalescence for now
         tcp_timer_sched.tasks = tcp_timers;
         tcp_timer_sched.num_tasks = GNRC_TCP_FREEBSD_NUM_TIMERS;
         tcp_timer_sched.thread_stack = _timer_stack;
