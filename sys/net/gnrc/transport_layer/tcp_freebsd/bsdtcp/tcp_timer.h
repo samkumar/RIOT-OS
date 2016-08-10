@@ -153,16 +153,12 @@ static const int	tcp_backoff[TCP_MAXRXTSHIFT + 1] =
 
 static const int tcp_totbackoff = 2559;	/* sum of tcp_backoff[] */
 
-//extern int tcp_keepinit;		/* time to establish connection */
-//extern int tcp_keepidle;		/* time before keepalive probes begin */
-//extern int tcp_keepintvl;		/* time between keepalive probes */
-//extern int tcp_keepcnt;			/* number of keepalives */
-//extern int tcp_delacktime;		/* time before sending a delayed ACK */
-//extern int tcp_maxpersistidle;
-//extern int tcp_finwait2_timeout;
-//extern int tcp_fast_finwait2_recycle;
-//extern int tcp_rexmit_slop;
-//extern int tcp_msl;
+void tcp_timer_delack(struct tcpcb* tp);
+void tcp_timer_keep(struct tcpcb* tp);
+void tcp_timer_persist(struct tcpcb* tp);
+void tcp_timer_2msl(struct tcpcb* tp);
+void tcp_timer_rexmt(struct tcpcb *tp);
+int tcp_timer_active(struct tcpcb *tp, uint32_t timer_type);
 
 /* Copied from below, with modifications. */
 #define	TP_KEEPINIT(tp)	(/*(tp)->t_keepinit ? (tp)->t_keepinit :*/ tcp_keepinit)

@@ -55,7 +55,7 @@
 };*/
 
 #define hz 1000 // number of ticks per second
-#define MILLIS_PER_TICK 1 // number of milliseconds per tick
+#define MICROS_PER_TICK 1000 // number of microseconds per tick
 
 #define FRAMES_PER_SEG 3
 #define FRAMECAP_6LOWPAN (122 - 22 - 12) // Fragmentation limit: maximum frame size of the IP and TCP headers
@@ -65,6 +65,8 @@
 #define SIG_CONN_ESTABLISHED 0x01
 #define SIG_RECVBUF_NOTEMPTY 0x02
 #define SIG_RCVD_FIN         0x04
+
+#define GNRC_TCP_FREEBSD_NUM_TIMERS (GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS * TIMERS_PER_ACTIVE_SOCKET)
 
 #define CONN_LOST_NORMAL 0 // errno of 0 means that the connection closed gracefully
 

@@ -29,8 +29,9 @@
  * @}
  */
 
- #include <stdint.h>
- #include <xtimer.h>
+#include <mutex.h>
+#include <stdint.h>
+#include <xtimer.h>
 
 struct task {
     /* All fields are for internal use by the task_sched module. */
@@ -60,4 +61,5 @@ struct task_sched {
 
 kernel_pid_t start_task_sched(struct task_sched* args);
 
-int post_task(struct task_sched* sched, int taskid);
+int sched_task(struct task_sched* sched, int taskid, int64_t delay);
+int cancel_task(struct task_sched* sched, int taskid);

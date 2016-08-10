@@ -19,6 +19,7 @@
  * @}
  */
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <errno.h>
@@ -34,18 +35,13 @@
 #include "bsdtcp/tcp_fsm.h"
 #include "bsdtcp/tcp_var.h"
 
+#include "task_sched.h"
 #include "xtimer.h"
 
 #define ENABLE_DEBUG    (1)
 #include "debug.h"
 
 #define SUCCESS 0
-
-static const uint32_t NUM_TIMERS = GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS * TIMERS_PER_ACTIVE_SOCKET;
-
-static const int TRUE = 1;
-static const int FALSE = 0;
-
  /**
   * @brief   Save the TCP thread IDs for later reference (just like the UDP
   *          implementation)
@@ -62,13 +58,8 @@ struct tcpcb_listen tcbls[GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS];
 /**
  * @brief    Timers used for TCP. Each active socket requires four timers.
  */
-struct tcp_timer {
-    xtimer_t timer;
-    msg_t msg;
-    bool running;
-};
-
-//struct tcp_timer tcp_timers[NUM_TIMERS];
+static struct task_sched tcp_timer_sched;
+struct task tcp_timers[GNRC_TCP_FREEBSD_NUM_TIMERS];
 
 /**
  * @brief   Allocate memory for the TCP thread's stack
@@ -81,15 +72,65 @@ static char _packet_stack[GNRC_TCP_FREEBSD_STACK_SIZE];
 static char _timer_stack[GNRC_TCP_FREEBSD_STACK_SIZE];
 #endif
 
+static void _handle_timer(int timer_id)
+{
+    struct tcpcb* tp;
+    DEBUG("Timer %d fired!\n", timer_id);
+    assert((timer_id >> 2) < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
+
+    tp = &tcbs[timer_id >> 2];
+    timer_id &= 0x3;
+
+    switch (timer_id) {
+    case TOS_DELACK:
+        DEBUG("Delayed ACK\n");
+        tcp_timer_delack(tp);
+        break;
+    case TOS_REXMT: // Also include persist case
+        if (tcp_timer_active(tp, TT_REXMT)) {
+            DEBUG("Retransmit\n");
+            tcp_timer_rexmt(tp);
+        } else {
+            DEBUG("Persist\n");
+            tcp_timer_persist(tp);
+        }
+        break;
+    case TOS_KEEP:
+        DEBUG("Keep\n");
+        tcp_timer_keep(tp);
+        break;
+    case TOS_2MSL:
+        DEBUG("2MSL\n");
+        tcp_timer_2msl(tp);
+        break;
+    }
+}
+
 /**
  *  @brief   Passes signals to the user of this module.
  */
 void handle_signals(struct tcpcb* tp, uint8_t signals, uint32_t freedentries)
 {
-    (void) tp;
-    (void) signals;
-    (void) freedentries;
-    /* TODO implement this */
+    struct sockaddr_in6 addrport;
+
+    if (signals & SIG_CONN_ESTABLISHED) {
+        addrport.sin6_port = tp->fport;
+        memcpy(&addrport.sin6_addr, &tp->faddr, sizeof(addrport.sin6_addr));
+
+        // TODO: signal connectDone(&addrport)
+    }
+
+    if (signals & SIG_RECVBUF_NOTEMPTY) {
+        // TODO: signal receiveReady(0)
+    }
+
+    if (signals & SIG_RCVD_FIN) {
+        // TODO: signal receiveReady(1)
+    }
+
+    if (freedentries > 0) {
+        // TODO: signal sendDone(freedentries)
+    }
 }
 
 /**
@@ -165,7 +206,7 @@ static void _receive(gnrc_pktsnip_t* pkt)
 
     th = (struct tcphdr*) tcp->data;
 
-    packet_len = iph->ip6_ctlun.ip6_un1.ip6_un1_plen;
+    packet_len = iph->ip6_plen;
     if (packet_len != ipv6->size + tcp->size) {
         DEBUG("Sizes don't add up: packet length is %" PRIu16 ", but got %zu\n", packet_len, ipv6->size + tcp->size);
         goto error;
@@ -213,34 +254,6 @@ static void _receive(gnrc_pktsnip_t* pkt)
 error:
     gnrc_pktbuf_release(pkt);
     return;
-}
-
-/**
- * @brief Event loop for timer events.
- */
-static void* _timer_loop(void* arg)
-{
-    (void) arg;
-    msg_t msg;
-    /*
-     * We need to make the queue sufficiently large that no timer can ever be
-     * dropped (since that would be catastrophic).
-     */
-    msg_t msg_queue[NUM_TIMERS];
-    //struct tcpcb* tp;
-    //uint32_t timer_id;
-
-    msg_init_queue(msg_queue, NUM_TIMERS);
-
-    for (;;) {
-        msg_receive(&msg);
-
-
-        //timer_id = msg.content.value & 0x3;
-    }
-
-    /* not reached */
-    return NULL;
 }
 
 /**
@@ -301,9 +314,15 @@ int gnrc_tcp_freebsd_init(void)
         _packet_pid = thread_create(_packet_stack, sizeof(_packet_stack),
                              GNRC_TCP_FREEBSD_PRIO, THREAD_CREATE_STACKTEST,
                              _packet_loop, NULL, "tcp_freebsd");
-        _timer_pid = thread_create(_timer_stack, sizeof(_timer_stack),
-                            GNRC_TCP_FREEBSD_PRIO, THREAD_CREATE_STACKTEST,
-                            _timer_loop, NULL, "tcp_freebsd timers");
+        tcp_timer_sched.coalesce_thresh = 200000; // 200 ms
+        tcp_timer_sched.tasks = tcp_timers;
+        tcp_timer_sched.num_tasks = GNRC_TCP_FREEBSD_NUM_TIMERS;
+        tcp_timer_sched.thread_stack = _timer_stack;
+        tcp_timer_sched.thread_stack_size = sizeof(_timer_stack);
+        tcp_timer_sched.thread_priority = GNRC_TCP_FREEBSD_PRIO;
+        tcp_timer_sched.thread_name = "tcp_freebsd timers";
+        tcp_timer_sched.task_handler = _handle_timer;
+        _timer_pid = start_task_sched(&tcp_timer_sched);
 
         /* Additional initialization work for TCP. */
         tcp_init();
@@ -327,15 +346,15 @@ bool portisfree(uint16_t port)
     int i;
     for (i = 0; i < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
         if (tcbs[i].lport == port) {
-            return FALSE;
+            return false;
         }
     }
     for (i = 0; i < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS; i++) {
         if (tcbls[i].lport == port) {
-            return FALSE;
+            return false;
         }
     }
-    return TRUE;
+    return true;
 }
 
 /* The external API. */
@@ -473,13 +492,21 @@ uint32_t get_ticks(void)
 
 void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay)
 {
-    //uint32_t tid = ((uint32_t) (((uint32_t) tcb->index) << 2)) | (uint32_t) timer_id;
-    /* TODO */
+    int task_id = (((int) tcb->index) << 2) | (int) timer_id;
+    int64_t delay_micros = MICROS_PER_TICK * (int64_t) delay;
+
+    if (sched_task(&tcp_timer_sched, task_id, delay_micros) != 0) {
+        DEBUG("sched_task failed!\n");
+    }
 }
 
 void stop_timer(struct tcpcb* tcb, uint8_t timer_id)
 {
-    /* TODO */
+    int task_id = (((int) tcb->index) << 2) | (int) timer_id;
+
+    if (cancel_task(&tcp_timer_sched, task_id) != 0) {
+        DEBUG("cancel_task failed!\n");
+    }
 }
 
 /**
@@ -487,7 +514,12 @@ void stop_timer(struct tcpcb* tcb, uint8_t timer_id)
  */
 void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port)
 {
-    /* TODO */
+    struct sockaddr_in6 addrport;
+    addrport.sin6_port = port;
+    memcpy(&addrport.sin6_addr, addr, sizeof(struct in6_addr));
+    // TODO: signal acceptDone(&addrport, tpl->acceptinto->index)
+    tpl->t_state = TCPS_CLOSED;
+    tpl->acceptinto = NULL;
 }
 
 /**
@@ -495,5 +527,5 @@ void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16
  */
 void connection_lost(struct tcpcb* tcb, uint8_t errnum)
 {
-    /* TODO */
+    // TODO: signal connectionLost(errno)
 }

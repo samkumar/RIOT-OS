@@ -58,7 +58,7 @@ void* _task_sched(void* arg)
 
         while (sched->_first != -1 && (until_next =
             (int64_t) (sched->tasks[sched->_first]._exec_time - xtimer_now64()))
-                        < sched->coalesce_thresh) {
+                        <= sched->coalesce_thresh) {
             int taskid = sched->_first;
             struct task* t = &sched->tasks[sched->_first];
             assert(t->_prev == -1);
@@ -103,30 +103,29 @@ kernel_pid_t start_task_sched(struct task_sched* args)
     return args->_pid;
 }
 
-static int _sched_task(struct task_sched* sched, int taskid, bool now,
-                        uint64_t when);
+static int _sched_task(struct task_sched* sched, int taskid, bool cancel,
+                        int64_t delay);
 
-int post_task(struct task_sched* sched, int taskid)
+int sched_task(struct task_sched* sched, int taskid, int64_t delay)
+{
+    return _sched_task(sched, taskid, false, delay);
+}
+
+int cancel_task(struct task_sched* sched, int taskid)
 {
     return _sched_task(sched, taskid, true, 0);
 }
 
-int sched_task(struct task_sched* sched, int taskid, uint64_t when)
+static int _sched_task(struct task_sched* sched, int taskid, bool cancel,
+                        int64_t delay)
 {
-    return _sched_task(sched, taskid, false, when);
-}
-
-static int _sched_task(struct task_sched* sched, int taskid, bool now,
-                        uint64_t when)
-{
+    uint64_t now;
     struct task* t;
+    int oldfirst = sched->_first;
 
     if (taskid < 0 || taskid > sched->num_tasks) {
         return -1;
     }
-
-    expired.type = 0;
-    expired.content.value = 0;
 
     t = &sched->tasks[taskid];
 
@@ -135,63 +134,64 @@ static int _sched_task(struct task_sched* sched, int taskid, bool now,
     /* Remove the task from the queue. */
     if (t->_prev != -1) {
         sched->tasks[t->_prev]._next = t->_next;
+    } else {
+        sched->_first = t->_next;
     }
     if (t->_next != -1) {
         sched->tasks[t->_next]._prev = t->_prev;
     }
 
-    if (now) {
+    now = xtimer_now64();
 
-        /* Put the task at the front of the queue. */
-        t->_exec_time = xtimer_now64();
-        t->_next = sched->_first;
+    if (cancel) {
+
         t->_prev = -1;
-        sched->_first = taskid;
-
-        if (t->_next == -1) {
-            assert(0 < (int64_t) (sched->tasks[t->_next]._exec_time
-                                    - t->_exec_time));
-        }
-
-        /* Now, send a message to the scheduler thread to process this event. If
-         * there's already a message on the queue, then that's OK; we don't need
-         * to block, since it will wake up momentarily.
-         */
-        if (!sched->_in_process_loop) {
-            msg_try_send(&expired, sched->_pid);
-        }
+        t->_next = -1;
 
     } else {
 
         int curr;
+        int prev = -1;
 
         /* Find the correct place in the queue. */
         for (curr = sched->_first; curr != -1; curr = sched->tasks[curr]._next) {
-            if (0 < (int64_t) (when - sched->tasks[curr]._exec_time)) {
+            if (delay > (int64_t) (sched->tasks[curr]._exec_time - now)) {
                 break;
             }
+            prev = curr;
         }
 
         /* Put the task at the correct place in the queue. */
-        if (curr == -1) {
-            t->_prev = -1;
-            t->_next = -1;
-            sched->_first = taskid;
-        } else {
-            t->_prev = sched->tasks[curr]._prev;
-            t->_next = curr;
+        t->_prev = prev;
+        t->_next = curr;
+        if (curr != -1) {
             sched->tasks[curr]._prev = taskid;
-            if (t->_prev == -1) {
-                sched->_first = taskid;
-            } else {
-                sched->tasks[t->_prev]._next = taskid;
-            }
+        }
+        if (t->_prev != -1) {
+            sched->tasks[t->_prev]._next = taskid;
+        } else {
+            sched->_first = taskid;
         }
 
-        /* Now, reset the timer so the event fires. */
-        if (!sched->_in_process_loop && sched->_first == taskid) {
-            xtimer_remove(&sched->_timer);
-            xtimer_set_msg64(&sched->_timer, when - xtimer_now64(), &expired,
+        /* Correctly set the exec time. */
+        t->_exec_time = now + (uint64_t) delay;
+    }
+
+    /*
+     * If the head of the queue changed, reset the timer so the correct
+     * event fires (unless we're in the precessing loop; then we'll check
+     * anyway, so don't bother with sending a message).
+     */
+    xtimer_remove(&sched->_timer);
+    if (!sched->_in_process_loop && sched->_first != -1
+        && (sched->_first == taskid || oldfirst == taskid)) {
+
+        // If the next event is sufficiently close, just fire it.
+        int64_t delay_to_first = sched->tasks[sched->_first]._exec_time - now;
+        if (delay_to_first <= sched->coalesce_thresh) {
+            msg_try_send(&expired, sched->_pid);
+        } else {
+            xtimer_set_msg64(&sched->_timer, delay_to_first, &expired,
                              sched->_pid);
         }
     }
