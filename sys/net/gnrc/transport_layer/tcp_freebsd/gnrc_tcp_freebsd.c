@@ -230,7 +230,7 @@ static void* _timer_loop(void* arg)
     //struct tcpcb* tp;
     //uint32_t timer_id;
 
-    msg_init_queue(msg_queue, sizeof(msg_queue));
+    msg_init_queue(msg_queue, NUM_TIMERS);
 
     for (;;) {
         msg_receive(&msg);
