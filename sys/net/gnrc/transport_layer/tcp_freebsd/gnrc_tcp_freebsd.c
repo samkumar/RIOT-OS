@@ -11,7 +11,7 @@
  * @{
  *
  * @file
- * @brief       TCP frontend for GNRC
+ * @brief       TCP interface to the GNRC
  *
  * @author      Sam Kumar <samkumar@berkeley.edu>
  *
@@ -117,20 +117,41 @@ void handle_signals(struct tcpcb* tp, uint8_t signals, uint32_t freedentries)
         addrport.sin6_port = tp->fport;
         memcpy(&addrport.sin6_addr, &tp->faddr, sizeof(addrport.sin6_addr));
 
-        // TODO: signal connectDone(&addrport)
+        event_connectDone((uint8_t) tp->index, &addrport);
     }
 
     if (signals & SIG_RECVBUF_NOTEMPTY) {
-        // TODO: signal receiveReady(0)
+        event_receiveReady((uint8_t) tp->index, 0);
     }
 
     if (signals & SIG_RCVD_FIN) {
-        // TODO: signal receiveReady(1)
+        event_receiveReady((uint8_t) tp->index, 1);
     }
 
     if (freedentries > 0) {
-        // TODO: signal sendDone(freedentries)
+        event_sendDone((uint8_t) tp->index, freedentries);
     }
+}
+
+/**
+ * Called when an active socket loses a connection.
+ */
+void connection_lost(struct tcpcb* tcb, uint8_t errnum)
+{
+    event_connectionLost((uint8_t) tcb->index, errnum);
+}
+
+/**
+ * Called when a passive socket accepts a connection.
+ */
+void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port)
+{
+    struct sockaddr_in6 addrport;
+    addrport.sin6_port = port;
+    memcpy(&addrport.sin6_addr, addr, sizeof(struct in6_addr));
+    // TODO: signal acceptDone(&addrport, tpl->acceptinto->index)
+    tpl->t_state = TCPS_CLOSED;
+    tpl->acceptinto = NULL;
 }
 
 /**
@@ -310,6 +331,8 @@ int gnrc_tcp_freebsd_init(void)
 {
     int i;
 
+    gnrc_tcp_freebsd_allocator_init();
+
     if (_packet_pid == KERNEL_PID_UNDEF) {
         _packet_pid = thread_create(_packet_stack, sizeof(_packet_stack),
                              GNRC_TCP_FREEBSD_PRIO, THREAD_CREATE_STACKTEST,
@@ -360,28 +383,28 @@ bool portisfree(uint16_t port)
 
 /* The external API. */
 
-int psock_getID(uint8_t psockid)
+int psock_getID_impl(int psockid)
 {
     return tcbls[psockid].index;
 }
 
-int asock_getID(uint8_t asockid)
+int asock_getID_impl(int asockid)
 {
     return tcbs[asockid].index;
 }
 
-int asock_getState(uint8_t asockid)
+int asock_getState_impl(int asockid)
 {
     return tcbs[asockid].t_state;
 }
 
-void asock_getPeerInfo(uint8_t asockid, struct in6_addr** addr, uint16_t** port)
+void asock_getPeerInfo_impl(int asockid, struct in6_addr** addr, uint16_t** port)
 {
     *addr = &tcbs[asockid].faddr;
     *port = &tcbs[asockid].fport;
 }
 
-error_t asock_bind(uint8_t asockid, uint16_t port)
+error_t asock_bind_impl(int asockid, uint16_t port)
 {
     uint16_t oldport = tcbs[asockid].lport;
     port = htons(port);
@@ -394,7 +417,7 @@ error_t asock_bind(uint8_t asockid, uint16_t port)
     return EADDRINUSE;
 }
 
-error_t psock_bind(uint8_t psockid, uint16_t port)
+error_t psock_bind_impl(int psockid, uint16_t port)
 {
     uint16_t oldport = tcbls[psockid].lport;
     port = htons(port);
@@ -407,7 +430,7 @@ error_t psock_bind(uint8_t psockid, uint16_t port)
     return EADDRINUSE;
 }
 
-error_t psock_listenaccept(uint8_t psockid, int asockid, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
+error_t psock_listenaccept_impl(int psockid, int asockid, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
 {
     tcbls[psockid].t_state = TCPS_LISTEN;
     if (tcbs[asockid].t_state != TCPS_CLOSED) {
@@ -419,7 +442,7 @@ error_t psock_listenaccept(uint8_t psockid, int asockid, uint8_t* recvbuf, size_
     return SUCCESS;
 }
 
-error_t asock_connect(uint8_t asockid, struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
+error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
 {
     struct tcpcb* tp = &tcbs[asockid];
     if (tp->t_state != TCPS_CLOSED) { // This is a check that I added
@@ -429,20 +452,20 @@ error_t asock_connect(uint8_t asockid, struct sockaddr_in6* addr, uint8_t* recvb
     return tcp6_usr_connect(tp, addr);
 }
 
-error_t asock_send(uint8_t asockid, struct lbufent* data, int moretocome, int* status)
+error_t asock_send_impl(int asockid, struct lbufent* data, int moretocome, int* status)
 {
     struct tcpcb* tp = &tcbs[asockid];
     return (error_t) tcp_usr_send(tp, moretocome, data, status);
 }
 
-error_t asock_receive(uint8_t asockid, uint8_t* buffer, uint32_t len, size_t* bytessent)
+error_t asock_receive_impl(int asockid, uint8_t* buffer, uint32_t len, size_t* bytessent)
 {
     struct tcpcb* tp = &tcbs[asockid];
     *bytessent = cbuf_read(&tp->recvbuf, buffer, len, 1);
     return (error_t) tcp_usr_rcvd(tp);
 }
 
-error_t asock_shutdown(uint8_t asockid, bool shut_rd, bool shut_wr)
+error_t asock_shutdown_impl(int asockid, bool shut_rd, bool shut_wr)
 {
     int error = SUCCESS;
     if (shut_rd) {
@@ -457,14 +480,14 @@ error_t asock_shutdown(uint8_t asockid, bool shut_rd, bool shut_wr)
     return error;
 }
 
-error_t psock_close(uint8_t psockid)
+error_t psock_close_impl(int psockid)
 {
     tcbls[psockid].t_state = TCP6S_CLOSED;
     tcbls[psockid].acceptinto = NULL;
     return SUCCESS;
 }
 
-error_t asock_abort(uint8_t asockid)
+error_t asock_abort_impl(int asockid)
 {
     tcp_usr_abort(&tcbs[asockid]);
     return SUCCESS;
@@ -508,25 +531,4 @@ void stop_timer(struct tcpcb* tcb, uint8_t timer_id)
     if (cancel_task(&tcp_timer_sched, task_id) != 0) {
         DEBUG("cancel_task failed!\n");
     }
-}
-
-/**
- * Called when a passive socket accepts a connection.
- */
-void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port)
-{
-    struct sockaddr_in6 addrport;
-    addrport.sin6_port = port;
-    memcpy(&addrport.sin6_addr, addr, sizeof(struct in6_addr));
-    // TODO: signal acceptDone(&addrport, tpl->acceptinto->index)
-    tpl->t_state = TCPS_CLOSED;
-    tpl->acceptinto = NULL;
-}
-
-/**
- * Called when an active socket loses a connection.
- */
-void connection_lost(struct tcpcb* tcb, uint8_t errnum)
-{
-    // TODO: signal connectionLost(errno)
 }

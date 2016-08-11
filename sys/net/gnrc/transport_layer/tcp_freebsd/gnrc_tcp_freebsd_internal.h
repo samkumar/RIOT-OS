@@ -17,13 +17,15 @@
  *
  * This file describes the API that the TCP frontend presents to the TCP
  * protocol logic. The protocol logic interacts with other parts of the
- * kernel (GNRC, xtimer, etc.) via this API.
+ * kernel (GNRC, xtimer, etc.) via this API. It also describes the API that
+ * the TCP frontend presents to the interface to the GNRC.
  * @}
  */
 
 #ifndef GNRC_TCP_FREEBSD_INTERNAL_H_
 #define GNRC_TCP_FREEBSD_INTERNAL_H_
 
+#include <errno.h>
 #include <stdio.h>
 #include "bsdtcp/ip6.h"
 #include "bsdtcp/tcp.h"
@@ -41,18 +43,6 @@
 #define RELOOKUP_REQUIRED -1
 
 #define IANA_TCP PROTNUM_TCP
-
-/*struct tcp_hdr {
-  uint16_t srcport;
-  uint16_t dstport;
-  uint32_t seqno;
-  uint32_t ackno;
-  uint8_t offset;
-  uint8_t flags;
-  uint16_t window;
-  uint16_t chksum;
-  uint16_t urgent;
-};*/
 
 #define hz 1000 // number of ticks per second
 #define MICROS_PER_TICK 1000 // number of microseconds per tick
@@ -76,6 +66,10 @@ struct ip6_packet {
     struct ip_iovec* ip6_data;
 };
 
+/*
+ * Functions that the TCP protocol logic can call to interact with the rest of
+ * the kernel.
+ */
 void send_message(gnrc_pktsnip_t* pkt);
 uint32_t get_ticks(void);
 uint32_t get_millis(void);
@@ -83,7 +77,35 @@ void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
 void stop_timer(struct tcpcb* tcb, uint8_t timer_id);
 void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port);
 void connection_lost(struct tcpcb* tcb, uint8_t errnum);
-
 uint16_t get_tcp_checksum(gnrc_pktsnip_t *tcpsnip, gnrc_pktsnip_t *ip6snip);
+
+/*
+ * Functions that the TCP API code can call to interact with the rest of the
+ * TCP stack.
+ */
+int psock_getID_impl(int psockid);
+int asock_getID_impl(int asockid);
+int asock_getState_impl(int asockid);
+void asock_getPeerInfo_impl(int asockid, struct in6_addr** addr, uint16_t** port);
+error_t asock_bind_impl(int asockid, uint16_t port);
+error_t psock_bind_impl(int psockid, uint16_t port);
+error_t psock_listenaccept_impl(int psockid, int asockid, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
+error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
+error_t asock_send_impl(int asockid, struct lbufent* data, int moretocome, int* status);
+error_t asock_receive_impl(int asockid, uint8_t* buffer, uint32_t len, size_t* bytessent);
+error_t asock_shutdown_impl(int asockid, bool shut_rd, bool shut_wr);
+error_t psock_close_impl(int psockid);
+error_t asock_abort_impl(int asockid);
+
+/*
+ * Functions that allow the TCP protocol logic to inform the user of TCP-related
+ * events.
+ */
+void gnrc_tcp_freebsd_allocator_init(void);
+void event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid);
+void event_connectDone(uint8_t ai, struct sockaddr_in6* addr);
+void event_receiveReady(uint8_t ai, int gotfin);
+void event_sendDone(uint8_t ai, uint32_t numentries);
+void event_connectionLost(uint8_t ai, uint8_t how);
 
 #endif // GNRC_TCP_FREEBSD_INTERNAL_H_
