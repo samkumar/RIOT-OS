@@ -38,6 +38,8 @@
 #include "task_sched.h"
 #include "xtimer.h"
 
+#include "mutex.h"
+
 #define ENABLE_DEBUG    (1)
 #include "debug.h"
 
@@ -48,6 +50,8 @@
   */
 static kernel_pid_t _packet_pid = KERNEL_PID_UNDEF;
 static kernel_pid_t _timer_pid = KERNEL_PID_UNDEF;
+
+static mutex_t tcp_lock = MUTEX_INIT;
 
 /**
  * @brief    Statically allocated pools of active and passive TCP sockets
@@ -81,6 +85,8 @@ static void _handle_timer(int timer_id)
     tp = &tcbs[timer_id >> 2];
     timer_id &= 0x3;
 
+    mutex_lock(&tcp_lock);
+
     switch (timer_id) {
     case TOS_DELACK:
         DEBUG("Delayed ACK\n");
@@ -104,6 +110,8 @@ static void _handle_timer(int timer_id)
         tcp_timer_2msl(tp);
         break;
     }
+
+    mutex_unlock(&tcp_lock);
 }
 
 /**
@@ -138,7 +146,9 @@ void handle_signals(struct tcpcb* tp, uint8_t signals, uint32_t freedentries)
  */
 void connection_lost(struct tcpcb* tcb, uint8_t errnum)
 {
+    mutex_unlock(&tcp_lock);
     event_connectionLost((uint8_t) tcb->index, errnum);
+    mutex_lock(&tcp_lock);
 }
 
 /**
@@ -147,11 +157,13 @@ void connection_lost(struct tcpcb* tcb, uint8_t errnum)
 void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port)
 {
     struct sockaddr_in6 addrport;
+    mutex_unlock(&tcp_lock);
     addrport.sin6_port = port;
     memcpy(&addrport.sin6_addr, addr, sizeof(struct in6_addr));
-    // TODO: signal acceptDone(&addrport, tpl->acceptinto->index)
+    event_acceptDone((uint8_t) tpl->index, &addrport, tpl->acceptinto->index);
     tpl->t_state = TCPS_CLOSED;
     tpl->acceptinto = NULL;
+    mutex_lock(&tcp_lock);
 }
 
 /**
@@ -248,8 +260,12 @@ static void _receive(gnrc_pktsnip_t* pkt)
         if (tcb->t_state != TCP6S_CLOSED && dport == tcb->lport
             && sport == tcb->fport
             && !memcmp(&iph->ip6_src, &tcb->faddr, sizeof(iph->ip6_src))) {
+            int rv;
             DEBUG("Matches active socket %d\n", i);
-            if (RELOOKUP_REQUIRED == tcp_input(iph, th, &tcbs[i], NULL, &signals, &freedentries)) {
+            mutex_lock(&tcp_lock);
+            rv = tcp_input(iph, th, &tcbs[i], NULL, &signals, &freedentries);
+            mutex_unlock(&tcp_lock);
+            if (RELOOKUP_REQUIRED == rv) {
                 break;
             } else {
                 handle_signals(&tcbs[i], signals, freedentries);
@@ -400,74 +416,113 @@ int asock_getState_impl(int asockid)
 
 void asock_getPeerInfo_impl(int asockid, struct in6_addr** addr, uint16_t** port)
 {
+    mutex_lock(&tcp_lock);
     *addr = &tcbs[asockid].faddr;
     *port = &tcbs[asockid].fport;
+    mutex_unlock(&tcp_lock);
 }
 
 error_t asock_bind_impl(int asockid, uint16_t port)
 {
-    uint16_t oldport = tcbs[asockid].lport;
+    error_t rv;
+    uint16_t oldport;
+    mutex_lock(&tcp_lock);
+    oldport = tcbs[asockid].lport;
     port = htons(port);
     tcbs[asockid].lport = 0;
     if (port == 0 || portisfree(port)) {
         tcbs[asockid].lport = port;
-        return SUCCESS;
+        rv = SUCCESS;
+        goto done;
     }
     tcbs[asockid].lport = oldport;
-    return EADDRINUSE;
+    rv = EADDRINUSE;
+done:
+    mutex_unlock(&tcp_lock);
+    return rv;
 }
 
 error_t psock_bind_impl(int psockid, uint16_t port)
 {
-    uint16_t oldport = tcbls[psockid].lport;
+    error_t rv;
+    uint16_t oldport;
+    mutex_lock(&tcp_lock);
+    oldport = tcbls[psockid].lport;
     port = htons(port);
     tcbls[psockid].lport = 0;
     if (port == 0 || portisfree(port)) {
         tcbls[psockid].lport = port;
-        return SUCCESS;
+        rv = SUCCESS;
+        goto done;
     }
     tcbls[psockid].lport = oldport;
-    return EADDRINUSE;
+    rv = EADDRINUSE;
+done:
+    mutex_unlock(&tcp_lock);
+    return rv;
 }
 
 error_t psock_listenaccept_impl(int psockid, int asockid, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
 {
+    error_t rv;
+    mutex_lock(&tcp_lock);
     tcbls[psockid].t_state = TCPS_LISTEN;
     if (tcbs[asockid].t_state != TCPS_CLOSED) {
         tcbls[psockid].t_state = TCPS_CLOSED;
-        return EISCONN;
+        rv = EISCONN;
+        goto done;
     }
     initialize_tcb(&tcbs[asockid], tcbs[asockid].lport, recvbuf, recvbuflen, reassbmp);
     tcbls[psockid].acceptinto = &tcbs[asockid];
-    return SUCCESS;
+
+done:
+    rv = SUCCESS;
+    mutex_unlock(&tcp_lock);
+    return rv;
 }
 
 error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
 {
+    error_t rv;
     struct tcpcb* tp = &tcbs[asockid];
+    mutex_lock(&tcp_lock);
     if (tp->t_state != TCPS_CLOSED) { // This is a check that I added
-        return (EISCONN);
+        rv = EISCONN;
+        goto done;
     }
     initialize_tcb(tp, tp->lport, recvbuf, recvbuflen, reassbmp);
-    return tcp6_usr_connect(tp, addr);
+    rv = (error_t) tcp6_usr_connect(tp, addr);
+
+done:
+    mutex_unlock(&tcp_lock);
+    return rv;
 }
 
 error_t asock_send_impl(int asockid, struct lbufent* data, int moretocome, int* status)
 {
+    error_t rv;
     struct tcpcb* tp = &tcbs[asockid];
-    return (error_t) tcp_usr_send(tp, moretocome, data, status);
+    mutex_lock(&tcp_lock);
+    rv = (error_t) tcp_usr_send(tp, moretocome, data, status);
+    mutex_unlock(&tcp_lock);
+    return rv;
 }
 
 error_t asock_receive_impl(int asockid, uint8_t* buffer, uint32_t len, size_t* bytessent)
 {
+    error_t rv;
     struct tcpcb* tp = &tcbs[asockid];
+    mutex_lock(&tcp_lock);
     *bytessent = cbuf_read(&tp->recvbuf, buffer, len, 1);
-    return (error_t) tcp_usr_rcvd(tp);
+    rv = (error_t) tcp_usr_rcvd(tp);
+    mutex_unlock(&tcp_lock);
+    return rv;
 }
 
 error_t asock_shutdown_impl(int asockid, bool shut_rd, bool shut_wr)
 {
     int error = SUCCESS;
+    mutex_lock(&tcp_lock);
     if (shut_rd) {
         cbuf_pop(&tcbs[asockid].recvbuf, cbuf_used_space(&tcbs[asockid].recvbuf)); // remove all data from the cbuf
         // TODO We need to deal with bytes received out-of-order
@@ -477,19 +532,24 @@ error_t asock_shutdown_impl(int asockid, bool shut_rd, bool shut_wr)
     if (shut_wr) {
         error = tcp_usr_shutdown(&tcbs[asockid]);
     }
+    mutex_unlock(&tcp_lock);
     return error;
 }
 
 error_t psock_close_impl(int psockid)
 {
+    mutex_lock(&tcp_lock);
     tcbls[psockid].t_state = TCP6S_CLOSED;
     tcbls[psockid].acceptinto = NULL;
+    mutex_unlock(&tcp_lock);
     return SUCCESS;
 }
 
 error_t asock_abort_impl(int asockid)
 {
+    mutex_lock(&tcp_lock);
     tcp_usr_abort(&tcbs[asockid]);
+    mutex_unlock(&tcp_lock);
     return SUCCESS;
 }
 
@@ -514,6 +574,11 @@ uint32_t get_ticks(void)
     return get_millis();
 }
 
+
+/*
+ * The lock ordering for the timing code is that the TCP lock is always
+ * acquired first, and then the timer lock.
+ */
 void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay)
 {
     int task_id = (((int) tcb->index) << 2) | (int) timer_id;
