@@ -43,7 +43,7 @@
 #include "tcp_seq.h"
 #include "tcp_var.h"
 #include "tcp_timer.h"
-#include "socket.h"
+#include <sys/socket.h>
 #include "ip6.h"
 #include "lbuf.h"
 

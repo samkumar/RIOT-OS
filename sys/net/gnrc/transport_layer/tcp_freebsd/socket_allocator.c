@@ -20,6 +20,7 @@
  * @}
  */
 
+#include <sys/socket.h>
 #include "gnrc_tcp_freebsd_internal.h"
 #include "bsdtcp/lbuf.h"
 #include <errno.h>
@@ -55,6 +56,17 @@ passive_socket_t passivesockets[GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS];
 /* Bitmasks to keep track of which sockets are allocated. */
 uint8_t activemask[1 + ((GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS - 1) >> 3)];
 uint8_t passivemask[1 + ((GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS - 1) >> 3)];
+
+void clear_activesocket(active_socket_t* asock)
+{
+    memset(asock, 0x00, sizeof(active_socket_t));
+}
+
+void clear_passivesocket(passive_socket_t* psock)
+{
+    memset(psock, 0x00, sizeof(passive_socket_t));
+    psock->acceptinginto = -1;
+}
 
 inline int _is_allocated(uint8_t* mask, int fd)
 {
@@ -97,12 +109,14 @@ bool _active_istimewait(int ai)
     return TCPS_TIME_WAIT == asock_getState_impl(ai);
 }
 
-int alloc_pfd(void) {
+int alloc_pfd(void)
+{
     int pfd = alloc_fd(passivemask, GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS, _always_true);
     return pfd + GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS;
 }
 
-int alloc_afd(void) {
+int alloc_afd(void)
+{
     int afd;
     // First, try to get a socket that's closed.
     afd = alloc_fd(activemask, GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS, _active_isclosed);
@@ -114,82 +128,217 @@ int alloc_afd(void) {
     return afd;
 }
 
-/* External API */
-int bsdtcp_active_socket(connectDone_t cd, sendDone_t sd, receiveReady_t rr, connectionLost_t cl)
+void dealloc_fd(uint8_t* mask, int fd)
 {
-    /* Return a socket handle. */
-    return 0;
+    assert(_is_allocated(mask, fd));
+    _force_dealloc(mask, fd);
 }
 
-int bsdtcp_passive_socket(acceptDone_t ad)
+void dealloc_afd(int afd)
 {
-    /* Return a passive socket handle. */
-    return 0;
+    assert(afd < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
+    dealloc_fd(activemask, afd);
+    clear_activesocket(&activesockets[afd]);
+}
+
+void dealloc_pfd(int pfd)
+{
+    assert(pfd < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS);
+    dealloc_fd(passivemask, pfd);
+    clear_passivesocket(&passivesockets[pfd]);
+}
+
+int decode_fd(int rawfd, bool* passive) {
+    if (rawfd < 0 || rawfd >= GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS + GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS) {
+        return -1;
+    }
+    if (rawfd >= GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS) {
+        *passive = true;
+        rawfd -= GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS;
+        if (!_is_allocated(passivemask, rawfd)) {
+            return -1;
+        }
+    } else {
+        *passive = false;
+        if (!_is_allocated(activemask, rawfd)) {
+            return -1;
+        }
+    }
+    return rawfd;
+}
+
+/* External API */
+
+int bsdtcp_active_socket(connectDone_t cd, sendDone_t sd, receiveReady_t rr, connectionLost_t cl, void* ctx)
+{
+    int fd = alloc_afd();
+    if (fd != -1) {
+        active_socket_t* asock = &activesockets[fd];
+        asock->connectDone = cd;
+        asock->sendDone = sd;
+        asock->receiveReady = rr;
+        asock->connectionLost = cl;
+        asock->context = ctx;
+    }
+    return fd;
+}
+
+int bsdtcp_passive_socket(acceptDone_t ad, void* ctx)
+{
+    int fd = alloc_pfd();
+    if (fd != -1) {
+        passive_socket_t* psock = &passivesockets[fd];
+        psock->acceptDone = ad;
+        psock->context = ctx;
+    }
+    return fd;
 }
 
 int bsdtcp_bind(int fd, uint16_t port)
 {
-    /* TODO */
-    return 0;
+    int rv;
+    bool passive;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1) {
+        return EBADF;
+    }
+    if (passive) {
+        rv = psock_bind_impl(fd, port);
+        DEBUG("Bound passive socket to port %" PRIu16 "\n", port);
+    } else {
+        rv = asock_bind_impl(fd, port);
+        DEBUG("Bound active socket to port %" PRIu16 "\n", port);
+    }
+    return rv;
 }
 
-int bsdtcp_connect(int fd, const struct sockaddr_in6* faddrport, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
+int bsdtcp_connect(int fd, struct sockaddr_in6* faddrport, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
 {
-    /* TODO */
-    return 0;
+    bool passive;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1 || passive) {
+        return EBADF;
+    }
+    return asock_connect_impl(fd, faddrport, recvbuf, recvbuflen, reassbmp);
 }
 
 int bsdtcp_listenaccept(int fd, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
 {
-    /* TODO */
-    return 0;
+    bool passive;
+    int afd;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1 || !passive) {
+        return EBADF;
+    }
+    afd = alloc_afd();
+    if (afd == -1) {
+        return ENFILE;
+    }
+    passivesockets[fd].acceptinginto = afd;
+    assert(afd == asock_getID_impl(afd));
+    DEBUG("Accepting into socket %d\n", afd);
+    return psock_listenaccept_impl(fd, afd, recvbuf, recvbuflen, reassbmp);
 }
 
 int bsdtcp_send(int fd, struct lbufent* data, int* status)
 {
-    /* TODO */
-    return 0;
+    bool passive;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1 || passive) {
+        return EBADF;
+    }
+    return asock_send_impl(fd, data, 0, status);
 }
 
 int bsdtcp_receive(int fd, uint8_t* buffer, size_t length, size_t* numbytes)
 {
-    /* TODO */
-    return 0;
+    bool passive;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1 || passive) {
+        return EBADF;
+    }
+    return asock_receive_impl(fd, buffer, length, numbytes);
 }
 
 int bsdtcp_shutdown(int fd, int how)
 {
-    /* TODO */
-    return 0;
+    bool passive;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1 || passive) {
+        return EBADF;
+    }
+    return asock_shutdown_impl(fd, how == SHUT_RD || how == SHUT_RDWR,
+                                how == SHUT_WR || how == SHUT_RDWR);
 }
 
 int bsdtcp_close(int fd)
 {
-    /* TODO */
-    return 0;
+    bool passive;
+    int rv;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1 || passive) {
+        return EBADF;
+    }
+    if (passive) {
+        rv = psock_close_impl(fd);
+        dealloc_pfd(fd);
+        if (passivesockets[fd].acceptinginto != -1) {
+            dealloc_afd(passivesockets[fd].acceptinginto);
+            passivesockets[fd].acceptinginto = -1;
+        }
+    } else {
+        rv = asock_shutdown_impl(fd, true, true);
+        dealloc_afd(fd);
+    }
+    return rv;
 }
 
 int bsdtcp_abort(int fd)
 {
-    /* TODO */
-    return 0;
+    bool passive;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1 || passive) {
+        return EBADF;
+    }
+    if (passive) {
+        return psock_close_impl(fd);
+    } else {
+        return asock_abort_impl(fd);
+    }
 }
 
 int bsdtcp_isestablished(int fd)
 {
-    /* TODO */
-    return 0;
+    bool passive;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1 || passive) {
+        return EBADF;
+    }
+    return TCPS_HAVEESTABLISHED(asock_getState_impl(fd));
 }
 
 int bsdtcp_hasrcvdfin(int fd)
 {
-    /* TODO */
-    return 0;
+    bool passive;
+    int state;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1 || passive) {
+        return EBADF;
+    }
+    state = asock_getState_impl(fd);
+    return state == TCPS_TIME_WAIT || state == TCPS_CLOSE_WAIT ||
+            state == TCPS_LAST_ACK || state == TCPS_CLOSING;
 }
 
-void bsdtcp_peerinfo(int fd, struct in6_addr** addrptr, uint16_t** portptr)
+int bsdtcp_peerinfo(int fd, struct in6_addr** addrptr, uint16_t** portptr)
 {
-    /* TODO */
+    bool passive;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1 || passive) {
+        return EBADF;
+    }
+    asock_getPeerInfo_impl(fd, addrptr, portptr);
+    return 0;
 }
 
 /* API to the TCP frontend. */
@@ -256,8 +405,13 @@ void event_connectionLost(uint8_t ai, uint8_t how)
 }
 
 void gnrc_tcp_freebsd_allocator_init(void) {
-    memset(&activesockets, 0x00, sizeof(activesockets));
-    memset(&passivesockets, 0x00, sizeof(passivesockets));
+    int i;
+    for (i = 0; i < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
+        clear_activesocket(&activesockets[i]);
+    }
+    for (i = 0; i < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS; i++) {
+        clear_passivesocket(&passivesockets[i]);
+    }
     memset(activemask, 0x00, sizeof(activemask));
     memset(passivemask, 0x00, sizeof(passivemask));
 }
