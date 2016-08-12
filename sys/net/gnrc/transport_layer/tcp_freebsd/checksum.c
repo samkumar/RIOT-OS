@@ -43,14 +43,19 @@ int gnrc_tcp_calc_csum(gnrc_pktsnip_t *hdr, gnrc_pktsnip_t *pseudo_hdr)
     struct tcphdr* th = hdr->data;
     th->th_sum = 0;
 
-    uint32_t csum = get_tcp_checksum(hdr, pseudo_hdr);
+    gnrc_pktsnip_t* snips[3];
+    snips[0] = hdr;
+    snips[1] = (hdr == NULL) ? NULL : hdr->next;
+    snips[2] = NULL;
+
+    uint32_t csum = get_tcp_checksum(pseudo_hdr, snips);
     th->th_sum = csum;
 
     return 0;
 }
 
 static uint16_t _calc_checksum(struct in6_addr* src, struct in6_addr* dest,
-                               gnrc_pktsnip_t* tcpseg, uint32_t len) {
+                               uint32_t ip6hdr_len, gnrc_pktsnip_t** snips) {
     uint32_t total;
     uint16_t* current;
     uint16_t* end;
@@ -71,7 +76,7 @@ static uint16_t _calc_checksum(struct in6_addr* src, struct in6_addr* dest,
     pseudoheader.reserved1 = 0;
     pseudoheader.reserved2 = 0;
     pseudoheader.protocol = 6; // TCP
-    pseudoheader.tcplen = (uint32_t) htonl(len);
+    pseudoheader.tcplen = (uint32_t) htonl(ip6hdr_len);
 
     total = 0;
     for (current = (uint16_t*) &pseudoheader;
@@ -80,9 +85,9 @@ static uint16_t _calc_checksum(struct in6_addr* src, struct in6_addr* dest,
     }
 
     starthalf = 0;
-    do {
-        current = (uint16_t*) tcpseg->data;
-        currlen = (uint32_t) tcpseg->size;
+    for (; *snips != NULL; snips++) {
+        current = (uint16_t*) (*snips)->data;
+        currlen = (uint32_t) (*snips)->size;
         if (starthalf && currlen > 0) {
             total += ((uint32_t) *((uint8_t*) current)) << 8;
             current = (uint16_t*) (((uint8_t*) current) + 1);
@@ -102,8 +107,7 @@ static uint16_t _calc_checksum(struct in6_addr* src, struct in6_addr* dest,
             // read the memory byte by byte, in case iovec isn't word-aligned
             total += deref_safe(current++);
         }
-        tcpseg = tcpseg->next;
-    } while (tcpseg != NULL);
+    }
 
     while (total >> 16) {
         total = (total & 0xFFFF) + (total >> 16);
@@ -112,9 +116,9 @@ static uint16_t _calc_checksum(struct in6_addr* src, struct in6_addr* dest,
     return ~((uint16_t) total);
 }
 
-uint16_t get_tcp_checksum(gnrc_pktsnip_t *tcpsnip, gnrc_pktsnip_t *ip6snip)
+uint16_t get_tcp_checksum(gnrc_pktsnip_t *ip6snip, gnrc_pktsnip_t** snips)
 {
     struct ip6_hdr* ip6 = ip6snip->data;
-    return _calc_checksum(&ip6->ip6_src, &ip6->ip6_dst, tcpsnip,
-                          (uint32_t) ip6->ip6_plen);
+    return _calc_checksum(&ip6->ip6_src, &ip6->ip6_dst,
+                            (uint32_t) ip6->ip6_plen, snips);
 }

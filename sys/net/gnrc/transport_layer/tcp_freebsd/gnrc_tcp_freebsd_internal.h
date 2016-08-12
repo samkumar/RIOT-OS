@@ -77,7 +77,7 @@ void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
 void stop_timer(struct tcpcb* tcb, uint8_t timer_id);
 void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port);
 void connection_lost(struct tcpcb* tcb, uint8_t errnum);
-uint16_t get_tcp_checksum(gnrc_pktsnip_t *tcpsnip, gnrc_pktsnip_t *ip6snip);
+uint16_t get_tcp_checksum(gnrc_pktsnip_t *ip6snip, gnrc_pktsnip_t** snips);
 
 /*
  * Functions that the TCP API code can call to interact with the rest of the

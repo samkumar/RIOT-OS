@@ -193,7 +193,7 @@ static void _receive(gnrc_pktsnip_t* pkt)
     tcp = gnrc_pktbuf_start_write(pkt);
     if (tcp == NULL) {
         DEBUG("tcp_freebsd: unable to get write access to packet\n");
-        goto error;
+        goto done;
     }
     pkt = tcp;
 
@@ -237,18 +237,33 @@ static void _receive(gnrc_pktsnip_t* pkt)
     pkt->type = GNRC_NETTYPE_UNDEF;
 #endif
 
+    tcp = ipv6->next;
+    assert(tcp != NULL);
+    assert(tcp->type == GNRC_NETTYPE_TCP);
+
+    /*
+     * If someone is splitting this for us, that's a problem, since the TCP
+     * header and the payload need to be contiguous, in one big snip.
+     */
+    assert(tcp->next = NULL);
+
     th = (struct tcphdr*) tcp->data;
 
     packet_len = iph->ip6_plen;
     if (packet_len != ipv6->size + tcp->size) {
         DEBUG("Sizes don't add up: packet length is %" PRIu16 ", but got %zu\n", packet_len, ipv6->size + tcp->size);
-        goto error;
+        goto done;
     }
     if (th->th_off < 5 || th->th_off > 15 || (((size_t) th->th_off) << 2) > tcp->size) {
         DEBUG("Too many options: header claims %" PRIu8 " words (pktsnip has %zu bytes)\n", th->th_off, tcp->size);
     }
 
-    /* TODO validate the checksum */
+    gnrc_pktsnip_t* snips[2] = { tcp, NULL };
+    uint16_t csum = get_tcp_checksum(ipv6, snips);
+    if (csum != 0) {
+        DEBUG("Dropping packet: bad checksum (%" PRIu16 ")\n", csum);
+        goto done;
+    }
 
     sport = th->th_sport; // network byte order
     dport = th->th_dport; // network byte order
@@ -270,7 +285,7 @@ static void _receive(gnrc_pktsnip_t* pkt)
             } else {
                 handle_signals(&tcbs[i], signals, freedentries);
             }
-            return;
+            goto done;
         }
     }
 
@@ -279,16 +294,14 @@ static void _receive(gnrc_pktsnip_t* pkt)
         if (tcbl->t_state == TCP6S_LISTEN && dport == tcbl->lport) {
             DEBUG("Matches passive socket %d\n", i);
             tcp_input(iph, th, NULL, &tcbls[i], NULL, NULL);
-            return;
+            goto done;
         }
     }
 
     DEBUG("Does not match any socket\n");
     tcp_dropwithreset(iph, th, NULL, tcp->size - (th->th_off << 2), ECONNREFUSED);
 
-    return;
-
-error:
+done:
     gnrc_pktbuf_release(pkt);
     return;
 }
