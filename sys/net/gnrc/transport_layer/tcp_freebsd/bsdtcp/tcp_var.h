@@ -33,12 +33,11 @@
 #ifndef _NETINET_TCP_VAR_H_
 #define _NETINET_TCP_VAR_H_
 
-//#include <netinet/tcp.h>
-//#include "../gnrc_tcp_freebsd_internal.h"
-#include "bitmap.h"
-#include "cbuf.h"
+
+#include "../lib/bitmap.h"
+#include "../lib/cbuf.h"
 #include "cc.h"
-#include "lbuf.h"
+#include "../lib/lbuf.h"
 #include "tcp.h"
 #include "types.h"
 #include "netinet/in.h"

@@ -324,13 +324,15 @@ static void* _packet_loop(void* arg)
 
     netreg.demux_ctx = GNRC_NETREG_DEMUX_CTX_ALL;
     netreg.pid = thread_getpid();
-    gnrc_netreg_register(GNRC_NETTYPE_TCP, &netreg);
+    if (gnrc_netreg_register(GNRC_NETTYPE_TCP, &netreg)) {
+        DEBUG("Error listening for packets\n");
+    }
 
     for (;;) {
         msg_receive(&msg);
         switch (msg.type) {
             case GNRC_NETAPI_MSG_TYPE_RCV:
-                printf("tcp_freebsd: got RCV message: %p\n", msg.content.ptr);
+                DEBUG("tcp_freebsd: got RCV message: %p\n", msg.content.ptr);
                 _receive(msg.content.ptr);
                 break;
             case GNRC_NETAPI_MSG_TYPE_SND:
@@ -338,7 +340,7 @@ static void* _packet_loop(void* arg)
                  * down to TCP, since the whole point of TCP is that protocols
                  * on top of it deal with _streams_ rather than _packets_.
                  */
-                printf("tcp_freebsd: got SND message: %p\n", msg.content.ptr);
+                DEBUG("tcp_freebsd: got SND message: %p\n", msg.content.ptr);
                 break;
             case GNRC_NETAPI_MSG_TYPE_SET:
             case GNRC_NETAPI_MSG_TYPE_GET:
@@ -570,8 +572,9 @@ error_t asock_abort_impl(int asockid)
 
 void send_message(gnrc_pktsnip_t* pkt)
 {
+    DEBUG("Sending TCP message: %d\n", pkt->type);
     if (!gnrc_netapi_dispatch_send(pkt->type, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
-        DEBUG("udp: cannot send packet: network layer not found\n");
+        DEBUG("tcp: cannot send packet: network layer not found\n");
         gnrc_pktbuf_release(pkt);
     }
 }

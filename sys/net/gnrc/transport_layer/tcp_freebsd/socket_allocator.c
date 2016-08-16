@@ -20,21 +20,16 @@
  * @}
  */
 
+#include <net/tcp_freebsd.h>
 #include <sys/socket.h>
 #include "gnrc_tcp_freebsd_internal.h"
-#include "bsdtcp/lbuf.h"
+#include "lib/lbuf.h"
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
-
-typedef void (*connectDone_t)(uint8_t, struct sockaddr_in6*, void*);
-typedef void (*sendDone_t)(uint8_t, uint32_t, void*);
-typedef void (*receiveReady_t)(uint8_t, int, void*);
-typedef void (*connectionLost_t)(uint8_t, uint8_t, void*);
-typedef void (*acceptDone_t)(uint8_t, struct sockaddr_in6*, int, void*);
 
 typedef struct asock {
     connectDone_t connectDone;

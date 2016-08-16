@@ -38,11 +38,15 @@
 #include "tcp_var.h"
 #include "tcp_seq.h"
 #include "tcp_timer.h"
-#include "cbuf.h"
+#include "../lib/cbuf.h"
 
 #include "tcp_const.h"
 
 #include "net/gnrc/pktbuf.h"
+
+#include "net/gnrc/ipv6/hdr.h"
+
+#include "debug.h"
 
 // From ip_compat.h
 #define	bcopy(a,b,c)	memmove(b,a,c)
@@ -1030,7 +1034,7 @@ send:
 	   RIOT OS way, where we allocate a gnrc_pktsnip_t. */
 	// Need to ip_malloc an extra three bytes so that we can word-align the packet
 	gnrc_pktsnip_t* payload = gnrc_pktbuf_add(NULL, NULL, len, GNRC_NETTYPE_UNDEF);
-	if (payload == NULL) {
+	if (payload == NULL && len != 0) {
 		goto memsendfail;
 	}
 	gnrc_pktsnip_t* tcpsnip = gnrc_pktbuf_add(payload, NULL, sizeof(struct tcphdr) + optlen, GNRC_NETTYPE_TCP);
@@ -1038,7 +1042,9 @@ send:
 		gnrc_pktbuf_release(payload);
 		goto memsendfail;
 	}
-	gnrc_pktsnip_t* ip6snip = gnrc_pktbuf_add(tcpsnip, NULL, sizeof(struct ip6_hdr) + ipoptlen, GNRC_NETTYPE_IPV6);
+	assert(ipoptlen == 0); // For now. Otherwise we need to handle IPv6 extensions...
+	// The destination address is copied into the header in tcpip_fillheaders
+	gnrc_pktsnip_t* ip6snip = gnrc_ipv6_hdr_build(tcpsnip, NULL, NULL);
 	if (ip6snip == NULL) {
 		gnrc_pktbuf_release(tcpsnip);
 memsendfail:
@@ -1075,6 +1081,9 @@ memsendfail:
 
 	ip6 = (struct ip6_hdr*) ip6snip->data;
 	th = (struct tcphdr*) tcpsnip->data;
+
+	ip6->ip6_nxt = IANA_TCP;
+	ip6->ip6_plen = htons(sizeof(struct tcphdr) + optlen + len);
 
 #if 0 // The TinyOS code
 	alen = sizeof(struct ip6_packet) + sizeof(struct tcphdr) + optlen + ipoptlen + sizeof(struct ip_iovec);
@@ -1130,7 +1139,7 @@ memsendfail:
 //#ifdef MAC
 //	mac_inpcb_create_mbuf(tp->t_inpcb, m);
 //#endif
-# if 0 // ALREADY HANDLED ABOVE
+#if 0 // ALREADY HANDLED ABOVE
 #ifdef INET6
 	if (isipv6) {
 		ip6 = mtod(m, struct ip6_hdr *);

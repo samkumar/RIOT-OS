@@ -39,10 +39,10 @@
 #include "tcp_var.h"
 #include "tcp_seq.h"
 #include "tcp_timer.h"
-#include "bitmap.h"
-#include "cbuf.h"
+#include "../lib/bitmap.h"
+#include "../lib/cbuf.h"
 #include "cc.h"
-#include "lbuf.h"
+#include "../lib/lbuf.h"
 
 #include "tcp_const.h"
 

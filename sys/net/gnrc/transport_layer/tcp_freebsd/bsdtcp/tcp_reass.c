@@ -30,8 +30,8 @@
  */
 
 #include "../gnrc_tcp_freebsd_internal.h"
-#include "bitmap.h"
-#include "cbuf.h"
+#include "../lib/bitmap.h"
+#include "../lib/cbuf.h"
 #include "tcp.h"
 #include "tcp_fsm.h"
 #include "tcp_seq.h"

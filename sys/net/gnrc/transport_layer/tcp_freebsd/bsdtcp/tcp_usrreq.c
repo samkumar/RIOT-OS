@@ -45,9 +45,11 @@
 #include "tcp_timer.h"
 #include <sys/socket.h>
 #include "ip6.h"
-#include "lbuf.h"
+#include "../lib/lbuf.h"
 
 #include "tcp_const.h"
+
+#include "debug.h"
 
 //static void	tcp_disconnect(struct tcpcb *);
 static void	tcp_usrclosed(struct tcpcb *);
@@ -221,6 +223,8 @@ tcp6_usr_connect(struct tcpcb* tp, struct sockaddr_in6* sin6p)
 	 */
 	if (IN6_IS_ADDR_V4MAPPED(&sin6p->sin6_addr)) {
 //		struct sockaddr_in sin;
+
+        DEBUG("V4-Mapped Address!\n");
 
 		if (/*(inp->inp_flags & IN6P_IPV6_V6ONLY) != 0*/1) {
 			error = EINVAL;

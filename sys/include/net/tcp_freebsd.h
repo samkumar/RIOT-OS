@@ -28,6 +28,15 @@
 extern "C" {
 #endif
 
+#include <netinet/in.h>
+#include "../net/gnrc/transport_layer/tcp_freebsd/lib/lbuf.h"
+
+typedef void (*connectDone_t)(uint8_t, struct sockaddr_in6*, void*);
+typedef void (*sendDone_t)(uint8_t, uint32_t, void*);
+typedef void (*receiveReady_t)(uint8_t, int, void*);
+typedef void (*connectionLost_t)(uint8_t, uint8_t, void*);
+typedef void (*acceptDone_t)(uint8_t, struct sockaddr_in6*, int, void*);
+
 int bsdtcp_active_socket(connectDone_t cd, sendDone_t sd, receiveReady_t rr, connectionLost_t cl, void* ctx);
 int bsdtcp_passive_socket(acceptDone_t ad, void* ctx);
 int bsdtcp_bind(int fd, uint16_t port);
