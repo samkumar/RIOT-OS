@@ -186,7 +186,7 @@ static inline gnrc_nettype_t gnrc_nettype_from_protnum(uint8_t num)
         case PROTNUM_IPV6:
             return GNRC_NETTYPE_IPV6;
 #endif
-#ifdef MODULE_GNRC_TCP
+#if defined(MODULE_GNRC_TCP) || defined(MODULE_GNRC_TCP_FREEBSD)
         case PROTNUM_TCP:
             return GNRC_NETTYPE_TCP;
 #endif

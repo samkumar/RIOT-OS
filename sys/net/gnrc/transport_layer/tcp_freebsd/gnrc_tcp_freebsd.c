@@ -184,6 +184,9 @@ static void _receive(gnrc_pktsnip_t* pkt)
     uint16_t dport;
     uint16_t packet_len;
 
+    uint16_t empirical_len;
+    gnrc_pktsnip_t* temp;
+
     /* Bitmask of signals that need to be sent to the user of this module. */
     uint8_t signals = 0;
 
@@ -237,25 +240,29 @@ static void _receive(gnrc_pktsnip_t* pkt)
     pkt->type = GNRC_NETTYPE_UNDEF;
 #endif
 
-    tcp = ipv6->next;
-    assert(tcp != NULL);
-    assert(tcp->type == GNRC_NETTYPE_TCP);
-
     /*
      * If someone is splitting this for us, that's a problem, since the TCP
-     * header and the payload need to be contiguous, in one big snip.
+     * header and the payload need to be contiguous, in one big snip. So I'm
+     * asserting that the topmost identified layer in the packet is indeed
+     * labelled as a TCP header.
      */
-    assert(tcp->next = NULL);
+    assert(tcp->type == GNRC_NETTYPE_TCP);
 
     th = (struct tcphdr*) tcp->data;
 
-    packet_len = iph->ip6_plen;
-    if (packet_len != ipv6->size + tcp->size) {
-        DEBUG("Sizes don't add up: packet length is %" PRIu16 ", but got %zu\n", packet_len, ipv6->size + tcp->size);
+    packet_len = htons(iph->ip6_plen);
+    empirical_len = 0;
+    for (temp = tcp; temp != ipv6; temp = temp->next) {
+        DEBUG("Size is %" PRIu16 "\n", temp->size);
+        empirical_len += temp->size;
+    }
+
+    if (packet_len != empirical_len) {
+        DEBUG("Sizes don't add up: packet length is %" PRIu16 ", but got %" PRIu16 "\n", packet_len, empirical_len);
         goto done;
     }
     if (th->th_off < 5 || th->th_off > 15 || (((size_t) th->th_off) << 2) > tcp->size) {
-        DEBUG("Too many options: header claims %" PRIu8 " words (pktsnip has %zu bytes)\n", th->th_off, tcp->size);
+        DEBUG("Too many options: header claims %" PRIu8 " words (pktsnip has %u bytes)\n", th->th_off, (unsigned int) tcp->size);
     }
 
     gnrc_pktsnip_t* snips[2] = { tcp, NULL };
@@ -346,10 +353,10 @@ static void* _packet_loop(void* arg)
             case GNRC_NETAPI_MSG_TYPE_GET:
                 msg_reply(&msg, &setget_reply);
             case GNRC_NETAPI_MSG_TYPE_ACK:
-                printf("tcp_freebsd: received SET, GET, or ACK\n");
+                DEBUG("tcp_freebsd: received SET, GET, or ACK\n");
                 break;
             default:
-                printf("tcp_freebsd: received unidentified message\n");
+                DEBUG("tcp_freebsd: received unidentified message\n");
                 break;
         }
     }

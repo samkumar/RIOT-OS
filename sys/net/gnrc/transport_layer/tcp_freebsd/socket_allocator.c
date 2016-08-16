@@ -340,7 +340,7 @@ int bsdtcp_peerinfo(int fd, struct in6_addr** addrptr, uint16_t** portptr)
 void event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid)
 {
     assert(pi >= 0 && pi < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS);
-    assert(_is_allocated(passivemask, pi + GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS));
+    assert(_is_allocated(passivemask, pi));
 
     passive_socket_t* psock = &passivesockets[pi];
     assert(psock->acceptinginto == asockid);
