@@ -67,8 +67,8 @@ void* _task_sched(void* arg)
             sched->_first = t->_next;
             if (sched->_first != -1) {
                 assert(sched->tasks[sched->_first]._prev == taskid);
+                sched->tasks[sched->_first]._prev = -1;
             }
-            sched->tasks[sched->_first]._prev = -1;
 
             assert(t->_prev == -1);
             t->_next = -1;

@@ -300,7 +300,9 @@ static void _receive(gnrc_pktsnip_t* pkt)
         tcbl = &tcbls[i];
         if (tcbl->t_state == TCP6S_LISTEN && dport == tcbl->lport) {
             DEBUG("Matches passive socket %d\n", i);
+            mutex_lock(&tcp_lock);
             tcp_input(iph, th, NULL, &tcbls[i], NULL, NULL);
+            mutex_unlock(&tcp_lock);
             goto done;
         }
     }
@@ -577,8 +579,12 @@ error_t asock_abort_impl(int asockid)
 
 /* The internal API. */
 
+static int ctr = 0;
 void send_message(gnrc_pktsnip_t* pkt)
 {
+    if (ctr++) {
+        //return;
+    }
     DEBUG("Sending TCP message: %d\n", pkt->type);
     if (!gnrc_netapi_dispatch_send(pkt->type, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
         DEBUG("tcp: cannot send packet: network layer not found\n");
