@@ -37,6 +37,9 @@
 #ifdef  MODULE_CONN_TCP
 #   include "net/conn/tcp.h"
 #endif  /* MODULE_CONN_TCP */
+#ifdef  MODULE_GNRC_CONN_TCP_FREEBSD
+#   include "net/conn/tcp_freebsd.h"
+#endif
 #ifdef  MODULE_CONN_UDP
 #   include "net/conn/udp.h"
 #endif  /* MODULE_CONN_UDP */
@@ -56,6 +59,9 @@ typedef union {
 #ifdef  MODULE_CONN_TCP
     conn_tcp_t tcp;             /**< TCP connection */
 #endif  /* MODULE_CONN_TCP */
+#ifdef  MODULE_GNRC_CONN_TCP_FREEBSD
+    conn_tcp_freebsd_t tcp;
+#endif
 #ifdef  MODULE_CONN_UDP
     conn_udp_t udp;             /**< UDP connection */
 #endif  /* MODULE_CONN_UDP */

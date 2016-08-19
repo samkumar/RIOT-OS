@@ -71,6 +71,16 @@ struct conn_udp {
     size_t local_addr_len;                      /**< length of struct conn_ip::local_addr */
 };
 
+struct conn_tcp_freebsd {
+    gnrc_nettype_t l3_type;
+    gnrc_nettype_t l4_type;
+    gnrc_netreg_entry_t netreg_entry;
+    ipv6_addr_t local_addr;
+    uint16_t local_port;
+    int asock;
+    int psock;
+};
+
 /**
  * @brief  Bind connection to demux context
  *

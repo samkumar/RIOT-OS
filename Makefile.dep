@@ -80,6 +80,10 @@ ifneq (,$(filter gnrc_netapi_mbox,$(USEMODULE)))
   USEMODULE += core_mbox
 endif
 
+ifneq (,$(filter gnrc_conn_tcp_freebsd,$(USEMODULE)))
+  USEMODULE += gnrc_tcp_freebsd
+endif
+
 ifneq (,$(filter gnrc_tcp_freebsd,$(USEMODULE)))
   USEMODULE += gnrc_tcp_freebsd_internal
   USEMODULE += gnrc_tcp_freebsd_blip
