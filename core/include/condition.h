@@ -34,7 +34,7 @@
  */
 typedef struct {
     /**
-     * @brief   The process waiting queue of the condition.
+     * @brief   The process waiting queue of the condition variable.
      * @internal
      */
     list_node_t queue;
@@ -44,7 +44,7 @@ typedef struct {
  * @brief Static initializer for mutex_t.
  * @details This initializer is preferable to mutex_init().
  */
-#define CONDITION_INIT { { NULL } }
+#define COND_INIT { { NULL } }
 
 /**
  * @brief Initializes a condition variable.
@@ -63,7 +63,7 @@ static inline void cond_init(condition_t* cond)
  * @param[in] condition Condition variable to wait on.
  * @param[in] mutex Mutex object held by the current thread.
  */
-void cond_wait(condition_t* cond, mutex_t *mutex);
+void cond_wait(condition_t* cond, mutex_t* mutex);
 
 /**
  * @brief Wakes up one thread waiting on the condition variable. The thread is

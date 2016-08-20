@@ -21,6 +21,37 @@
 #include "net/conn/tcp_freebsd.h"
 #include "net/tcp_freebsd.h"
 
+static void conn_tcp_freebsd_connectDone(uint8_t ai, struct sockaddr_in6* faddr, void* ctx) {
+    (void) ai;
+    (void) faddr;
+    (void) ctx;
+}
+
+static void conn_tcp_freebsd_sendDone(uint8_t ai, uint32_t tofree, void* ctx) {
+    (void) ai;
+    (void) tofree;
+    (void) ctx;
+}
+
+static void conn_tcp_freebsd_receiveReady(uint8_t ai, int gotfin, void* ctx) {
+    (void) ai;
+    (void) gotfin;
+    (void) ctx;
+}
+
+static void conn_tcp_freebsd_connectionLost(uint8_t ai, uint8_t how, void* ctx) {
+    (void) ai;
+    (void) how;
+    (void) ctx;
+}
+
+static void conn_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, int ai, void* ctx) {
+    (void) pi;
+    (void) faddr;
+    (void) ai;
+    (void) ctx;
+}
+
 int conn_tcp_create(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len, int family,
                     uint16_t port)
 {
@@ -36,6 +67,7 @@ int conn_tcp_create(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len,
                 conn->local_port = port;
                 conn->asock = -1;
                 conn->psock = -1;
+                conn->errstat = 0;
             }
             else {
                 return -EADDRNOTAVAIL;
@@ -87,14 +119,81 @@ int conn_tcp_getpeeraddr(conn_tcp_freebsd_t *conn, void *addr, uint16_t *port)
 
 int conn_tcp_connect(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len, uint16_t port)
 {
-    /* TODO */
-    return 0;
+    int rv;
+
+    struct sockaddr_in6 faddrport;
+
+    mutex_lock(&conn->lock);
+    if (addr_len != sizeof(struct in6_addr)) {
+        rv = -EAFNOSUPPORT;
+        goto unlockreturn;
+    }
+    memcpy(&faddrport.sin6_addr, addr, addr_len);
+    faddrport.sin6_port = htons(port);
+    if (conn->psock != -1) {
+        bsdtcp_close(conn->psock);
+        conn->psock = -1;
+    }
+    if (conn->asock == -1) {
+        conn->asock = bsdtcp_active_socket(conn_tcp_freebsd_connectDone,
+            conn_tcp_freebsd_sendDone, conn_tcp_freebsd_receiveReady,
+            conn_tcp_freebsd_connectionLost, conn);
+        if (conn->asock == -1) {
+            rv = -ENOMEM;
+            goto unlockboth;
+        }
+    }
+
+    mutex_lock(&conn->connect_lock);
+    if (bsdtcp_isestablished(conn->asock)) {
+        rv = -EISCONN;
+        goto unlockboth;
+    }
+    conn->errstat = 0;
+    /* TODO fix args*/
+    int error = bsdtcp_connect(conn->asock, &faddrport, NULL, 800, NULL);
+    if (error != 0) {
+        rv = -error;
+        goto unlockboth;
+    }
+
+    /* Wait until either connection done OR connection lost */
+    cond_wait(&conn->connect_cond, &conn->lock);
+
+    rv = conn->errstat;
+
+unlockboth:
+    mutex_unlock(&conn->connect_lock);
+unlockreturn:
+    mutex_unlock(&conn->lock);
+    return rv;
 }
 
 int conn_tcp_listen(conn_tcp_freebsd_t *conn, int queue_len)
 {
-    /* TODO */
-    return 0;
+    int rv;
+    mutex_lock(&conn->lock);
+    if (conn->asock != -1) {
+        bsdtcp_abort(conn->asock);
+        conn->asock = -1;
+    }
+    if (conn->psock == -1) {
+        conn->psock = bsdtcp_passive_socket(conn_tcp_freebsd_acceptDone, conn);
+        if (conn->psock == -1) {
+            rv = -ENOMEM;
+            goto unlockreturn;
+        }
+    }
+
+    conn->errstat = 0;
+
+    /* TODO more to do, obviously */
+
+    rv = conn->errstat;
+
+unlockreturn:
+    mutex_unlock(&conn->lock);
+    return rv;
 }
 
 int conn_tcp_accept(conn_tcp_freebsd_t *conn, conn_tcp_freebsd_t *out_conn)

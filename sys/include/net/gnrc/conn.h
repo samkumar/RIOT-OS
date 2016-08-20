@@ -24,6 +24,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "condition.h"
+#include "mutex.h"
 #include "net/ipv6/addr.h"
 #include "net/gnrc.h"
 #include "sched.h"
@@ -79,6 +81,14 @@ struct conn_tcp_freebsd {
     uint16_t local_port;
     int asock;
     int psock;
+    int errstat;
+
+    mutex_t lock;
+    mutex_t connect_lock;
+    condition_t accept_cond;
+    condition_t connect_cond;
+    condition_t receive_cond;
+    condition_t send_cond;
 };
 
 /**
