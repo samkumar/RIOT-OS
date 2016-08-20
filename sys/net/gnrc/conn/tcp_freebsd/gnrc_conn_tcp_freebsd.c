@@ -21,31 +21,65 @@
 #include "net/conn/tcp_freebsd.h"
 #include "net/tcp_freebsd.h"
 
-static void conn_tcp_freebsd_connectDone(uint8_t ai, struct sockaddr_in6* faddr, void* ctx) {
+static void conn_tcp_freebsd_connectDone(uint8_t ai, struct sockaddr_in6* faddr, void* ctx)
+{
     (void) ai;
     (void) faddr;
-    (void) ctx;
+    conn_tcp_freebsd_t* conn = ctx;
+    mutex_lock(&conn->lock);
+    conn->errstat = 0;
+    cond_signal(&conn->connect_cond);
+    mutex_unlock(&conn->lock);
 }
 
-static void conn_tcp_freebsd_sendDone(uint8_t ai, uint32_t tofree, void* ctx) {
+static void conn_tcp_freebsd_sendDone(uint8_t ai, uint32_t tofree, void* ctx)
+{
     (void) ai;
     (void) tofree;
     (void) ctx;
 }
 
-static void conn_tcp_freebsd_receiveReady(uint8_t ai, int gotfin, void* ctx) {
+static void conn_tcp_freebsd_receiveReady(uint8_t ai, int gotfin, void* ctx)
+{
     (void) ai;
     (void) gotfin;
-    (void) ctx;
+    conn_tcp_freebsd_t* conn = ctx;
+    mutex_lock(&conn->lock);
+    conn->errstat = 0;
+    cond_signal(&conn->receive_cond);
+    mutex_unlock(&conn->lock);
 }
 
-static void conn_tcp_freebsd_connectionLost(uint8_t ai, uint8_t how, void* ctx) {
+static void conn_tcp_freebsd_connectionLost(uint8_t ai, uint8_t how, void* ctx)
+{
     (void) ai;
     (void) how;
-    (void) ctx;
+    conn_tcp_freebsd_t* conn = ctx;
+    mutex_lock(&conn->lock);
+    conn->errstat = -((int) how);
+    cond_broadcast(&conn->connect_cond);
+    cond_broadcast(&conn->receive_cond);
+    cond_broadcast(&conn->send_cond);
+    mutex_unlock(&conn->lock);
 }
 
-static void conn_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, int ai, void* ctx) {
+static acceptArgs_t conn_tcp_freebsd_acceptReady(uint8_t pi, void* ctx)
+{
+    /* TODO fix context */
+    int asockid = bsdtcp_active_socket(conn_tcp_freebsd_connectDone,
+        conn_tcp_freebsd_sendDone, conn_tcp_freebsd_receiveReady,
+        conn_tcp_freebsd_connectionLost, NULL);
+    /* TODO fix args */
+    acceptArgs_t args;
+    args.asockid = asockid;
+    args.recvbuf = NULL;
+    args.recvbuflen = 800;
+    args.reassbmp = NULL;
+    return args;
+}
+
+static void conn_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, int ai, void* ctx)
+{
     (void) pi;
     (void) faddr;
     (void) ai;
@@ -178,18 +212,14 @@ int conn_tcp_listen(conn_tcp_freebsd_t *conn, int queue_len)
         conn->asock = -1;
     }
     if (conn->psock == -1) {
-        conn->psock = bsdtcp_passive_socket(conn_tcp_freebsd_acceptDone, conn);
+        conn->psock = bsdtcp_passive_socket(conn_tcp_freebsd_acceptReady, conn_tcp_freebsd_acceptDone, conn);
         if (conn->psock == -1) {
             rv = -ENOMEM;
             goto unlockreturn;
         }
     }
 
-    conn->errstat = 0;
-
-    /* TODO more to do, obviously */
-
-    rv = conn->errstat;
+    rv = -bsdtcp_listen(conn->psock);
 
 unlockreturn:
     mutex_unlock(&conn->lock);
@@ -198,14 +228,34 @@ unlockreturn:
 
 int conn_tcp_accept(conn_tcp_freebsd_t *conn, conn_tcp_freebsd_t *out_conn)
 {
+    assert(conn->psock != -1 && conn->asock == -1);
     /* TODO */
     return 0;
 }
 
 int conn_tcp_recv(conn_tcp_freebsd_t *conn, void *data, size_t max_len)
 {
-    /* TODO */
-    return 0;
+    size_t bytes_read;
+    int error;
+
+    assert(conn->asock != -1 && conn->psock == -1);
+    mutex_lock(&conn->lock);
+
+    conn->errstat = 0;
+    error = bsdtcp_receive(conn->asock, data, max_len, &bytes_read);
+    while (bytes_read == 0 && error == 0 && conn->errstat == 0) {
+        cond_wait(&conn->receive_cond, &conn->lock);
+        error = bsdtcp_receive(conn->asock, data, max_len, &bytes_read);
+    }
+
+    mutex_unlock(&conn->lock);
+
+    if (error != 0) {
+        return -error;
+    } else if (conn->errstat != 0) {
+        return conn->errstat;
+    }
+    return (int) bytes_read;
 }
 
 int conn_tcp_send(conn_tcp_freebsd_t *conn, const void *data, size_t len)

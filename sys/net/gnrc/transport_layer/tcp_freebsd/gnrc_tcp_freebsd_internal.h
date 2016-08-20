@@ -33,6 +33,7 @@
 #include "bsdtcp/tcp_timer.h"
 #include "bsdtcp/tcp_var.h"
 #include "net/gnrc/pkt.h"
+#include "net/tcp_freebsd.h"
 
 #define GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS 1
 #define GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS 1
@@ -75,7 +76,8 @@ uint32_t get_ticks(void);
 uint32_t get_millis(void);
 void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
 void stop_timer(struct tcpcb* tcb, uint8_t timer_id);
-void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port);
+struct tcpcb* accept_ready(struct tcpcb_listen* tpl);
+void accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struct in6_addr* addr, uint16_t port);
 void connection_lost(struct tcpcb* tcb, uint8_t errnum);
 uint16_t get_tcp_checksum(gnrc_pktsnip_t *ip6snip, gnrc_pktsnip_t** snips);
 
@@ -89,7 +91,7 @@ int asock_getState_impl(int asockid);
 void asock_getPeerInfo_impl(int asockid, struct in6_addr** addr, uint16_t** port);
 error_t asock_bind_impl(int asockid, uint16_t port);
 error_t psock_bind_impl(int psockid, uint16_t port);
-error_t psock_listenaccept_impl(int psockid, int asockid, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
+error_t psock_listen_impl(int psockid);
 error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
 error_t asock_send_impl(int asockid, struct lbufent* data, int moretocome, int* status);
 error_t asock_receive_impl(int asockid, uint8_t* buffer, uint32_t len, size_t* bytessent);
@@ -102,6 +104,7 @@ error_t asock_abort_impl(int asockid);
  * events.
  */
 void gnrc_tcp_freebsd_allocator_init(void);
+acceptArgs_t event_acceptReady(uint8_t pi);
 void event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid);
 void event_connectDone(uint8_t ai, struct sockaddr_in6* addr);
 void event_receiveReady(uint8_t ai, int gotfin);

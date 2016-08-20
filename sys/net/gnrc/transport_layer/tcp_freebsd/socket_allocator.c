@@ -40,7 +40,7 @@ typedef struct asock {
 } active_socket_t;
 
 typedef struct psock {
-    int acceptinginto;
+    acceptReady_t acceptReady;
     acceptDone_t acceptDone;
     void* context;
 } passive_socket_t;
@@ -60,7 +60,6 @@ void clear_activesocket(active_socket_t* asock)
 void clear_passivesocket(passive_socket_t* psock)
 {
     memset(psock, 0x00, sizeof(passive_socket_t));
-    psock->acceptinginto = -1;
 }
 
 inline int _is_allocated(uint8_t* mask, int fd)
@@ -178,11 +177,12 @@ int bsdtcp_active_socket(connectDone_t cd, sendDone_t sd, receiveReady_t rr, con
     return fd;
 }
 
-int bsdtcp_passive_socket(acceptDone_t ad, void* ctx)
+int bsdtcp_passive_socket(acceptReady_t ar, acceptDone_t ad, void* ctx)
 {
     int fd = alloc_pfd();
     if (fd != -1) {
         passive_socket_t* psock = &passivesockets[fd];
+        psock->acceptReady = ar;
         psock->acceptDone = ad;
         psock->context = ctx;
     }
@@ -217,22 +217,14 @@ int bsdtcp_connect(int fd, struct sockaddr_in6* faddrport, uint8_t* recvbuf, siz
     return asock_connect_impl(fd, faddrport, recvbuf, recvbuflen, reassbmp);
 }
 
-int bsdtcp_listenaccept(int fd, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
+int bsdtcp_listen(int fd)
 {
     bool passive;
-    int afd;
     fd = decode_fd(fd, &passive);
     if (fd == -1 || !passive) {
         return EBADF;
     }
-    afd = alloc_afd();
-    if (afd == -1) {
-        return ENFILE;
-    }
-    passivesockets[fd].acceptinginto = afd;
-    assert(afd == asock_getID_impl(afd));
-    DEBUG("Accepting into socket %d\n", afd);
-    return psock_listenaccept_impl(fd, afd, recvbuf, recvbuflen, reassbmp);
+    return psock_listen_impl(fd);
 }
 
 int bsdtcp_send(int fd, struct lbufent* data, int* status)
@@ -277,10 +269,6 @@ int bsdtcp_close(int fd)
     if (passive) {
         rv = psock_close_impl(fd);
         dealloc_pfd(fd);
-        if (passivesockets[fd].acceptinginto != -1) {
-            dealloc_afd(passivesockets[fd].acceptinginto);
-            passivesockets[fd].acceptinginto = -1;
-        }
     } else {
         rv = asock_shutdown_impl(fd, true, true);
         dealloc_afd(fd);
@@ -337,18 +325,30 @@ int bsdtcp_peerinfo(int fd, struct in6_addr** addrptr, uint16_t** portptr)
 }
 
 /* API to the TCP frontend. */
+acceptArgs_t event_acceptReady(uint8_t pi)
+{
+    assert(pi >= 0 && pi < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS);
+    assert(_is_allocated(passivemask, pi));
+
+    passive_socket_t* psock = &passivesockets[pi];
+
+    if (psock->acceptReady != NULL) {
+        return psock->acceptReady(pi, psock->context);
+    } else {
+        acceptArgs_t args = { -1, NULL, 0, NULL };
+        return args;
+    }
+}
 void event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid)
 {
     assert(pi >= 0 && pi < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS);
     assert(_is_allocated(passivemask, pi));
 
     passive_socket_t* psock = &passivesockets[pi];
-    assert(psock->acceptinginto == asockid);
 
     if (psock->acceptDone != NULL) {
-        psock->acceptDone(pi, addr, psock->acceptinginto, psock->context);
+        psock->acceptDone(pi, addr, asockid, psock->context);
     }
-    psock->acceptinginto = -1;
 }
 
 void event_connectDone(uint8_t ai, struct sockaddr_in6* addr)

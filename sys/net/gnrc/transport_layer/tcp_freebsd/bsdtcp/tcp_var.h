@@ -101,7 +101,6 @@ struct tcpcb_listen {
     int t_state;     /* Always CLOSED or LISTEN. */
 	int index;
     uint16_t lport;
-    struct tcpcb* acceptinto;
 };
 
 #define TCB_CANTRCVMORE 0x20

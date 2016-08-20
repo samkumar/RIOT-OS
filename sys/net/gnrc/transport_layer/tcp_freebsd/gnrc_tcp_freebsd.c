@@ -152,17 +152,35 @@ void connection_lost(struct tcpcb* tcb, uint8_t errnum)
 }
 
 /**
+ * Called when a passive socket is about to accept a connection,
+ * and needs an active socket to accept into.
+ */
+struct tcpcb* accept_ready(struct tcpcb_listen* tpl)
+{
+    acceptArgs_t args;
+    mutex_unlock(&tcp_lock);
+    args = event_acceptReady((uint8_t) tpl->index);
+    mutex_lock(&tcp_lock);
+    if (args.asockid == -1) {
+        return NULL;
+    }
+    assert(args.asockid >= 0 && args.asockid < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
+    struct tcpcb* asock = &tcbs[args.asockid];
+    initialize_tcb(asock, asock->lport, args.recvbuf, args.recvbuflen, args.reassbmp);
+    return asock;
+}
+
+/**
  * Called when a passive socket accepts a connection.
  */
-void accepted_connection(struct tcpcb_listen* tpl, struct in6_addr* addr, uint16_t port)
+void accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struct in6_addr* addr, uint16_t port)
 {
     struct sockaddr_in6 addrport;
     mutex_unlock(&tcp_lock);
     addrport.sin6_port = port;
     memcpy(&addrport.sin6_addr, addr, sizeof(struct in6_addr));
-    event_acceptDone((uint8_t) tpl->index, &addrport, tpl->acceptinto->index);
+    event_acceptDone((uint8_t) tpl->index, &addrport, accepted->index);
     tpl->t_state = TCPS_CLOSED;
-    tpl->acceptinto = NULL;
     mutex_lock(&tcp_lock);
 }
 
@@ -398,7 +416,6 @@ int gnrc_tcp_freebsd_init(void)
             tcbls[i].t_state = TCPS_CLOSED;
             tcbls[i].index = i;
             tcbls[i].lport = 0;
-            tcbls[i].acceptinto = NULL;
         }
     }
     return _packet_pid;
@@ -486,23 +503,12 @@ done:
     return rv;
 }
 
-error_t psock_listenaccept_impl(int psockid, int asockid, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
+error_t psock_listen_impl(int psockid)
 {
-    error_t rv;
     mutex_lock(&tcp_lock);
     tcbls[psockid].t_state = TCPS_LISTEN;
-    if (tcbs[asockid].t_state != TCPS_CLOSED) {
-        tcbls[psockid].t_state = TCPS_CLOSED;
-        rv = EISCONN;
-        goto done;
-    }
-    initialize_tcb(&tcbs[asockid], tcbs[asockid].lport, recvbuf, recvbuflen, reassbmp);
-    tcbls[psockid].acceptinto = &tcbs[asockid];
-
-done:
-    rv = SUCCESS;
     mutex_unlock(&tcp_lock);
-    return rv;
+    return SUCCESS;
 }
 
 error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
@@ -564,7 +570,6 @@ error_t psock_close_impl(int psockid)
 {
     mutex_lock(&tcp_lock);
     tcbls[psockid].t_state = TCP6S_CLOSED;
-    tcbls[psockid].acceptinto = NULL;
     mutex_unlock(&tcp_lock);
     return SUCCESS;
 }

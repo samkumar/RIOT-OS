@@ -1364,7 +1364,11 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 		//syncache_add(&inc, &to, th, inp, &so, m, NULL, NULL);
 		// INSTEAD OF ADDING TO THE SYNCACHE, INITIALIZE THE NEW SOCKET RIGHT AWAY
 		// CODE IS TAKEN FROM THE syncache_socket FUNCTION
-		tp = tpl->acceptinto;
+		tp = accept_ready(tpl); // Try to allocate an active socket to accept into
+        if (tp == NULL) {
+            /* If we couldn't allocate, just ignore the SYN. */
+            return IPPROTO_DONE;
+        }
 		tcp_state_change(tp, TCPS_SYN_RECEIVED);
 		tpmarkpassiveopen(tp);
 		tp->t_flags |= TF_ACKNOW; // my addition
@@ -1460,7 +1464,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 //		INP_INFO_UNLOCK_ASSERT(&V_tcbinfo);
 		tcp_output(tp); // to send the SYN-ACK
 
-		accepted_connection(tpl, &ip6->ip6_src, th->th_sport);
+		accepted_connection(tpl, tp, &ip6->ip6_src, th->th_sport);
 		return (IPPROTO_DONE);
 	} else if (tp->t_state == TCPS_LISTEN) {
 		/*
