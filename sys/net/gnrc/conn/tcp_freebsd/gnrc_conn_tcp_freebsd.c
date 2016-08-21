@@ -20,6 +20,11 @@
 #include "net/gnrc/tcp_freebsd.h"
 #include "net/conn/tcp_freebsd.h"
 #include "net/tcp_freebsd.h"
+#include "zone/gnrc_conn_tcp_freebsd_zalloc.h"
+
+#define ENABLE_DEBUG (0)
+
+#include "debug.h"
 
 static void conn_tcp_freebsd_connectDone(uint8_t ai, struct sockaddr_in6* faddr, void* ctx)
 {
@@ -65,16 +70,29 @@ static void conn_tcp_freebsd_connectionLost(uint8_t ai, uint8_t how, void* ctx)
 
 static acceptArgs_t conn_tcp_freebsd_acceptReady(uint8_t pi, void* ctx)
 {
+    void* recvbuf = conn_tcp_freebsd_zalloc(864 + (864 >> 3));
+    if (recvbuf == NULL) {
+        DEBUG("Out of memory in acceptReady\n");
+        acceptArgs_t args;
+        args.asockid = -1;
+        args.recvbuf = NULL;
+        args.recvbuflen = 0;
+        args.reassbmp = NULL;
+        return args;
+    }
+    conn_tcp_freebsd_t* conn = ctx;
+    conn->recvbuf = recvbuf;
+
     /* TODO fix context */
     int asockid = bsdtcp_active_socket(conn_tcp_freebsd_connectDone,
         conn_tcp_freebsd_sendDone, conn_tcp_freebsd_receiveReady,
         conn_tcp_freebsd_connectionLost, NULL);
-    /* TODO fix args */
+
     acceptArgs_t args;
     args.asockid = asockid;
-    args.recvbuf = NULL;
-    args.recvbuflen = 800;
-    args.reassbmp = NULL;
+    args.recvbuf = recvbuf;
+    args.recvbuflen = 864;
+    args.reassbmp = args.recvbuf + args.recvbuflen;
     return args;
 }
 

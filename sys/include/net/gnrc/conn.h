@@ -82,6 +82,7 @@ struct conn_tcp_freebsd {
     int asock;
     int psock;
     int errstat;
+    void* recvbuf;
 
     mutex_t lock;
     mutex_t connect_lock;

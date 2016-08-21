@@ -9,6 +9,7 @@ ifneq (,$(filter gnrc_conn_udp,$(USEMODULE)))
 endif
 ifneq (,$(filter gnrc_conn_tcp_freebsd,$(USEMODULE)))
     DIRS += conn/tcp_freebsd
+    DIRS += conn/tcp_freebsd/zone
 endif
 ifneq (,$(filter gnrc_csma_sender,$(USEMODULE)))
     DIRS += link_layer/csma_sender
