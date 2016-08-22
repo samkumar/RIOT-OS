@@ -1464,7 +1464,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 //		INP_INFO_UNLOCK_ASSERT(&V_tcbinfo);
 		tcp_output(tp); // to send the SYN-ACK
 
-		accepted_connection(tpl, tp, &ip6->ip6_src, th->th_sport);
+		tp->accepted_from = tpl;
 		return (IPPROTO_DONE);
 	} else if (tp->t_state == TCPS_LISTEN) {
 		/*
@@ -2558,7 +2558,14 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				// If this socket was opened actively, then the fact we are in SYN-RECEIVED indicates a simultaneous open
 				// Don't ACK the SYN-ACK, in that case (unless it contains data or something, which will be processed later)
 				tp->t_flags &= ~TF_ACKNOW;
-			}
+			} else {
+                bool accepted = accepted_connection(tp->accepted_from, tp, &ip6->ip6_src, th->th_sport);
+                if (!accepted) {
+                    // Maybe I want to just silently frop the packet?
+                    rstreason = ECONNREFUSED;
+                    goto dropwithreset;
+                }
+            }
 		}
 		/*
 		 * If segment contains data or ACK, will call tcp_reass()

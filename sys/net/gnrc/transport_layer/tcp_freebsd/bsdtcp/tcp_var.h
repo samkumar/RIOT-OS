@@ -139,6 +139,8 @@ struct tcpcb {
 	uint8_t index; /* Index/ID of this TCB */
 	uint8_t miscflags;
 
+	struct tcpcb_listen* accepted_from;
+
 	struct lbufhead sendbuf;
 	struct cbufhead recvbuf;
 	uint8_t* reassbmp;

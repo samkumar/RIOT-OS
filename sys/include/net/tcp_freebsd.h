@@ -43,7 +43,7 @@ typedef void (*sendDone_t)(uint8_t, uint32_t, void*);
 typedef void (*receiveReady_t)(uint8_t, int, void*);
 typedef void (*connectionLost_t)(uint8_t, uint8_t, void*);
 typedef acceptArgs_t (*acceptReady_t)(uint8_t, void*);
-typedef void (*acceptDone_t)(uint8_t, struct sockaddr_in6*, int, void*);
+typedef bool (*acceptDone_t)(uint8_t, struct sockaddr_in6*, int, void*);
 
 int bsdtcp_active_socket(connectDone_t cd, sendDone_t sd, receiveReady_t rr, connectionLost_t cl, void* ctx);
 int bsdtcp_passive_socket(acceptReady_t ar, acceptDone_t ad, void* ctx);

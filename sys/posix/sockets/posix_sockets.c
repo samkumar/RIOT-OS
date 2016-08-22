@@ -420,7 +420,7 @@ int accept(int socket, struct sockaddr *restrict address,
                 new_s->type = s->type;
                 new_s->protocol = s->protocol;
                 tmp.ss_family = s->domain;
-                if ((res = conn_tcp_getpeeraddr(&s->conn.tcp, addr, port)) < 0) {
+                if ((res = conn_tcp_getpeeraddr(&new_s->conn.tcp, addr, port)) < 0) {
                     errno = -res;
                     res = -1;
                     break;

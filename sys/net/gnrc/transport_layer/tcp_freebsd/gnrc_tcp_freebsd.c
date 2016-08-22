@@ -121,7 +121,7 @@ void handle_signals(struct tcpcb* tp, uint8_t signals, uint32_t freedentries)
 {
     struct sockaddr_in6 addrport;
 
-    if (signals & SIG_CONN_ESTABLISHED) {
+    if (signals & SIG_CONN_ESTABLISHED && !tpispassiveopen(tp)) {
         addrport.sin6_port = tp->fport;
         memcpy(&addrport.sin6_addr, &tp->faddr, sizeof(addrport.sin6_addr));
 
@@ -173,15 +173,18 @@ struct tcpcb* accept_ready(struct tcpcb_listen* tpl)
 /**
  * Called when a passive socket accepts a connection.
  */
-void accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struct in6_addr* addr, uint16_t port)
+bool accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struct in6_addr* addr, uint16_t port)
 {
+    bool accepted_successfully;
     struct sockaddr_in6 addrport;
     mutex_unlock(&tcp_lock);
     addrport.sin6_port = port;
     memcpy(&addrport.sin6_addr, addr, sizeof(struct in6_addr));
-    event_acceptDone((uint8_t) tpl->index, &addrport, accepted->index);
+    accepted_successfully = event_acceptDone((uint8_t) tpl->index, &addrport, accepted->index);
     tpl->t_state = TCPS_CLOSED;
     mutex_lock(&tcp_lock);
+
+    return accepted_successfully;
 }
 
 /**

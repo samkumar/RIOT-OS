@@ -108,9 +108,6 @@ struct conn_tcp_freebsd {
             int psock;
             condition_t accept_cond;
 
-            /* Number of sockets pending acceptance but not yet on the queue. */
-            unsigned int accept_pending;
-
             /* Circular buffer for accept queue. */
             cib_t accept_cib;
             int* accept_queue;

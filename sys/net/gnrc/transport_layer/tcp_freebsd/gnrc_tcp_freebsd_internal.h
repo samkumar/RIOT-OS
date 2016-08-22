@@ -77,7 +77,7 @@ uint32_t get_millis(void);
 void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
 void stop_timer(struct tcpcb* tcb, uint8_t timer_id);
 struct tcpcb* accept_ready(struct tcpcb_listen* tpl);
-void accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struct in6_addr* addr, uint16_t port);
+bool accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struct in6_addr* addr, uint16_t port);
 void connection_lost(struct tcpcb* tcb, uint8_t errnum);
 uint16_t get_tcp_checksum(gnrc_pktsnip_t *ip6snip, gnrc_pktsnip_t** snips);
 
@@ -105,7 +105,7 @@ error_t asock_abort_impl(int asockid);
  */
 void gnrc_tcp_freebsd_allocator_init(void);
 acceptArgs_t event_acceptReady(uint8_t pi);
-void event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid);
+bool event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid);
 void event_connectDone(uint8_t ai, struct sockaddr_in6* addr);
 void event_receiveReady(uint8_t ai, int gotfin);
 void event_sendDone(uint8_t ai, uint32_t numentries);

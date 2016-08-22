@@ -180,8 +180,9 @@ int bsdtcp_active_socket(connectDone_t cd, sendDone_t sd, receiveReady_t rr, con
 int bsdtcp_passive_socket(acceptReady_t ar, acceptDone_t ad, void* ctx)
 {
     int fd = alloc_pfd();
+    int decoded_fd = fd - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS;
     if (fd != -1) {
-        passive_socket_t* psock = &passivesockets[fd];
+        passive_socket_t* psock = &passivesockets[decoded_fd];
         psock->acceptReady = ar;
         psock->acceptDone = ad;
         psock->context = ctx;
@@ -357,7 +358,7 @@ acceptArgs_t event_acceptReady(uint8_t pi)
         return args;
     }
 }
-void event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid)
+bool event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid)
 {
     assert(pi >= 0 && pi < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS);
     assert(_is_allocated(passivemask, pi));
@@ -365,8 +366,10 @@ void event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid)
     passive_socket_t* psock = &passivesockets[pi];
 
     if (psock->acceptDone != NULL) {
-        psock->acceptDone(pi, addr, asockid, psock->context);
+        return psock->acceptDone(pi, addr, asockid, psock->context);
     }
+
+    return false;
 }
 
 void event_connectDone(uint8_t ai, struct sockaddr_in6* addr)
