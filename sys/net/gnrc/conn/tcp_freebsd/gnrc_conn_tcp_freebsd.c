@@ -226,7 +226,6 @@ static void conn_tcp_passive_clear(conn_tcp_freebsd_t* conn)
 
 static void conn_tcp_active_clear(conn_tcp_freebsd_t* conn)
 {
-
     if (conn->hasactive) {
         conn->hasactive = false;
         mutex_lock(&conn->sfields.active.connect_lock);
@@ -235,6 +234,8 @@ static void conn_tcp_active_clear(conn_tcp_freebsd_t* conn)
         cond_broadcast(&conn->sfields.active.connect_cond);
         cond_broadcast(&conn->sfields.active.receive_cond);
         cond_broadcast(&conn->sfields.active.send_cond);
+        _free_sendstates(conn, (uint32_t) 0xFFFFFFFFu);
+        assert(conn->sfields.active.in_send_buffer == 0);
     }
 }
 
