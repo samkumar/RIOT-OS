@@ -76,20 +76,28 @@ struct conn_udp {
 struct conn_tcp_freebsd {
     gnrc_nettype_t l3_type;
     gnrc_nettype_t l4_type;
-    gnrc_netreg_entry_t netreg_entry;
+
     ipv6_addr_t local_addr;
     uint16_t local_port;
-    int asock;
-    int psock;
-    int errstat;
-    void* recvbuf;
 
     mutex_t lock;
-    mutex_t connect_lock;
-    condition_t accept_cond;
-    condition_t connect_cond;
-    condition_t receive_cond;
-    condition_t send_cond;
+    union {
+        struct {
+            int asock;
+            void* recvbuf;
+            mutex_t connect_lock;
+            condition_t connect_cond;
+            condition_t receive_cond;
+            condition_t send_cond;
+        } active;
+        struct {
+            int psock;
+            condition_t accept_cond;
+        } passive;
+    } sfields; /* specific fields */
+    int errstat;
+    bool hasactive;
+    bool haspassive;
 };
 
 /**

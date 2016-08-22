@@ -25,6 +25,9 @@ void* conn_tcp_freebsd_zalloc(unsigned long numbytes) {
 }
 
 void conn_tcp_freebsd_zfree(void* ptr) {
+    if (ptr == NULL) {
+        return;
+    }
     assert(initialized);
     memmgr_free(ptr);
 }
