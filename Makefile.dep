@@ -82,6 +82,7 @@ endif
 
 ifneq (,$(filter gnrc_conn_tcp_freebsd,$(USEMODULE)))
   USEMODULE += gnrc_tcp_freebsd
+  USEMODULE += gnrc_conn_tcp_freebsd_zalloc
 endif
 
 ifneq (,$(filter gnrc_tcp_freebsd,$(USEMODULE)))
@@ -488,6 +489,10 @@ endif
 
 ifneq (,$(filter %_conn_tcp,$(USEMODULE)))
   USEMODULE += conn_tcp
+endif
+
+ifneq (,$(filter %_conn_tcp_freebsd,$(USEMODULE)))
+  USEMODULE += conn_tcp_freebsd
 endif
 
 ifneq (,$(filter %_conn_udp,$(USEMODULE)))

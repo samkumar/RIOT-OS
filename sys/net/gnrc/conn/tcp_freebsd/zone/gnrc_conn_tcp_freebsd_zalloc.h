@@ -11,7 +11,7 @@
 
 static bool initialized = false;
 
-void conn_tcp_freebsd_zone_init(void)
+static inline void conn_tcp_freebsd_zone_init(void)
 {
     if (!initialized) {
         initialized = true;
@@ -19,7 +19,7 @@ void conn_tcp_freebsd_zone_init(void)
     }
 }
 
-void* conn_tcp_freebsd_zalloc(unsigned long numbytes) {
+static inline void* conn_tcp_freebsd_zalloc(unsigned long numbytes) {
     if (numbytes == 0) {
         return NULL;
     }
@@ -27,7 +27,7 @@ void* conn_tcp_freebsd_zalloc(unsigned long numbytes) {
     return memmgr_alloc(numbytes);
 }
 
-void conn_tcp_freebsd_zfree(void* ptr) {
+static inline void conn_tcp_freebsd_zfree(void* ptr) {
     if (ptr == NULL) {
         return;
     }

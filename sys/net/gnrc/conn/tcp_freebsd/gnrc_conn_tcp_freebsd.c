@@ -369,6 +369,8 @@ int conn_tcp_getpeeraddr(conn_tcp_freebsd_t *conn, void *addr, uint16_t *port)
         return -ENOTCONN;
     }
     bsdtcp_peerinfo(conn->sfields.active.asock, &addrptr, &portptr);
+    memcpy(addr, addrptr, sizeof(struct in6_addr));
+    *port = *portptr;
     mutex_unlock(&conn->lock);
     return 0;
 }
