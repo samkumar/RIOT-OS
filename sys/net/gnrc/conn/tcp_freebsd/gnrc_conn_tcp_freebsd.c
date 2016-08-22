@@ -29,6 +29,39 @@
 #define RECV_BUF_LEN 864
 #define REASS_BMP_LEN ((RECV_BUF_LEN + 7) >> 3)
 
+#define SENDMAXCOPY 52
+#define COPYBUFSIZE (SENDMAXCOPY << 1)
+#define SENDBUFSIZE 864
+
+/* Cached copy buffer, which may help us avoid a dynamic memory allocation. */
+struct conn_tcp_freebsd_send_state* extracopybuf = NULL;
+
+static uint32_t _free_sendstates(conn_tcp_freebsd_t* conn, uint32_t howmany) {
+    uint32_t totalbytesremoved = 0;
+    uint32_t i;
+
+    struct conn_tcp_freebsd_send_state* head;
+    struct conn_tcp_freebsd_send_state* newhead;
+    for (i = 0; (i < howmany) && (conn->sfields.active.send_head != NULL); i++) {
+        head = conn->sfields.active.send_head;
+        newhead = head->next;
+        totalbytesremoved += (head->buflen - head->entry.extraspace);
+        if (head->buflen == COPYBUFSIZE && extracopybuf == NULL) {
+            /* Hang on to the reference, to avoid a future memory allocation. */
+            extracopybuf = head;
+        } else {
+            conn_tcp_freebsd_zfree(head);
+        }
+        conn->sfields.active.send_head = newhead;
+    }
+    if (conn->sfields.active.send_head == NULL) {
+        conn->sfields.active.send_tail = NULL;
+    }
+    assert(totalbytesremoved <= conn->sfields.active.in_send_buffer);
+    conn->sfields.active.in_send_buffer -= totalbytesremoved;
+    return totalbytesremoved;
+}
+
 static void conn_tcp_freebsd_connectDone(uint8_t ai, struct sockaddr_in6* faddr, void* ctx)
 {
     assert(ctx != NULL);
@@ -44,10 +77,19 @@ static void conn_tcp_freebsd_connectDone(uint8_t ai, struct sockaddr_in6* faddr,
 
 static void conn_tcp_freebsd_sendDone(uint8_t ai, uint32_t tofree, void* ctx)
 {
-    assert(ctx != NULL);
     (void) ai;
-    (void) tofree;
-    (void) ctx;
+    uint32_t freed;
+
+    conn_tcp_freebsd_t* conn = ctx;
+    assert(conn != NULL);
+
+    mutex_lock(&conn->lock);
+    assert(conn->hasactive && !conn->haspassive);
+    freed = _free_sendstates(conn, tofree);
+    if (freed > 0) {
+        cond_broadcast(&conn->sfields.active.send_cond);
+    }
+    mutex_unlock(&conn->lock);
 }
 
 static void conn_tcp_freebsd_receiveReady(uint8_t ai, int gotfin, void* ctx)
@@ -225,6 +267,10 @@ static bool conn_tcp_active_set(conn_tcp_freebsd_t* conn, int asock)
         cond_init(&conn->sfields.active.connect_cond);
         cond_init(&conn->sfields.active.receive_cond);
         cond_init(&conn->sfields.active.send_cond);
+
+        conn->sfields.active.send_head = NULL;
+        conn->sfields.active.send_tail = NULL;
+        conn->sfields.active.in_send_buffer = 0;
     }
     return true;
 }
@@ -440,8 +486,98 @@ int conn_tcp_recv(conn_tcp_freebsd_t *conn, void *data, size_t max_len)
     return (int) bytes_read;
 }
 
-int conn_tcp_send(conn_tcp_freebsd_t *conn, const void *data, size_t len)
+/* SEND POLICY
+ * If a buffer is smaller than or equal to SENDMAXCOPY bytes, then
+ * COPYBUFSIZE bytes are allocated, and the buffer is copied into the
+ * space. This allows the TCP stack to coalesce small buffers within the
+ * remaining space in COPYBUFSIZE.
+ * Otherwise, the TCP stack is provided a reference to the buffer, with no
+ * extra space.
+ */
+int conn_tcp_send(conn_tcp_freebsd_t *conn, const void* data, size_t len)
 {
-    /* TODO */
-    return 0;
+    int error = 0;
+    struct lbufent* bufent;
+    struct conn_tcp_freebsd_send_state* sstate;
+
+    mutex_lock(&conn->lock);
+    assert(conn->hasactive && !conn->haspassive);
+
+    while (len > 0 && error == 0) {
+        /*
+         * Look at the remaining space in the send buffer to figure out how much
+         * we can send.
+         */
+        while (conn->sfields.active.in_send_buffer >= SENDBUFSIZE) {
+            assert(conn->sfields.active.in_send_buffer == SENDBUFSIZE);
+            cond_wait(&conn->sfields.active.send_cond, &conn->lock);
+        }
+        const char* buffer = data;
+        size_t buflen = SENDBUFSIZE - conn->sfields.active.in_send_buffer;
+        if (len < buflen) {
+            buflen = len;
+        }
+
+        bool copy = (buflen <= SENDMAXCOPY);
+        if (copy) {
+            if (extracopybuf == NULL) {
+                sstate = conn_tcp_freebsd_zalloc(sizeof(*sstate) + COPYBUFSIZE);
+                sstate->buflen = COPYBUFSIZE;
+            } else {
+                sstate = extracopybuf;
+                assert(sstate->buflen == COPYBUFSIZE);
+                extracopybuf = NULL;
+            }
+        } else {
+            sstate = conn_tcp_freebsd_zalloc(sizeof(*sstate) + buflen);
+            sstate->buflen = buflen;
+        }
+
+        if (sstate == NULL) {
+            return -ENOMEM;
+        }
+        sstate->next = NULL;
+
+        bufent = &sstate->entry;
+        bufent->iov.iov_next = NULL;
+        bufent->iov.iov_len = buflen;
+
+        bufent->iov.iov_base = (uint8_t*) (sstate + 1);
+        bufent->extraspace = (copy ? (COPYBUFSIZE - buflen) : buflen);
+        memcpy(bufent->iov.iov_base, buffer, buflen);
+
+        int state;
+
+        error = (int) bsdtcp_send(conn->sfields.active.asock, bufent, &state);
+
+        if (state == 1) {
+            /* The TCP stack has a reference to this buffer, and we must keep track of it. */
+            if (conn->sfields.active.send_tail == NULL) {
+                conn->sfields.active.send_head = sstate;
+            } else {
+                conn->sfields.active.send_tail->next = sstate;
+            }
+            conn->sfields.active.send_tail = sstate;
+        } else {
+            /* Either the send failed, or this was copied into the last buffer already. */
+            if (copy) {
+                assert(extracopybuf == NULL);
+                /* Cache this copy, to avoid another dynamic memory allocation */
+                extracopybuf = sstate;
+            } else {
+                conn_tcp_freebsd_zfree(sstate);
+            }
+        }
+
+        if (state != 0) {
+            /* The send didn't fail, so we need to keep track of queued bytes. */
+            conn->sfields.active.in_send_buffer += buflen;
+        }
+
+        buffer += buflen;
+        len -= buflen;
+    }
+
+    mutex_unlock(&conn->lock);
+    return -error;
 }
