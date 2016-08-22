@@ -414,17 +414,19 @@ int accept(int socket, struct sockaddr *restrict address,
                     break;
                 }
                 else {
-                    new_s->fd = res = fd;
+                    new_s->fd = fd;
                 }
                 new_s->domain = s->domain;
                 new_s->type = s->type;
                 new_s->protocol = s->protocol;
+                new_s->bound = true;
                 tmp.ss_family = s->domain;
                 if ((res = conn_tcp_getpeeraddr(&new_s->conn.tcp, addr, port)) < 0) {
                     errno = -res;
                     res = -1;
                     break;
                 }
+                res = fd;
                 *port = htons(*port); /* XXX: sin(6)_port is supposed to be
                                          network byte order */
                 *address_len = _addr_truncate(address, *address_len, &tmp, tmp_len);

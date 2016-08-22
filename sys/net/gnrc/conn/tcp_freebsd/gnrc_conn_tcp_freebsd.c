@@ -164,8 +164,6 @@ fail:
 
 static bool conn_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, int ai, void* ctx)
 {
-    DEBUG("accept done\n");
-
     (void) pi;
     (void) faddr;
 
@@ -251,18 +249,21 @@ static bool conn_tcp_active_set(conn_tcp_freebsd_t* conn, int asock)
                 conn->hasactive = false;
                 return false;
             }
+
+            conn->sfields.active.recvbuf = conn_tcp_freebsd_zalloc(RECV_BUF_LEN + REASS_BMP_LEN);
+            if (conn->sfields.active.recvbuf == NULL) {
+                conn->hasactive = false;
+                bsdtcp_close(conn->sfields.active.asock);
+                conn->sfields.active.asock = -1;
+                return false;
+            }
+
         } else {
             conn->sfields.active.asock = asock;
+            /* How to get the recvbuf? */
         }
         bsdtcp_bind(conn->sfields.active.asock, conn->local_port);
 
-        conn->sfields.active.recvbuf = conn_tcp_freebsd_zalloc(RECV_BUF_LEN + REASS_BMP_LEN);
-        if (conn->sfields.active.recvbuf == NULL) {
-            conn->hasactive = false;
-            bsdtcp_close(conn->sfields.active.asock);
-            conn->sfields.active.asock = -1;
-            return false;
-        }
         mutex_init(&conn->sfields.active.connect_lock);
         cond_init(&conn->sfields.active.connect_cond);
         cond_init(&conn->sfields.active.receive_cond);
@@ -452,6 +453,7 @@ int conn_tcp_accept(conn_tcp_freebsd_t* conn, conn_tcp_freebsd_t* out_conn)
 
     int asock = conn->sfields.passive.accept_queue[asockidx];
 
+    memcpy(&out_conn->local_addr, &conn->local_addr, sizeof(ipv6_addr_t));
     conn_tcp_general_init(out_conn, conn->local_port);
 
     mutex_lock(&out_conn->lock);

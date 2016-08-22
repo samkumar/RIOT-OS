@@ -9,6 +9,10 @@
 
 #include "memmgr.h"
 
+#define ENABLE_DEBUG (1)
+
+#include "debug.h"
+
 static bool initialized = false;
 
 static inline void conn_tcp_freebsd_zone_init(void)
@@ -24,7 +28,9 @@ static inline void* conn_tcp_freebsd_zalloc(unsigned long numbytes) {
         return NULL;
     }
     conn_tcp_freebsd_zone_init();
-    return memmgr_alloc(numbytes);
+    void* p = memmgr_alloc(numbytes);
+    DEBUG("Allocating %lu bytes: %p\n", numbytes, p);
+    return p;
 }
 
 static inline void conn_tcp_freebsd_zfree(void* ptr) {
@@ -32,6 +38,7 @@ static inline void conn_tcp_freebsd_zfree(void* ptr) {
         return;
     }
     assert(initialized);
+    DEBUG("Freeing %p\n", ptr);
     memmgr_free(ptr);
 }
 
