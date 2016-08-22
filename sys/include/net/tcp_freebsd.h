@@ -47,6 +47,7 @@ typedef void (*acceptDone_t)(uint8_t, struct sockaddr_in6*, int, void*);
 
 int bsdtcp_active_socket(connectDone_t cd, sendDone_t sd, receiveReady_t rr, connectionLost_t cl, void* ctx);
 int bsdtcp_passive_socket(acceptReady_t ar, acceptDone_t ad, void* ctx);
+int bsdtcp_set_ctx(int fd, void* newctx);
 int bsdtcp_bind(int fd, uint16_t port);
 int bsdtcp_connect(int fd, struct sockaddr_in6* faddrport, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
 int bsdtcp_listen(int fd);

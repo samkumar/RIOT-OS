@@ -20,6 +20,9 @@ void conn_tcp_freebsd_zone_init(void)
 }
 
 void* conn_tcp_freebsd_zalloc(unsigned long numbytes) {
+    if (numbytes == 0) {
+        return NULL;
+    }
     conn_tcp_freebsd_zone_init();
     return memmgr_alloc(numbytes);
 }

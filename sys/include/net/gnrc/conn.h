@@ -24,6 +24,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "cib.h"
 #include "condition.h"
 #include "mutex.h"
 #include "net/ipv6/addr.h"
@@ -93,6 +94,13 @@ struct conn_tcp_freebsd {
         struct {
             int psock;
             condition_t accept_cond;
+
+            /* Number of sockets pending acceptance but not yet on the queue. */
+            unsigned int accept_pending;
+
+            /* Circular buffer for accept queue. */
+            cib_t accept_cib;
+            int* accept_queue;
         } passive;
     } sfields; /* specific fields */
     int errstat;

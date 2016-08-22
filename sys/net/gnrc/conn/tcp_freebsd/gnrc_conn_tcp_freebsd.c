@@ -83,45 +83,73 @@ static void conn_tcp_freebsd_connectionLost(uint8_t ai, uint8_t how, void* ctx)
 
 static acceptArgs_t conn_tcp_freebsd_acceptReady(uint8_t pi, void* ctx)
 {
+    /* To be returned after filling in members. */
+    acceptArgs_t args;
+
     assert(ctx != NULL);
     conn_tcp_freebsd_t* conn = ctx;
 
     mutex_lock(&conn->lock);
     assert(conn->haspassive && !conn->hasactive);
 
+    if (cib_avail(&conn->sfields.passive.accept_cib) == conn->sfields.passive.accept_pending) {
+        DEBUG("Accept queue full\n");
+        goto fail;
+    }
+
     void* recvbuf = conn_tcp_freebsd_zalloc(RECV_BUF_LEN + REASS_BMP_LEN);
     if (recvbuf == NULL) {
         DEBUG("Out of memory in acceptReady\n");
-        acceptArgs_t args;
-        args.asockid = -1;
-        args.recvbuf = NULL;
-        args.recvbuflen = 0;
-        args.reassbmp = NULL;
-        mutex_unlock(&conn->lock);
-        return args;
+        goto fail;
     }
 
     int asockid = bsdtcp_active_socket(conn_tcp_freebsd_connectDone,
         conn_tcp_freebsd_sendDone, conn_tcp_freebsd_receiveReady,
         conn_tcp_freebsd_connectionLost, NULL);
 
-    acceptArgs_t args;
     args.asockid = asockid;
     args.recvbuf = recvbuf;
     args.recvbuflen = RECV_BUF_LEN;
     args.reassbmp = ((uint8_t*) args.recvbuf) + RECV_BUF_LEN;
 
+    conn->sfields.passive.accept_pending++;
+
+done:
     mutex_unlock(&conn->lock);
     return args;
+
+fail:
+    args.asockid = -1;
+    args.recvbuf = NULL;
+    args.recvbuflen = 0;
+    args.reassbmp = NULL;
+
+    goto done;
 }
 
 static void conn_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, int ai, void* ctx)
 {
-    assert(ctx != NULL);
     (void) pi;
     (void) faddr;
-    (void) ai;
-    (void) ctx;
+
+    int putidx;
+
+    conn_tcp_freebsd_t* conn = ctx;
+    assert(conn != NULL);
+
+    mutex_lock(&conn->lock);
+    assert(conn->haspassive && !conn->hasactive);
+
+    assert(conn->sfields.passive.accept_pending > 0);
+    conn->sfields.passive.accept_pending--;
+
+    putidx = cib_put(&conn->sfields.passive.accept_cib);
+    assert(putidx != -1);
+    conn->sfields.passive.accept_queue[putidx] = ai;
+
+    cond_signal(&conn->sfields.passive.accept_cond);
+
+    mutex_unlock(&conn->lock);
 }
 
 
@@ -141,9 +169,16 @@ static void conn_tcp_general_init(conn_tcp_freebsd_t* conn, uint16_t port)
 static void conn_tcp_passive_clear(conn_tcp_freebsd_t* conn)
 {
     if (conn->haspassive) {
+        int asockidx;
+
         conn->haspassive = false;
         bsdtcp_close(conn->sfields.passive.psock);
         cond_broadcast(&conn->sfields.passive.accept_cond);
+
+        while ((asockidx = cib_get(&conn->sfields.passive.accept_cib)) != -1) {
+            bsdtcp_close(conn->sfields.passive.accept_queue[asockidx]);
+        }
+        conn_tcp_freebsd_zfree(conn->sfields.passive.accept_queue);
     }
 }
 
@@ -161,18 +196,24 @@ static void conn_tcp_active_clear(conn_tcp_freebsd_t* conn)
     }
 }
 
-static bool conn_tcp_active_set(conn_tcp_freebsd_t* conn)
+static bool conn_tcp_active_set(conn_tcp_freebsd_t* conn, int asock)
 {
     conn_tcp_passive_clear(conn);
     if (!conn->hasactive) {
         conn->hasactive = true;
-        conn->sfields.active.asock = bsdtcp_active_socket(conn_tcp_freebsd_connectDone,
-            conn_tcp_freebsd_sendDone, conn_tcp_freebsd_receiveReady,
-            conn_tcp_freebsd_connectionLost, conn);
-        if (conn->sfields.active.asock == -1) {
-            conn->hasactive = false;
-            return false;
+        if (asock == -1) {
+            conn->sfields.active.asock = bsdtcp_active_socket(conn_tcp_freebsd_connectDone,
+                conn_tcp_freebsd_sendDone, conn_tcp_freebsd_receiveReady,
+                conn_tcp_freebsd_connectionLost, conn);
+            if (conn->sfields.active.asock == -1) {
+                conn->hasactive = false;
+                return false;
+            }
+        } else {
+            conn->sfields.active.asock = asock;
         }
+        bsdtcp_bind(asock, conn->local_port);
+
         conn->sfields.active.recvbuf = conn_tcp_freebsd_zalloc(RECV_BUF_LEN + REASS_BMP_LEN);
         if (conn->sfields.active.recvbuf == NULL) {
             conn->hasactive = false;
@@ -188,8 +229,9 @@ static bool conn_tcp_active_set(conn_tcp_freebsd_t* conn)
     return true;
 }
 
-static bool conn_tcp_passive_set(conn_tcp_freebsd_t* conn)
+static bool conn_tcp_passive_set(conn_tcp_freebsd_t* conn, int queue_len)
 {
+    assert(queue_len >= 0 && queue_len < (1 << (8 * sizeof(int) - 2)));
     conn_tcp_active_clear(conn);
     if (!conn->haspassive) {
         conn->haspassive = true;
@@ -198,7 +240,28 @@ static bool conn_tcp_passive_set(conn_tcp_freebsd_t* conn)
             conn->haspassive = false;
             return false;
         }
+        bsdtcp_bind(conn->sfields.passive.psock, conn->local_port);
+
         cond_init(&conn->sfields.passive.accept_cond);
+        conn->sfields.passive.accept_pending = 0;
+
+        /* Set adj_queue_len to the power of two above queue_len. */
+        unsigned int adj_queue_len = 1;
+        while (queue_len != 0) {
+            queue_len >>= 1;
+            adj_queue_len <<= 1;
+        }
+        adj_queue_len >>= 1;
+
+        cib_init(&conn->sfields.passive.accept_cib, adj_queue_len);
+
+        conn->sfields.passive.accept_queue = conn_tcp_freebsd_zalloc(adj_queue_len * sizeof(int));
+        if (conn->sfields.passive.accept_queue == NULL && adj_queue_len != 0) {
+            conn->haspassive = false;
+            bsdtcp_close(conn->sfields.passive.psock);
+            conn->sfields.passive.psock = -1;
+            return false;
+        }
     }
     return true;
 }
@@ -276,7 +339,7 @@ int conn_tcp_connect(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len
     }
     memcpy(&faddrport.sin6_addr, addr, addr_len);
     faddrport.sin6_port = htons(port);
-    bool res = conn_tcp_active_set(conn);
+    bool res = conn_tcp_active_set(conn, -1);
     if (!res) {
         rv = -ENOMEM;
         goto unlockreturn;
@@ -312,7 +375,7 @@ int conn_tcp_listen(conn_tcp_freebsd_t *conn, int queue_len)
 {
     int rv;
     mutex_lock(&conn->lock);
-    bool res = conn_tcp_passive_set(conn);
+    bool res = conn_tcp_passive_set(conn, queue_len);
     if (!res) {
         rv = -ENOMEM;
         goto unlockreturn;
@@ -325,12 +388,30 @@ unlockreturn:
     return rv;
 }
 
-int conn_tcp_accept(conn_tcp_freebsd_t *conn, conn_tcp_freebsd_t *out_conn)
+int conn_tcp_accept(conn_tcp_freebsd_t* conn, conn_tcp_freebsd_t* out_conn)
 {
+    mutex_lock(&conn->lock);
     if (!conn->hasactive && conn->haspassive) {
+        mutex_unlock(&conn->lock);
         return -EINVAL;
     }
-    /* TODO */
+
+    int asockidx;
+    while ((asockidx = cib_get(&conn->sfields.passive.accept_cib)) == -1) {
+        cond_wait(&conn->sfields.passive.accept_cond, &conn->lock);
+    }
+
+    int asock = conn->sfields.passive.accept_queue[asockidx];
+
+    conn_tcp_general_init(out_conn, conn->local_port);
+
+    mutex_lock(&out_conn->lock);
+    conn_tcp_active_set(out_conn, asock);
+    int rv = bsdtcp_set_ctx(asock, out_conn);
+    assert(rv == 0);
+    mutex_unlock(&out_conn->lock);
+
+    mutex_unlock(&conn->lock);
     return 0;
 }
 

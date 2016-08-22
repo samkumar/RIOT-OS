@@ -189,6 +189,24 @@ int bsdtcp_passive_socket(acceptReady_t ar, acceptDone_t ad, void* ctx)
     return fd;
 }
 
+int bsdtcp_set_ctx(int fd, void* newctx) {
+    bool passive;
+    fd = decode_fd(fd, &passive);
+    if (fd == -1) {
+        return EBADF;
+    }
+
+    if (passive) {
+        passive_socket_t* psock = &passivesockets[fd];
+        psock->context = newctx;
+    } else {
+        active_socket_t* asock = &activesockets[fd];
+        asock->context = newctx;
+    }
+
+    return 0;
+}
+
 int bsdtcp_bind(int fd, uint16_t port)
 {
     int rv;
