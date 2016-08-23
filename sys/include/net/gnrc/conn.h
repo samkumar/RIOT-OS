@@ -82,6 +82,11 @@ struct conn_tcp_freebsd_send_state {
     struct lbufent entry;
 };
 
+struct conn_tcp_freebsd_accept_queue_entry {
+    int asockid;
+    void* recvbuf;
+};
+
 struct conn_tcp_freebsd {
     gnrc_nettype_t l3_type;
     gnrc_nettype_t l4_type;

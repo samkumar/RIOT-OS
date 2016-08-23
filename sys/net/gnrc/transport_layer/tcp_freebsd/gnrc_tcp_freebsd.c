@@ -621,6 +621,8 @@ void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay)
     int task_id = (((int) tcb->index) << 2) | (int) timer_id;
     int64_t delay_micros = MICROS_PER_TICK * (int64_t) delay;
 
+    DEBUG("Setting timer %d: %d\n", task_id, (int) (delay_micros / 1000));
+
     if (sched_task(&tcp_timer_sched, task_id, delay_micros) != 0) {
         DEBUG("sched_task failed!\n");
     }
@@ -629,6 +631,8 @@ void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay)
 void stop_timer(struct tcpcb* tcb, uint8_t timer_id)
 {
     int task_id = (((int) tcb->index) << 2) | (int) timer_id;
+
+    DEBUG("Stopping timer %d\n", task_id);
 
     if (cancel_task(&tcp_timer_sched, task_id) != 0) {
         DEBUG("cancel_task failed!\n");

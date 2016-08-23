@@ -22,7 +22,7 @@
 #include "net/tcp_freebsd.h"
 #include "zone/gnrc_conn_tcp_freebsd_zalloc.h"
 
-#define ENABLE_DEBUG (1)
+#define ENABLE_DEBUG (0)
 
 #include "debug.h"
 
@@ -539,7 +539,8 @@ int conn_tcp_send(conn_tcp_freebsd_t *conn, const void* data, size_t len)
         }
 
         if (sstate == NULL) {
-            return -ENOMEM;
+            error = ENOMEM;
+            goto unlockreturn;
         }
         sstate->next = NULL;
 
@@ -583,6 +584,7 @@ int conn_tcp_send(conn_tcp_freebsd_t *conn, const void* data, size_t len)
         len -= buflen;
     }
 
+unlockreturn:
     mutex_unlock(&conn->lock);
     return -error;
 }
