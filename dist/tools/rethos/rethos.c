@@ -268,6 +268,9 @@ typedef struct {
     uint8_t rexmit_frame[MTU];
     bool rexmit_acked;
 
+    /* Keeps track of whether anything has been sent yet. */
+    bool received_data_frame;
+
     /* Last received sequence number, used to detect losses. */
     uint16_t last_rcvd_seqno;
 } serial_t;
@@ -919,7 +922,10 @@ int main(int argc, char *argv[])
                                  * the last packet we received.
                                  */
                                 if (serial.rexmit_acked) {
-                                    rethos_send_ack_frame(&serial, serial.in_seqno);
+                                    if (serial.received_data_frame)
+                                    {
+                                        rethos_send_ack_frame(&serial, serial.in_seqno);
+                                    }
                                 } else {
                                     /* Retransmit the last frame that was sent. */
                                     rethos_rexmit_data_frame(&serial);
@@ -938,6 +944,8 @@ int main(int argc, char *argv[])
                                 continue;
                             }
                         }
+
+                        serial.received_data_frame = true;
 
                         /* ACK the frame we just received. */
                         rethos_send_ack_frame(&serial, serial.in_seqno);
