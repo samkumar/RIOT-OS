@@ -167,7 +167,7 @@ typedef struct {
     uint8_t rexmit_frame[RETHOS_TX_BUF_SZ];
     bool rexmit_acked;
 
-    bool received_something = false;
+    bool received_data;
 } ethos_t;
 
 struct _rethos_handler {

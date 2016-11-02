@@ -783,6 +783,7 @@ int main(int argc, char *argv[])
     }
 
     serial_t serial = {0};
+    serial.rexmit_acked = true; // The retransmit buffer contains garbage, so don't transmit that
 
     if (argc < 3) {
         usage();
