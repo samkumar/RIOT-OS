@@ -93,6 +93,9 @@ void ethos_setup(ethos_t *dev, const ethos_params_t *params)
     dev->stats_rx_cksum_fail = 0;
     dev->stats_rx_bytes = 0;
 
+    dev->rexmit_acked = true;
+    dev->received_data = false;
+
     tsrb_init(&dev->netdev_inbuf, (char*)params->buf, params->bufsize);
     mutex_init(&dev->out_mutex);
 
@@ -152,7 +155,10 @@ static void process_frame(ethos_t *dev)
                      * Sending a NACK here could cause a NACK storm, so instead just ACK the last
                      * thing we received.
                      */
-                    rethos_send_ack_frame(dev, dev->rx_seqno);
+                    if (dev->received_data)
+                    {
+                        rethos_send_ack_frame(dev, dev->rx_seqno);
+                    }
                 }
                 else
                 {
@@ -164,6 +170,9 @@ static void process_frame(ethos_t *dev)
 
         return; //Other types are internal to rethos
     }
+
+    dev->received_data = true;
+
     //Handle the special channels
     switch(dev->rx_channel) {
       case RETHOS_CHANNEL_NETDEV:
@@ -343,89 +352,105 @@ void rethos_rexmit_callback(void* arg)
     xtimer_set(&rexmit_timer, (uint32_t) RETHOS_REXMIT_MICROS);
 }
 
-void ethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, unsigned channel)
+void rethos_start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type)
 {
-    uint16_t seqno = ++(dev->txseq);
+    uint8_t preamble_buffer[6];
+    if (!irq_is_in()) {
+        mutex_lock(&dev->out_mutex);
+    }
 
     /* Store this data, in case we need to retransmit it. */
     dev->rexmit_seqno = seqno;
     dev->rexmit_channel = (uint8_t) channel;
     dev->rexmit_numbytes = len;
     memcpy(dev->rexmit_frame, data, len);
-    dev->rexmit_acked = false;
+    dev->rexmit_acked = true; // We have a partial frame, so don't retransmit it on a NACK
 
-    rethos_send_frame(dev, data, len, channel, seqno, RETHOS_FRAME_TYPE_DATA);
+    dev->flsum1 = 0xFF;
+    dev->flsum2 = 0xFF;
 
-    /* Set the rexmit timer */
-    rexmit_timer.arg = dev;
-    xtimer_set(&rexmit_timer, (uint32_t) RETHOS_REXMIT_MICROS);
+    preamble_buffer[0] = RETHOS_ESC_CHAR;
+    preamble_buffer[1] = RETHOS_FRAME_START;
+    //This is where the checksum starts
+    preamble_buffer[2] = frame_type;
+    preamble_buffer[3] = seqno & 0xFF; //Little endian cos im a rebel
+    preamble_buffer[4] = seqno >> 8;
+    preamble_buffer[5] = channel;
+
+    dev->stats_tx_bytes += 4 + thislen;
+
+    fletcher16_add(&preamble_buffer[2], 4, &dev->flsum1, &dev->flsum2);
+
+    uart_write(dev->uart, preamble_buffer, 2);
+    for (size_t i = 0; i < 4; i++)
+    {
+      _write_escaped(dev->uart, preamble_buffer[2+i]);
+    }
+
+    if (thislen > 0)
+    {
+      fletcher16_add(data, thislen, &dev->flsum1, &dev->flsum2);
+      //todo replace with a little bit of chunking
+      for (size_t i = 0; i<thislen; i++) {
+        _write_escaped(dev->uart, data[i]);
+      }
+    }
 }
 
-void rethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint16_t seqno, uint8_t frame_type)
+void ethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, unsigned channel)
 {
-    rethos_start_frame(dev, data, len, channel, seqno, frame_type);
+    rethos_send_frame(dev, data, len, channel, seqno, RETHOS_FRAME_TYPE_DATA);
+}
+
+void rethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint8_t frame_type)
+{
+    rethos_start_frame(dev, data, len, channel, frame_type);
+    rethos_end_frame(dev);
+}
+
+/* We need to copy this because, apparently, both rethos_send_frame and rethos_start_frame are public... */
+void rethos_send_frame_seqno(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint16_t seqno, uint8_t frame_type)
+{
+    rethos_start_frame_seqno(dev, data, len, channel, seqno, frame_type);
     rethos_end_frame(dev);
 }
 
 void rethos_rexmit_data_frame(ethos_t* dev)
 {
-    rethos_send_frame(dev, dev->rexmit_frame, dev->rexmit_numbytes, dev->rexmit_channel, dev->rexmit_seqno, RETHOS_FRAME_TYPE_DATA);
+    rethos_send_frame_seqno(dev, dev->rexmit_frame, dev->rexmit_numbytes, dev->rexmit_channel, dev->rexmit_seqno, RETHOS_FRAME_TYPE_DATA);
 }
 
 void rethos_send_ack_frame(ethos_t* dev, uint16_t seqno)
 {
-    rethos_send_frame(dev, NULL, 0, RETHOS_CHANNEL_CONTROL, seqno, RETHOS_FRAME_TYPE_ACK);
+    rethos_send_frame_seqno(dev, NULL, 0, RETHOS_CHANNEL_CONTROL, seqno, RETHOS_FRAME_TYPE_ACK);
 }
 
 void rethos_send_nack_frame(ethos_t* dev)
 {
-    rethos_send_frame(dev, NULL, 0, RETHOS_CHANNEL_CONTROL, 0, RETHOS_FRAME_TYPE_NACK);
+    rethos_send_frame_seqno(dev, NULL, 0, RETHOS_CHANNEL_CONTROL, 0, RETHOS_FRAME_TYPE_NACK);
 }
 
-void rethos_start_frame(ethos_t *dev, const uint8_t *data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type)
+void rethos_start_frame(ethos_t *dev, const uint8_t *data, size_t thislen, uint8_t channel, uint8_t frame_type)
 {
-  uint8_t preamble_buffer[6];
-  if (!irq_is_in()) {
-      mutex_lock(&dev->out_mutex);
-  } else {
-    //We need to clobber the existing frame, including its reliable delivery
-  }
-
-  dev->flsum1 = 0xFF;
-  dev->flsum2 = 0xFF;
-
-  preamble_buffer[0] = RETHOS_ESC_CHAR;
-  preamble_buffer[1] = RETHOS_FRAME_START;
-  //This is where the checksum starts
-  preamble_buffer[2] = frame_type;
-  preamble_buffer[3] = seqno & 0xFF; //Little endian cos im a rebel
-  preamble_buffer[4] = seqno >> 8;
-  preamble_buffer[5] = channel;
-
-  dev->stats_tx_bytes += 4 + thislen;
-
-  fletcher16_add(&preamble_buffer[2], 4, &dev->flsum1, &dev->flsum2);
-
-  uart_write(dev->uart, preamble_buffer, 2);
-  for (size_t i = 0; i < 4; i++)
-  {
-    _write_escaped(dev->uart, preamble_buffer[2+i]);
-  }
-
-  if (thislen > 0)
-  {
-    fletcher16_add(data, thislen, &dev->flsum1, &dev->flsum2);
-    //todo replace with a little bit of chunking
-    for (size_t i = 0; i<thislen; i++) {
-      _write_escaped(dev->uart, data[i]);
-    }
-  }
-
+    uint16_t seqno = ++(dev->txseq);
+    rethos_start_frame_seqno(dev, data, thislen, channel, frame_type);
 }
 
 void rethos_continue_frame(ethos_t *dev, const uint8_t *data, size_t thislen)
 {
   fletcher16_add(data, thislen, &dev->flsum1, &dev->flsum2);
+
+  /* Check if we're going to overflow the rexmit buffer. */
+  if (thislen + dev->rexmit_numbytes > RETHOS_TX_BUF_SZ)
+  {
+      /* Just stop transmitting data. The checksum should be corrupt anyway, so
+       * the other side won't think this was valid. We just need to make sure we
+       * never retransmit.
+       */
+      dev->rexmit_numbytes = RETHOS_TX_BUF_SZ + 1;
+      return;
+  }
+
   dev->stats_tx_bytes += thislen;
   //todo replace with a little bit of chunking
   for (size_t i = 0; i<thislen; i++) {
@@ -435,14 +460,24 @@ void rethos_continue_frame(ethos_t *dev, const uint8_t *data, size_t thislen)
 
 void rethos_end_frame(ethos_t *dev)
 {
-  uint16_t cksum = fletcher16_fin(dev->flsum1, dev->flsum2);
-  uart_write(dev->uart, _end_frame, 2);
-  _write_escaped(dev->uart, cksum & 0xFF);
-  _write_escaped(dev->uart, cksum >> 8);
-  dev->stats_tx_frames += 1;
-  if (!irq_is_in()) {
-      mutex_unlock(&dev->out_mutex);
-  }
+    uint16_t cksum = fletcher16_fin(dev->flsum1, dev->flsum2);
+    uart_write(dev->uart, _end_frame, 2);
+    _write_escaped(dev->uart, cksum & 0xFF);
+    _write_escaped(dev->uart, cksum >> 8);
+    dev->stats_tx_frames += 1;
+
+    /* Enable retransmission and set the rexmit timer */
+    if (dev->rexmit_numbytes <= RETHOS_TX_BUF_SZ)
+    {
+        dev->rexmit_acked = false;
+        rexmit_timer.arg = dev;
+        xtimer_set(&rexmit_timer, (uint32_t) RETHOS_REXMIT_MICROS);
+    }
+
+    if (!irq_is_in())
+    {
+        mutex_unlock(&dev->out_mutex);
+    }
 }
 
 static int _send(netdev2_t *netdev, const struct iovec *vector, unsigned count)

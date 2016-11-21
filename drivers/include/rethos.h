@@ -166,6 +166,8 @@ typedef struct {
     size_t rexmit_numbytes;
     uint8_t rexmit_frame[RETHOS_TX_BUF_SZ];
     bool rexmit_acked;
+
+    bool received_data;
 } ethos_t;
 
 struct _rethos_handler {
@@ -223,9 +225,7 @@ void ethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, unsigned ch
  * @param[in]   len         nr of bytes to send
  * @param[in]   frame_type  frame channel to use
  */
-void rethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint16_t seqno, uint8_t frame_type);
-
-void rethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint16_t seqno, uint8_t frame_type);
+void rethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint8_t frame_type);
 
 void rethos_rexmit_data_frame(ethos_t* dev);
 
@@ -243,7 +243,7 @@ void rethos_send_nack_frame(ethos_t* dev);
  * @param[in]   thislen     nr of bytes to send on this invocation
  * @param[in]   frame_type  frame type to use
  */
-void rethos_start_frame(ethos_t *dev, const uint8_t *data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type);
+void rethos_start_frame(ethos_t *dev, const uint8_t *data, size_t thislen, uint8_t channel, uint8_t frame_type);
 
 /**
  * @brief send frame over serial port using ethos' framing
