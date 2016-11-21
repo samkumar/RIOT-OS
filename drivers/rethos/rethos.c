@@ -135,7 +135,7 @@ static void process_frame(ethos_t *dev)
     if (dev->rx_frame_type != RETHOS_FRAME_TYPE_DATA)
     {
         /* All ACKs and NACKs happen on the RETHOS-reserved channel. */
-        if (serial.channel == RETHOS_CHANNEL_CONTROL)
+        if (dev->rx_channel == RETHOS_CHANNEL_CONTROL)
         {
             if (dev->rx_frame_type == RETHOS_FRAME_TYPE_ACK)
             {
@@ -362,8 +362,8 @@ void rethos_start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen,
     /* Store this data, in case we need to retransmit it. */
     dev->rexmit_seqno = seqno;
     dev->rexmit_channel = (uint8_t) channel;
-    dev->rexmit_numbytes = len;
-    memcpy(dev->rexmit_frame, data, len);
+    dev->rexmit_numbytes = thislen;
+    memcpy(dev->rexmit_frame, data, thislen);
     dev->rexmit_acked = true; // We have a partial frame, so don't retransmit it on a NACK
 
     dev->flsum1 = 0xFF;
@@ -399,7 +399,7 @@ void rethos_start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen,
 
 void ethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, unsigned channel)
 {
-    rethos_send_frame(dev, data, len, channel, seqno, RETHOS_FRAME_TYPE_DATA);
+    rethos_send_frame(dev, data, len, channel, RETHOS_FRAME_TYPE_DATA);
 }
 
 void rethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint8_t frame_type)
@@ -433,7 +433,7 @@ void rethos_send_nack_frame(ethos_t* dev)
 void rethos_start_frame(ethos_t *dev, const uint8_t *data, size_t thislen, uint8_t channel, uint8_t frame_type)
 {
     uint16_t seqno = ++(dev->txseq);
-    rethos_start_frame_seqno(dev, data, thislen, channel, frame_type);
+    rethos_start_frame_seqno(dev, data, thislen, channel, seqno, frame_type);
 }
 
 void rethos_continue_frame(ethos_t *dev, const uint8_t *data, size_t thislen)
