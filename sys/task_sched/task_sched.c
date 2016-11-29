@@ -59,7 +59,7 @@ void* _task_sched(void* arg)
         sched->_in_process_loop = true;
 
         while (sched->_first != -1
-                && 0 <= (int64_t) (xtimer_now64() - sched->tasks[sched->_first]._min_exec_time)) {
+                && 0 <= (int64_t) (xtimer_now_usec64() - sched->tasks[sched->_first]._min_exec_time)) {
             int taskid = sched->_first;
             struct task* t = &sched->tasks[sched->_first];
 
@@ -83,7 +83,7 @@ void* _task_sched(void* arg)
         xtimer_remove(&sched->_timer);
         if (sched->_first != -1) {
             uint64_t until_next = (uint64_t)
-                (sched->tasks[sched->_first]._req_exec_time - xtimer_now64());
+                (sched->tasks[sched->_first]._req_exec_time - xtimer_now_usec64());
             xtimer_set_msg64(&sched->_timer, until_next, &expired, sched->_pid);
         }
 
@@ -150,7 +150,7 @@ static int _sched_task(struct task_sched* sched, int taskid, bool cancel,
         sched->tasks[t->_next]._prev = t->_prev;
     }
 
-    now = xtimer_now64();
+    now = xtimer_now_usec64();
 
     if (cancel) {
 

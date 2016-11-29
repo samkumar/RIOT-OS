@@ -345,15 +345,14 @@ static void* _packet_loop(void* arg)
     msg_t msg;
     msg_t setget_reply;
     msg_t msg_queue[GNRC_TCP_FREEBSD_MSG_QUEUE_SIZE];
-    gnrc_netreg_entry_t netreg;
+    gnrc_netreg_entry_t netreg = GNRC_NETREG_ENTRY_INIT_PID(GNRC_NETREG_DEMUX_CTX_ALL,
+                                                            _packet_pid);
 
     setget_reply.type = GNRC_NETAPI_MSG_TYPE_ACK;
     setget_reply.content.value = (uint32_t) -ENOTSUP;
 
     msg_init_queue(msg_queue, GNRC_TCP_FREEBSD_MSG_QUEUE_SIZE);
 
-    netreg.demux_ctx = GNRC_NETREG_DEMUX_CTX_ALL;
-    netreg.pid = thread_getpid();
     if (gnrc_netreg_register(GNRC_NETTYPE_TCP, &netreg)) {
         DEBUG("Error listening for packets\n");
     }
@@ -602,7 +601,7 @@ void send_message(gnrc_pktsnip_t* pkt)
 
 uint32_t get_millis(void)
 {
-    uint64_t micros = xtimer_now64();
+    uint64_t micros = xtimer_now_usec64();
     return micros / 1000;
 }
 
