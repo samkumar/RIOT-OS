@@ -345,6 +345,13 @@ static void* _packet_loop(void* arg)
     msg_t msg;
     msg_t setget_reply;
     msg_t msg_queue[GNRC_TCP_FREEBSD_MSG_QUEUE_SIZE];
+
+    /* _packet_pid may not be assigned, if the scheduler switches to this thread
+     * before thread_create returns, or after thread_create returns but before
+     * the return value is stored.
+     */
+    _packet_pid = thread_getpid();
+
     gnrc_netreg_entry_t netreg = GNRC_NETREG_ENTRY_INIT_PID(GNRC_NETREG_DEMUX_CTX_ALL,
                                                             _packet_pid);
 
