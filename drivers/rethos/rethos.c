@@ -177,6 +177,9 @@ static void process_frame(ethos_t *dev)
     dev->received_data = true;
     dev->last_rcvd_seqno = dev->rx_seqno;
 
+    /* ACK the frame we just received. */
+    rethos_send_ack_frame(dev, dev->rx_seqno);
+
     //Handle the special channels
     switch(dev->rx_channel) {
       case RETHOS_CHANNEL_NETDEV:
@@ -231,7 +234,7 @@ static void sm_char(ethos_t *dev, uint8_t c)
     case SM_IN_FRAME:
       dev->rx_buffer[dev->rx_buffer_index] = c;
       fletcher16_add(&c, 1, &dev->rx_cksum1, &dev->rx_cksum2);
-      if ((dev->rx_buffer_index++) > RETHOS_RX_BUF_SZ) {
+      if ((++dev->rx_buffer_index) >= RETHOS_RX_BUF_SZ) {
         sm_invalidate(dev);
       }
       return;
@@ -279,8 +282,8 @@ static void ethos_isr(void *arg, uint8_t c)
     if (dev->state == SM_IN_ESCAPE) {
       switch (c) {
         case RETHOS_LITERAL_ESC:
-          sm_char(dev, RETHOS_ESC_CHAR);
           dev->state = dev->fromstate;
+          sm_char(dev, RETHOS_ESC_CHAR);
           return;
         case RETHOS_FRAME_START:
           sm_frame_start(dev);

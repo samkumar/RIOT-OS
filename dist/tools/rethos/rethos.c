@@ -447,8 +447,9 @@ static void _write_escaped(int fd, const uint8_t* buf, ssize_t n)
         char c = (char) buf[i];
         if (c == RETHOS_ESC_CHAR) {
             checked_write(fd, _esc_esc, sizeof(_esc_esc));
+        } else {
+            checked_write(fd, &buf[i], 1);
         }
-        checked_write(fd, &buf[i], 1);
     }
 }
 
