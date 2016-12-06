@@ -56,11 +56,11 @@ so that implies that even the preamble needs to be escaped when written
 #endif
 
 #ifndef RETHOS_TX_BUF_SZ
-#define RETHOS_TX_BUF_SZ 4096
+#define RETHOS_TX_BUF_SZ 2048
 #endif
 
 #ifndef RETHOS_RX_BUF_SZ
-#define RETHOS_RX_BUF_SZ 4096
+#define RETHOS_RX_BUF_SZ 2048
 #endif
 
 /**
@@ -83,7 +83,7 @@ so that implies that even the preamble needs to be escaped when written
 */
 
 #define RETHOS_FRAME_TYPE_ACK            (0x4)
-#define RETHOS_FRAME_TYPE_NACK           (0x4)
+#define RETHOS_FRAME_TYPE_NACK           (0x5)
 
 #define RETHOS_CHANNEL_CONTROL            0x00
 #define RETHOS_CHANNEL_NETDEV             0x01
@@ -168,6 +168,7 @@ typedef struct {
     bool rexmit_acked;
 
     bool received_data;
+    uint16_t last_rcvd_seqno;
 } ethos_t;
 
 struct _rethos_handler {

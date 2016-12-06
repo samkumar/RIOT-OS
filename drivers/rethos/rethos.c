@@ -53,6 +53,9 @@ static const uint8_t _end_frame[] = {RETHOS_ESC_CHAR, RETHOS_FRAME_END};
 
 xtimer_t rexmit_timer;
 
+void rethos_send_frame_seqno_norexmit(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint16_t seqno, uint8_t frame_type);
+void rethos_start_frame_seqno_norexmit(ethos_t* dev, const uint8_t* data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type);
+
 static void fletcher16_add(const uint8_t *data, size_t bytes, uint16_t *sum1i, uint16_t *sum2i)
 {
     uint16_t sum1 = *sum1i, sum2 = *sum2i;
@@ -135,7 +138,7 @@ static void process_frame(ethos_t *dev)
     if (dev->rx_frame_type != RETHOS_FRAME_TYPE_DATA)
     {
         /* All ACKs and NACKs happen on the RETHOS-reserved channel. */
-        if (serial.channel == RETHOS_CHANNEL_CONTROL)
+        if (dev->rx_channel == RETHOS_CHANNEL_CONTROL)
         {
             if (dev->rx_frame_type == RETHOS_FRAME_TYPE_ACK)
             {
@@ -172,6 +175,10 @@ static void process_frame(ethos_t *dev)
     }
 
     dev->received_data = true;
+    dev->last_rcvd_seqno = dev->rx_seqno;
+
+    /* ACK the frame we just received. */
+    rethos_send_ack_frame(dev, dev->rx_seqno);
 
     //Handle the special channels
     switch(dev->rx_channel) {
@@ -227,7 +234,7 @@ static void sm_char(ethos_t *dev, uint8_t c)
     case SM_IN_FRAME:
       dev->rx_buffer[dev->rx_buffer_index] = c;
       fletcher16_add(&c, 1, &dev->rx_cksum1, &dev->rx_cksum2);
-      if ((dev->rx_buffer_index++) > RETHOS_RX_BUF_SZ) {
+      if ((++dev->rx_buffer_index) >= RETHOS_RX_BUF_SZ) {
         sm_invalidate(dev);
       }
       return;
@@ -275,8 +282,8 @@ static void ethos_isr(void *arg, uint8_t c)
     if (dev->state == SM_IN_ESCAPE) {
       switch (c) {
         case RETHOS_LITERAL_ESC:
-          sm_char(dev, RETHOS_ESC_CHAR);
           dev->state = dev->fromstate;
+          sm_char(dev, RETHOS_ESC_CHAR);
           return;
         case RETHOS_FRAME_START:
           sm_frame_start(dev);
@@ -352,19 +359,9 @@ void rethos_rexmit_callback(void* arg)
     xtimer_set(&rexmit_timer, (uint32_t) RETHOS_REXMIT_MICROS);
 }
 
-void rethos_start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type)
+void _start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type)
 {
     uint8_t preamble_buffer[6];
-    if (!irq_is_in()) {
-        mutex_lock(&dev->out_mutex);
-    }
-
-    /* Store this data, in case we need to retransmit it. */
-    dev->rexmit_seqno = seqno;
-    dev->rexmit_channel = (uint8_t) channel;
-    dev->rexmit_numbytes = len;
-    memcpy(dev->rexmit_frame, data, len);
-    dev->rexmit_acked = true; // We have a partial frame, so don't retransmit it on a NACK
 
     dev->flsum1 = 0xFF;
     dev->flsum2 = 0xFF;
@@ -397,9 +394,34 @@ void rethos_start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen,
     }
 }
 
+void rethos_start_frame_seqno_norexmit(ethos_t* dev, const uint8_t* data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type)
+{
+    if (!irq_is_in()) {
+        mutex_lock(&dev->out_mutex);
+    }
+
+    _start_frame_seqno(dev, data, thislen, channel, seqno, frame_type);
+}
+
+void rethos_start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type)
+{
+    if (!irq_is_in()) {
+        mutex_lock(&dev->out_mutex);
+    }
+
+    /* Store this data, in case we need to retransmit it. */
+    dev->rexmit_seqno = seqno;
+    dev->rexmit_channel = (uint8_t) channel;
+    dev->rexmit_numbytes = thislen;
+    memcpy(dev->rexmit_frame, data, thislen);
+    dev->rexmit_acked = true; // We have a partial frame, so don't retransmit it on a NACK
+
+    _start_frame_seqno(dev, data, thislen, channel, seqno, frame_type);
+}
+
 void ethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, unsigned channel)
 {
-    rethos_send_frame(dev, data, len, channel, seqno, RETHOS_FRAME_TYPE_DATA);
+    rethos_send_frame(dev, data, len, channel, RETHOS_FRAME_TYPE_DATA);
 }
 
 void rethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint8_t frame_type)
@@ -415,6 +437,12 @@ void rethos_send_frame_seqno(ethos_t *dev, const uint8_t *data, size_t len, uint
     rethos_end_frame(dev);
 }
 
+void rethos_send_frame_seqno_norexmit(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint16_t seqno, uint8_t frame_type)
+{
+    rethos_start_frame_seqno_norexmit(dev, data, len, channel, seqno, frame_type);
+    rethos_end_frame(dev);
+}
+
 void rethos_rexmit_data_frame(ethos_t* dev)
 {
     rethos_send_frame_seqno(dev, dev->rexmit_frame, dev->rexmit_numbytes, dev->rexmit_channel, dev->rexmit_seqno, RETHOS_FRAME_TYPE_DATA);
@@ -422,18 +450,18 @@ void rethos_rexmit_data_frame(ethos_t* dev)
 
 void rethos_send_ack_frame(ethos_t* dev, uint16_t seqno)
 {
-    rethos_send_frame_seqno(dev, NULL, 0, RETHOS_CHANNEL_CONTROL, seqno, RETHOS_FRAME_TYPE_ACK);
+    rethos_send_frame_seqno_norexmit(dev, NULL, 0, RETHOS_CHANNEL_CONTROL, seqno, RETHOS_FRAME_TYPE_ACK);
 }
 
 void rethos_send_nack_frame(ethos_t* dev)
 {
-    rethos_send_frame_seqno(dev, NULL, 0, RETHOS_CHANNEL_CONTROL, 0, RETHOS_FRAME_TYPE_NACK);
+    rethos_send_frame_seqno_norexmit(dev, NULL, 0, RETHOS_CHANNEL_CONTROL, 0, RETHOS_FRAME_TYPE_NACK);
 }
 
 void rethos_start_frame(ethos_t *dev, const uint8_t *data, size_t thislen, uint8_t channel, uint8_t frame_type)
 {
     uint16_t seqno = ++(dev->txseq);
-    rethos_start_frame_seqno(dev, data, thislen, channel, frame_type);
+    rethos_start_frame_seqno(dev, data, thislen, channel, seqno, frame_type);
 }
 
 void rethos_continue_frame(ethos_t *dev, const uint8_t *data, size_t thislen)

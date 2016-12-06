@@ -447,8 +447,9 @@ static void _write_escaped(int fd, const uint8_t* buf, ssize_t n)
         char c = (char) buf[i];
         if (c == RETHOS_ESC_CHAR) {
             checked_write(fd, _esc_esc, sizeof(_esc_esc));
+        } else {
+            checked_write(fd, &buf[i], 1);
         }
-        checked_write(fd, &buf[i], 1);
     }
 }
 
@@ -925,7 +926,7 @@ int main(int argc, char *argv[])
                                 if (serial.rexmit_acked) {
                                     if (serial.received_data_frame)
                                     {
-                                        rethos_send_ack_frame(&serial, serial.in_seqno);
+                                        rethos_send_ack_frame(&serial, serial.last_rcvd_seqno);
                                     }
                                 } else {
                                     /* Retransmit the last frame that was sent. */
