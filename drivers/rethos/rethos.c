@@ -55,6 +55,7 @@ xtimer_t rexmit_timer;
 
 void rethos_send_frame_seqno_norexmit(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint16_t seqno, uint8_t frame_type);
 void rethos_start_frame_seqno_norexmit(ethos_t* dev, const uint8_t* data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type);
+void rethos_end_frame_helper(ethos_t* dev, bool rexmit);
 
 static void fletcher16_add(const uint8_t *data, size_t bytes, uint16_t *sum1i, uint16_t *sum2i)
 {
@@ -413,7 +414,9 @@ void rethos_start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen,
     dev->rexmit_seqno = seqno;
     dev->rexmit_channel = (uint8_t) channel;
     dev->rexmit_numbytes = thislen;
-    memcpy(dev->rexmit_frame, data, thislen);
+    if (dev->rexmit_numbytes <= RETHOS_TX_BUF_SZ) {
+        memcpy(dev->rexmit_frame, data, thislen);
+    }
     dev->rexmit_acked = true; // We have a partial frame, so don't retransmit it on a NACK
 
     _start_frame_seqno(dev, data, thislen, channel, seqno, frame_type);
@@ -440,7 +443,7 @@ void rethos_send_frame_seqno(ethos_t *dev, const uint8_t *data, size_t len, uint
 void rethos_send_frame_seqno_norexmit(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint16_t seqno, uint8_t frame_type)
 {
     rethos_start_frame_seqno_norexmit(dev, data, len, channel, seqno, frame_type);
-    rethos_end_frame(dev);
+    rethos_end_frame_helper(dev, false);
 }
 
 void rethos_rexmit_data_frame(ethos_t* dev)
@@ -486,7 +489,7 @@ void rethos_continue_frame(ethos_t *dev, const uint8_t *data, size_t thislen)
   }
 }
 
-void rethos_end_frame(ethos_t *dev)
+void rethos_end_frame_helper(ethos_t* dev, bool rexmit)
 {
     uint16_t cksum = fletcher16_fin(dev->flsum1, dev->flsum2);
     uart_write(dev->uart, _end_frame, 2);
@@ -495,7 +498,7 @@ void rethos_end_frame(ethos_t *dev)
     dev->stats_tx_frames += 1;
 
     /* Enable retransmission and set the rexmit timer */
-    if (dev->rexmit_numbytes <= RETHOS_TX_BUF_SZ)
+    if (rexmit && dev->rexmit_numbytes <= RETHOS_TX_BUF_SZ)
     {
         dev->rexmit_acked = false;
         rexmit_timer.arg = dev;
@@ -506,6 +509,11 @@ void rethos_end_frame(ethos_t *dev)
     {
         mutex_unlock(&dev->out_mutex);
     }
+}
+
+void rethos_end_frame(ethos_t *dev)
+{
+    rethos_end_frame_helper(dev, true);
 }
 
 static int _send(netdev2_t *netdev, const struct iovec *vector, unsigned count)
