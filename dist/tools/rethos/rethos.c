@@ -1064,6 +1064,8 @@ int main(int argc, char *argv[])
                     rethos_send_data_frame(&serial, inbuf, res, i);
                     stats.channel[i].serial_forwarded++;
                     stats.global.domain_forwarded++;
+
+                    printf("Sent frame 0x%X\n", serial.out_seqno);
                 }
             }
         }
