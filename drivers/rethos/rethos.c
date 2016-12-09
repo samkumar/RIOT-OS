@@ -413,10 +413,13 @@ void rethos_start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen,
     /* Store this data, in case we need to retransmit it. */
     dev->rexmit_seqno = seqno;
     dev->rexmit_channel = (uint8_t) channel;
-    dev->rexmit_numbytes = thislen;
-    if (dev->rexmit_numbytes <= RETHOS_TX_BUF_SZ) {
+    dev->rexmit_numbytes = 0;
+    if (dev->rexmit_numbytes + thislen <= RETHOS_TX_BUF_SZ) {
         memcpy(dev->rexmit_frame, data, thislen);
+    } else {
+        dev->rexmit_numbytes = RETHOS_TX_BUF_SZ + 1;
     }
+    dev->rexmit_numbytes += thislen;
     dev->rexmit_acked = true; // We have a partial frame, so don't retransmit it on a NACK
 
     _start_frame_seqno(dev, data, thislen, channel, seqno, frame_type);
@@ -481,6 +484,12 @@ void rethos_continue_frame(ethos_t *dev, const uint8_t *data, size_t thislen)
       dev->rexmit_numbytes = RETHOS_TX_BUF_SZ + 1;
       return;
   }
+
+  /* Store this data, in case we need to retransmit it. */
+  if (dev->rexmit_numbytes + thislen <= RETHOS_TX_BUF_SZ) {
+      memcpy(dev->rexmit_frame, data, thislen);
+  }
+  dev->rexmit_numbytes += thislen;
 
   dev->stats_tx_bytes += thislen;
   //todo replace with a little bit of chunking
