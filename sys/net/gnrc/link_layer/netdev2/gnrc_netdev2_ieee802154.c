@@ -11,6 +11,7 @@
  *
  * @file
  * @author  Martine Lenders <mlenders@inf.fu-berlin.de>
+ * @author  Hyung-Sin Kim <hs.kim@berkeley.edu>
  */
 
 #include <stddef.h>
@@ -20,19 +21,22 @@
 #include "net/ieee802154.h"
 
 #include "net/gnrc/netdev2/ieee802154.h"
+#include "byteorder.h"
 
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
 
 static gnrc_pktsnip_t *_recv(gnrc_netdev2_t *gnrc_netdev2);
 static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt);
+static int _send_beacon(gnrc_netdev2_t *gnrc_netdev2);
 
 int gnrc_netdev2_ieee802154_init(gnrc_netdev2_t *gnrc_netdev2,
                                  netdev2_ieee802154_t *dev)
 {
-    gnrc_netdev2->send = _send;
+    gnrc_netdev2->send = _send;   
+    gnrc_netdev2->send_beacon = _send_beacon;
     gnrc_netdev2->recv = _recv;
-    gnrc_netdev2->dev = (netdev2_t *)dev;
+    gnrc_netdev2->dev  = (netdev2_t *)dev;
 
     return 0;
 }
@@ -42,14 +46,17 @@ static gnrc_pktsnip_t *_make_netif_hdr(uint8_t *mhr)
     gnrc_pktsnip_t *snip;
     uint8_t src[IEEE802154_LONG_ADDRESS_LEN], dst[IEEE802154_LONG_ADDRESS_LEN];
     int src_len, dst_len;
-    le_uint16_t _pan_tmp;   /* TODO: hand-up PAN IDs to GNRC? */
+    le_uint16_t _pan_tmp_src, _pan_tmp_dst;   /* TODO: hand-up PAN IDs to GNRC? */
 
-    dst_len = ieee802154_get_dst(mhr, dst, &_pan_tmp);
-    src_len = ieee802154_get_src(mhr, src, &_pan_tmp);
+    dst_len = ieee802154_get_dst(mhr, dst, &_pan_tmp_dst);
+    src_len = ieee802154_get_src(mhr, src, &_pan_tmp_src);
     if ((dst_len < 0) || (src_len < 0)) {
         DEBUG("_make_netif_hdr: unable to get addresses\n");
         return NULL;
     }
+	printf("[Rx packet] %u/%2x%2x(%4x)->%u/%2x%2x(%4x), flag %u, seq %u", src_len, src[0],src[1], 
+			_pan_tmp_src.u16, dst_len, dst[0],dst[1], _pan_tmp_dst.u16, mhr[0], mhr[2]);
+
     /* allocate space for header */
     snip = gnrc_netif_hdr_build(src, (size_t)src_len, dst, (size_t)dst_len);
     if (snip == NULL) {
@@ -71,6 +78,7 @@ static gnrc_pktsnip_t *_recv(gnrc_netdev2_t *gnrc_netdev2)
     netdev2_ieee802154_t *state = (netdev2_ieee802154_t *)gnrc_netdev2->dev;
     gnrc_pktsnip_t *pkt = NULL;
     int bytes_expected = netdev->driver->recv(netdev, NULL, 0, NULL);
+
 
     if (bytes_expected > 0) {
         int nread;
@@ -107,6 +115,7 @@ static gnrc_pktsnip_t *_recv(gnrc_netdev2_t *gnrc_netdev2)
                 return NULL;
             }
             netif_hdr = _make_netif_hdr(ieee802154_hdr->data);
+			printf(", len %u/%u\n", mhr_len,nread);
             if (netif_hdr == NULL) {
                 DEBUG("_recv_ieee802154: no space left in packet buffer\n");
                 gnrc_pktbuf_release(pkt);
@@ -150,7 +159,7 @@ static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
     uint8_t mhr[IEEE802154_MAX_HDR_LEN];
     uint8_t flags = (uint8_t)(state->flags & NETDEV2_IEEE802154_SEND_MASK);
     le_uint16_t dev_pan = byteorder_btols(byteorder_htons(state->pan));
-
+	
     flags |= IEEE802154_FCF_TYPE_DATA;
     if (pkt == NULL) {
         DEBUG("_send_ieee802154: pkt was NULL\n");
@@ -190,6 +199,9 @@ static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
         DEBUG("_send_ieee802154: Error preperaring frame\n");
         return -EINVAL;
     }
+
+	
+	printf("[Tx Data] %u/%2x%2x->%u/%2x%2x, flag %2x, seq %u\n", src_len, src[0],src[1], dst_len, dst[0],dst[1], flags, state->seq-1);
     /* prepare packet for sending */
     vec_snip = gnrc_pktbuf_get_iovec(pkt, &n);
     if (vec_snip != NULL) {
@@ -217,5 +229,49 @@ static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
     gnrc_pktbuf_release(pkt);
     return res;
 }
+
+/* hskim: send beacon for MAC operation */
+static int _send_beacon(gnrc_netdev2_t *gnrc_netdev2)
+{
+    netdev2_t *netdev = gnrc_netdev2->dev;
+    netdev2_ieee802154_t *state = (netdev2_ieee802154_t *)gnrc_netdev2->dev;
+    struct iovec vector;
+    const uint8_t *src, *dst = NULL;
+    int res = 0;
+    size_t src_len, dst_len;
+    uint8_t mhr[IEEE802154_MAX_HDR_LEN];
+    uint8_t flags = 0; //(uint8_t)(state->flags & NETDEV2_IEEE802154_SEND_MASK);
+    le_uint16_t dev_pan = byteorder_btols(byteorder_htons(state->pan));
+	
+    flags |= IEEE802154_FCF_TYPE_BEACON;
+    //flags |= IEEE802154_FCF_TYPE_DATA;
+
+    dst = ieee802154_addr_bcast;
+    dst_len = IEEE802154_ADDR_BCAST_LEN;
+    
+/*    if (state->flags & NETDEV2_IEEE802154_SRC_MODE_LONG) {
+        src_len = IEEE802154_LONG_ADDRESS_LEN;
+        src = state->long_addr;
+    }
+    else {
+  */      src_len = IEEE802154_SHORT_ADDRESS_LEN;
+        src = state->short_addr;
+    //}
+    /* fill MAC header, seq should be set by device */
+    if ((res = ieee802154_set_frame_hdr(mhr, src, src_len,
+                                        dst, dst_len, dev_pan,
+                                        dev_pan, flags, state->seq++)) == 0) {
+        DEBUG("_send_ieee802154: Error preperaring frame\n");
+        return -EINVAL;
+    }
+	printf("[Tx Beacon] %u/%2x%2x->%u/%2x%2x, flag %2x, seq %u\n", src_len, src[0],src[1], dst_len, dst[0],dst[1], flags, state->seq-1);
+    /* prepare packet for sending */
+    vector.iov_base = mhr;
+    vector.iov_len = (size_t)res;
+    res = netdev->driver->send(netdev, &vector, 1);
+
+    return res;
+}
+
 
 /** @} */

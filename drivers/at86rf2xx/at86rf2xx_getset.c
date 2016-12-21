@@ -369,6 +369,12 @@ void at86rf2xx_set_option(at86rf2xx_t *dev, uint16_t option, bool state)
                 tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_MASK);
                 tmp |= AT86RF2XX_IRQ_STATUS_MASK__RX_START;
                 at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK, tmp);
+                break;            
+			case AT86RF2XX_OPT_TELL_AMI:
+                DEBUG("[at86rf2xx] opt: enabling AMI IRQ\n");
+                tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_MASK);
+                tmp |= AT86RF2XX_IRQ_STATUS_MASK__AMI;
+                at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK, tmp);
                 break;
             default:
                 /* do nothing */
@@ -429,7 +435,9 @@ static inline void _set_state(at86rf2xx_t *dev, uint8_t state)
      */
     if (state != AT86RF2XX_STATE_RX_AACK_ON) {
         while (at86rf2xx_get_status(dev) != state);
-    }
+    } else {        
+		while (at86rf2xx_get_status(dev) == AT86RF2XX_STATE_IN_PROGRESS);
+	}
 
     dev->state = state;
 }
@@ -449,6 +457,8 @@ void at86rf2xx_set_state(at86rf2xx_t *dev, uint8_t state)
     if (state == old_state) {
         return;
     }
+	//printf("(%2x,%2x,%2x)->", at86rf2xx_get_status(dev), at86rf2xx_reg_read(dev, AT86RF2XX_REG__TRX_STATUS)
+    //            & AT86RF2XX_TRX_STATUS_MASK__TRX_STATUS, state);
 
     /* we need to go via PLL_ON if we are moving between RX_AACK_ON <-> TX_ARET_ON */
     if ((old_state == AT86RF2XX_STATE_RX_AACK_ON &&
@@ -463,10 +473,14 @@ void at86rf2xx_set_state(at86rf2xx_t *dev, uint8_t state)
         at86rf2xx_assert_awake(dev);
     }
 
+	//printf("(%2x,%2x,%2x)->", at86rf2xx_get_status(dev), at86rf2xx_reg_read(dev, AT86RF2XX_REG__TRX_STATUS)
+    //            & AT86RF2XX_TRX_STATUS_MASK__TRX_STATUS, state);
+
+
     if (state == AT86RF2XX_STATE_SLEEP) {
         /* First go to TRX_OFF */
         at86rf2xx_force_trx_off(dev);
-        /* Discard all IRQ flags, framebuffer is lost anyway */
+	    /* Discard all IRQ flags, framebuffer is lost anyway */
         at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_STATUS);
         /* Go to SLEEP mode from TRX_OFF */
         gpio_set(dev->params.sleep_pin);
@@ -474,6 +488,8 @@ void at86rf2xx_set_state(at86rf2xx_t *dev, uint8_t state)
     } else {
         _set_state(dev, state);
     }
+	//printf("(%2x,%2x,%2x)\n", at86rf2xx_get_status(dev), at86rf2xx_reg_read(dev, AT86RF2XX_REG__TRX_STATUS)
+    //            & AT86RF2XX_TRX_STATUS_MASK__TRX_STATUS, state);
 }
 
 void at86rf2xx_reset_state_machine(at86rf2xx_t *dev)

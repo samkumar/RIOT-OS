@@ -59,7 +59,6 @@ const netdev2_driver_t at86rf2xx_driver = {
 static void _irq_handler(void *arg)
 {
     netdev2_t *dev = (netdev2_t *) arg;
-
     if (dev->event_callback) {
         dev->event_callback(dev, NETDEV2_EVENT_ISR);
     }
@@ -114,6 +113,7 @@ static int _send(netdev2_t *netdev, const struct iovec *vector, unsigned count)
 #ifdef MODULE_NETSTATS_L2
         netdev->stats.tx_bytes += len;
 #endif
+		//printf("len %u\n", ptr->iov_len);
         len = at86rf2xx_tx_load(dev, ptr->iov_base, ptr->iov_len, len);
     }
 
@@ -273,6 +273,11 @@ static int _get(netdev2_t *netdev, netopt_t opt, void *val, size_t max_len)
                 !!(dev->netdev.flags & AT86RF2XX_OPT_TELL_RX_START);
             return sizeof(netopt_enable_t);
 
+        case NETOPT_AMI_IRQ:
+            *((netopt_enable_t *)val) =
+                !!(dev->netdev.flags & AT86RF2XX_OPT_TELL_AMI);
+            return sizeof(netopt_enable_t);
+
         case NETOPT_RX_END_IRQ:
             *((netopt_enable_t *)val) =
                 !!(dev->netdev.flags & AT86RF2XX_OPT_TELL_RX_END);
@@ -382,12 +387,11 @@ static int _set(netdev2_t *netdev, netopt_t opt, void *val, size_t len)
     at86rf2xx_t *dev = (at86rf2xx_t *) netdev;
     uint8_t old_state = at86rf2xx_get_status(dev);
     int res = -ENOTSUP;
-
+	//printf("set radio %2x %2x\n", old_state, opt);
     if (dev == NULL) {
         return -ENODEV;
     }
-
-    /* temporarily wake up if sleeping */
+	/* temporarily wake up if sleeping */
     if (old_state == AT86RF2XX_STATE_SLEEP) {
         at86rf2xx_assert_awake(dev);
     }
@@ -536,6 +540,12 @@ static int _set(netdev2_t *netdev, netopt_t opt, void *val, size_t len)
             res = sizeof(netopt_enable_t);
             break;
 
+        case NETOPT_AMI_IRQ:
+            at86rf2xx_set_option(dev, AT86RF2XX_OPT_TELL_AMI,
+                                 ((bool *)val)[0]);
+            res = sizeof(netopt_enable_t);
+            break;
+
         case NETOPT_CSMA:
             at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA,
                                  ((bool *)val)[0]);
@@ -592,6 +602,7 @@ static void _isr(netdev2_t *netdev)
     /* If transceiver is sleeping register access is impossible and frames are
      * lost anyway, so return immediately.
      */
+
     state = at86rf2xx_get_status(dev);
     if (state == AT86RF2XX_STATE_SLEEP) {
         return;
@@ -606,7 +617,13 @@ static void _isr(netdev2_t *netdev)
     if (irq_mask & AT86RF2XX_IRQ_STATUS_MASK__RX_START) {
         netdev->event_callback(netdev, NETDEV2_EVENT_RX_STARTED);
         DEBUG("[at86rf2xx] EVT - RX_START\n");
+	}
+
+    if (irq_mask & AT86RF2XX_IRQ_STATUS_MASK__AMI) {
+        netdev->event_callback(netdev, NETDEV2_EVENT_RX_STARTED);
+        DEBUG("[at86rf2xx] EVT - AMI\n");
     }
+
 
     if (irq_mask & AT86RF2XX_IRQ_STATUS_MASK__TRX_END) {
         if (state == AT86RF2XX_STATE_RX_AACK_ON ||

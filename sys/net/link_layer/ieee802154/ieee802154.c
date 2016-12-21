@@ -78,7 +78,9 @@ size_t ieee802154_set_frame_hdr(uint8_t *buf, const uint8_t *src, size_t src_len
 
     /* fill in source PAN ID (if applicable) */
     if (src_len != 0) {
-        if ((dst_len != 0) && (src_pan.u16 == dst_pan.u16)) {
+		/* hskim: To pass address check of AT86RF2XX's RX_AACK mode, 
+			      a beacon's src pan id must not be compressed */
+        if ((dst_len != 0) && (src_pan.u16 == dst_pan.u16) && type != IEEE802154_FCF_TYPE_BEACON) {
             buf[0] |= IEEE802154_FCF_PAN_COMP;
         }
         else {

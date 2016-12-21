@@ -78,6 +78,9 @@ int __attribute__((used)) sched_run(void)
           (active_thread == NULL) ? KERNEL_PID_UNDEF : active_thread->pid,
           next_thread->pid);
 
+    //printf("sched_run: AT: %2x(%2x), NThread %2x(%2x)\n", active_thread->pid, active_thread->status, next_thread->pid, next_thread->status);
+
+
     if (active_thread == next_thread) {
         DEBUG("sched_run: done, sched_active_thread was not changed.\n");
         return 0;
@@ -145,6 +148,7 @@ void sched_set_status(thread_t *process, unsigned int status)
 {
     if (status >= STATUS_ON_RUNQUEUE) {
         if (!(process->status >= STATUS_ON_RUNQUEUE)) {
+			//printf("addT %2x %2x\n",process->pid, process->priority);
             DEBUG("sched_set_status: adding thread %" PRIkernel_pid " to runqueue %" PRIu16 ".\n",
                   process->pid, process->priority);
             clist_rpush(&sched_runqueues[process->priority], &(process->rq_entry));
@@ -153,6 +157,7 @@ void sched_set_status(thread_t *process, unsigned int status)
     }
     else {
         if (process->status >= STATUS_ON_RUNQUEUE) {
+			//printf("removeT %2x %2x\n",process->pid, process->priority);
             DEBUG("sched_set_status: removing thread %" PRIkernel_pid " to runqueue %" PRIu16 ".\n",
                   process->pid, process->priority);
             clist_lpop(&sched_runqueues[process->priority]);
@@ -171,6 +176,8 @@ void sched_switch(uint16_t other_prio)
     thread_t *active_thread = (thread_t *) sched_active_thread;
     uint16_t current_prio = active_thread->priority;
     int on_runqueue = (active_thread->status >= STATUS_ON_RUNQUEUE);
+
+	//printf("sched_switch\n");
 
     DEBUG("sched_switch: active pid=%" PRIkernel_pid" prio=%" PRIu16 " on_runqueue=%i "
           ", other_prio=%" PRIu16 "\n",
