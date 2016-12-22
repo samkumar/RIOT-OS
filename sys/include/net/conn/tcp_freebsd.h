@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Martine Lenders <mlenders@inf.fu-berlin.de>
+ * Copyright (C) 2016 University of California, Berkeley
  *
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -15,7 +15,7 @@
  * @file
  * @brief   TCP connection definitions
  *
- * @author  Martine Lenders <mlenders@inf.fu-berlin.de>
+ * @author  Sam Kumar <samkumar@berkeley.edu>
  */
 #ifndef NET_CONN_TCP_FREEBSD_H_
 #define NET_CONN_TCP_FREEBSD_H_
