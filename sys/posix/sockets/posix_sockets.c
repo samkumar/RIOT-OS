@@ -241,7 +241,7 @@ static int socket_close(int socket)
 {
     socket_t *s;
     int res = 0;
-    if ((unsigned)(socket - 1) > (SOCKET_POOL_SIZE - 1)) {
+    if (socket >= SOCKET_POOL_SIZE) {
         return -1;
     }
     mutex_lock(&_pool_mutex);
