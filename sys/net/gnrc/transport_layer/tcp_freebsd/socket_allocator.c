@@ -100,7 +100,8 @@ bool _active_isclosed(int ai)
 
 bool _active_istimewait(int ai)
 {
-    return TCPS_TIME_WAIT == asock_getState_impl(ai);
+    int state = asock_getState_impl(ai);
+    return TCPS_TIME_WAIT == state || TCPS_CLOSED == state;
 }
 
 int alloc_pfd(void)
@@ -117,7 +118,9 @@ int alloc_afd(void)
     if (afd == -1) {
         // If that failed, try to get a socket in TIME-WAIT, and end the TIME-WAIT early.
         afd = alloc_fd(activemask, GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS, _active_istimewait);
-        asock_abort_impl(afd);
+        if (afd != -1) {
+            asock_abort_impl(afd);
+        }
     }
     return afd;
 }
@@ -282,7 +285,7 @@ int bsdtcp_close(int fd)
     bool passive;
     int rv;
     fd = decode_fd(fd, &passive);
-    if (fd == -1 || passive) {
+    if (fd == -1) {
         return EBADF;
     }
     if (passive) {
@@ -299,7 +302,7 @@ int bsdtcp_abort(int fd)
 {
     bool passive;
     fd = decode_fd(fd, &passive);
-    if (fd == -1 || passive) {
+    if (fd == -1) {
         return EBADF;
     }
     if (passive) {

@@ -40,7 +40,7 @@
 
 #include "mutex.h"
 
-#define ENABLE_DEBUG    (1)
+#define ENABLE_DEBUG    (0)
 #include "debug.h"
 
 #define SUCCESS 0

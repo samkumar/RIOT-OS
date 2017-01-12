@@ -48,6 +48,9 @@
 
 #include "net/gnrc/pktbuf.h"
 
+#define ENABLE_DEBUG (0)
+#include "debug.h"
+
 /* EXTERN DECLARATIONS FROM TCP_TIMER.H */
 #if 0 // I put these in the enum below
 int tcp_keepinit;		/* time to establish connection */
@@ -216,8 +219,7 @@ tcp_state_change(struct tcpcb *tp, int newstate)
 	int pstate = tp->t_state;
 #endif
 #endif
-    int pstate = tp->t_state;
-    printf("Socket %d: %s --> %s\n", tp->index, tcpstates[pstate], tcpstates[newstate]);
+    DEBUG("Socket %d: %s --> %s\n", tp->index, tcpstates[tp->t_state], tcpstates[newstate]);
 	tp->t_state = newstate;
 #if 0
 	TCP_PROBE6(state__change, NULL, tp, NULL, tp, NULL, pstate);
