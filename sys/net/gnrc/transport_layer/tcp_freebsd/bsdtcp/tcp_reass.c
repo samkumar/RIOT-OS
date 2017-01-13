@@ -83,7 +83,7 @@ tcp_reass(struct tcpcb* tp, struct tcphdr* th, int* tlenp, uint8_t* data, uint8_
 	written = cbuf_reass_write(&tp->recvbuf, (size_t) offset, data, tlen, tp->reassbmp, &start_index);
 
 	if ((th->th_flags & TH_FIN) && (tp->reass_fin_index == -1)) {
-		tp->reass_fin_index = (int16_t) start_index;
+		tp->reass_fin_index = (int16_t) (start_index + tlen);
 	}
 	KASSERT(written == tlen, ("Reassembly write out of bounds: tried to write %d, but wrote %d\n", tlen, (int) written));
 

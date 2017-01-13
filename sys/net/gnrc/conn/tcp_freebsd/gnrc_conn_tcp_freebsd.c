@@ -549,7 +549,7 @@ int conn_tcp_send(conn_tcp_freebsd_t *conn, const void* data, size_t len)
         bufent->iov.iov_len = buflen;
 
         bufent->iov.iov_base = (uint8_t*) (sstate + 1);
-        bufent->extraspace = (copy ? (COPYBUFSIZE - buflen) : buflen);
+        bufent->extraspace = (copy ? (COPYBUFSIZE - buflen) : 0);
         memcpy(bufent->iov.iov_base, buffer, buflen);
 
         int state;

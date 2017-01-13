@@ -88,6 +88,9 @@
 
 #include "tcp_const.h"
 
+#define ENABLE_DEBUG (0)
+#include "debug.h"
+
 // Copied from in.h
 #define IPPROTO_DONE 267
 
@@ -1180,7 +1183,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 		 */
 		if ((thflags & TH_SYN) == 0) {
 			//if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
-				printf(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
+				DEBUG(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
 				    "SYN is missing, segment ignored\n",
 				    /*s*/"note", __func__);
 //			TCPSTAT_INC(tcps_badsyn);
@@ -1191,7 +1194,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 		 */
 		if (thflags & TH_ACK) {
 			//if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
-				printf(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
+				DEBUG(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
 				    "SYN|ACK invalid, segment rejected\n",
 				    /*s*/"note", __func__);
 //			syncache_badack(&inc);	/* XXX: Not needed! */
@@ -1212,7 +1215,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 		 */
 		if ((thflags & TH_FIN) && V_drop_synfin) {
 			//if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
-				printf(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
+				DEBUG(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
 				    "SYN|FIN segment ignored (based on "
 				    "sysctl setting)\n", /*s*/"note", __func__);
 //			TCPSTAT_INC(tcps_badsyn);
@@ -1306,7 +1309,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 			if (th->th_dport == th->th_sport &&
 			    IN6_ARE_ADDR_EQUAL(&ip6->ip6_dst, &ip6->ip6_src)) {
 				//if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
-				    printf(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
+				    DEBUG(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
 					"Connection attempt to/from self "
 					"ignored\n", /*s*/ "note", __func__);
 				goto dropunlock;
@@ -1314,7 +1317,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb
 			if (IN6_IS_ADDR_MULTICAST(&ip6->ip6_dst) ||
 			    IN6_IS_ADDR_MULTICAST(&ip6->ip6_src)) {
 				//if ((s = tcp_log_addrs(&inc, th, NULL, NULL)))
-				    printf(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
+				    DEBUG(/*log(LOG_DEBUG, */"%s; %s: Listen socket: "
 					"Connection attempt from/to multicast "
 					"address ignored\n", /*s*/ "note", __func__);
 				goto dropunlock;
@@ -1707,14 +1710,14 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 	 */
 	if ((tp->t_flags & TF_RCVD_TSTMP) && !(to.to_flags & TOF_TS)) {
 //		if ((s = tcp_log_addrs(inc, th, NULL, NULL))) {
-			printf(/*log(LOG_DEBUG, */"%s; %s: Timestamp missing, "
+			DEBUG(/*log(LOG_DEBUG, */"%s; %s: Timestamp missing, "
 			    "no action\n", /*s*/"note", __func__);
 //			free(s, M_TCPLOG);
 //		}
 	}
 	if (!(tp->t_flags & TF_RCVD_TSTMP) && (to.to_flags & TOF_TS)) {
 //		if ((s = tcp_log_addrs(inc, th, NULL, NULL))) {
-			printf(/*log(LOG_DEBUG, */"%s; %s: Timestamp not expected, "
+			DEBUG(/*log(LOG_DEBUG, */"%s; %s: Timestamp not expected, "
 			    "no action\n", /*s*/"note", __func__);
 //			free(s, M_TCPLOG);
 //		}
@@ -2323,7 +2326,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			rstreason = BANDLIM_UNLIMITED;
 		} else {*/
 			/* Send challenge ACK. */
-			printf("Sending challenge ACK\n");
+			DEBUG("Sending challenge ACK\n");
 			tcp_respond(tp, ip6, th, tp->rcv_nxt, tp->snd_nxt, TH_ACK);
 			tp->last_ack_sent = tp->rcv_nxt;
 //			m = NULL;
@@ -2516,7 +2519,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 			goto drop;
 	}
 
-	printf("Processing ACK\n");
+	DEBUG("Processing ACK\n");
 
 	/*
 	 * Ack processing.
@@ -2831,7 +2834,7 @@ process_ACK:
 //		TCPSTAT_INC(tcps_rcvackpack);
 //		TCPSTAT_ADD(tcps_rcvackbyte, acked);
 
-		printf("Bytes acked: %d\n", acked);
+		DEBUG("Bytes acked: %d\n", acked);
 		/*
 		 * If we just performed our first retransmit, and the ACK
 		 * arrives within our recovery window, then it was a mistake
@@ -3200,7 +3203,7 @@ step6:
 	 * that the connection is closing.
 	 */
 	if (thflags & TH_FIN) {
-	    printf("FIN Processing start\n");
+	    DEBUG("FIN Processing start\n");
 		if (TCPS_HAVERCVDFIN(tp->t_state) == 0) {
 //			socantrcvmore(so);
             tpcantrcvmore(tp);

@@ -378,7 +378,7 @@ bool event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid)
 void event_connectDone(uint8_t ai, struct sockaddr_in6* addr)
 {
     assert(ai >= 0 && ai < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
-    assert(_is_allocated(activemask, ai));
+    // Doesn't need to be allocated
 
     active_socket_t* asock = &activesockets[ai];
 
@@ -390,7 +390,7 @@ void event_connectDone(uint8_t ai, struct sockaddr_in6* addr)
 void event_receiveReady(uint8_t ai, int gotfin)
 {
     assert(ai >= 0 && ai < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
-    assert(_is_allocated(activemask, ai));
+    // Doesn't need to be allocated
 
     active_socket_t* asock = &activesockets[ai];
 
@@ -402,7 +402,7 @@ void event_receiveReady(uint8_t ai, int gotfin)
 void event_sendDone(uint8_t ai, uint32_t numentries)
 {
     assert(ai >= 0 && ai < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
-    assert(_is_allocated(activemask, ai));
+    // Doesn't need to be allocated
 
     active_socket_t* asock = &activesockets[ai];
 
@@ -414,7 +414,7 @@ void event_sendDone(uint8_t ai, uint32_t numentries)
 void event_connectionLost(uint8_t ai, uint8_t how)
 {
     assert(ai >= 0 && ai < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
-    assert(_is_allocated(activemask, ai));
+    // Doesn't need t be allocated
 
     active_socket_t* asock = &activesockets[ai];
 

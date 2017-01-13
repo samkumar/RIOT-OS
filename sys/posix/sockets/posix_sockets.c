@@ -405,7 +405,7 @@ int accept(int socket, struct sockaddr *restrict address,
                 res = -1;
                 break;
             }
-            else if ((address != NULL) && (address_len != NULL)) {
+            else {
                 /* TODO: add read and write */
                 int fd = fd_new(new_s - _pool, NULL, NULL, socket_close);
                 if (fd < 0) {
@@ -429,7 +429,9 @@ int accept(int socket, struct sockaddr *restrict address,
                 res = fd;
                 *port = htons(*port); /* XXX: sin(6)_port is supposed to be
                                          network byte order */
-                *address_len = _addr_truncate(address, *address_len, &tmp, tmp_len);
+                if (address != NULL && address_len != NULL) {
+                    *address_len = _addr_truncate(address, *address_len, &tmp, tmp_len);
+                }
             }
             break;
 #endif
@@ -752,6 +754,8 @@ ssize_t recvfrom(int socket, void *restrict buffer, size_t length, int flags,
 {
     socket_t *s;
     int res = 0;
+    int temp;
+
     /* May be kept unassigned if no conn module is available */
     /* cppcheck-suppress unassignedVariable */
     struct sockaddr_storage tmp;
@@ -821,8 +825,8 @@ ssize_t recvfrom(int socket, void *restrict buffer, size_t length, int flags,
                 errno = -res;
                 return -1;
             }
-            if ((res = conn_tcp_getpeeraddr(&s->conn.tcp, addr, port)) < 0) {
-                errno = -res;
+            if ((temp = conn_tcp_getpeeraddr(&s->conn.tcp, addr, port)) < 0) {
+                errno = -temp;
                 return -1;
             }
             break;
