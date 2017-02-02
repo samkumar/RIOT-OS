@@ -130,10 +130,6 @@ static void *_gnrc_netdev2_thread(void *args)
     /* initialize low-level driver */
     dev->driver->init(dev);
 
-    /* we are working on a MAC to do this properly */
-    netopt_state_t sleepstate = NETOPT_STATE_SLEEP;
-    dev->driver->set(dev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));
-
     /* start the event loop */
     while (1) {
         DEBUG("gnrc_netdev2: waiting for incoming messages\n");
