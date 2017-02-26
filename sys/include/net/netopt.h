@@ -146,8 +146,8 @@ typedef enum {
     NETOPT_PROMISCUOUSMODE,     /**< en/disable promiscuous mode or read
                                  *   the current state */
     NETOPT_AUTOACK,             /**< en/disable link layer auto ACKs or read
-                                 *   the current state */    
-    NETOPT_ACK_PENDING,         /**< en/disable link layer auto ACKs 
+                                 *   the current state */
+    NETOPT_ACK_PENDING,         /**< en/disable link layer auto ACKs
                                  *   with pending bit */
     NETOPT_ACK_REQ,             /**< en/disable acknowledgement requests or
                                  *   read the current state */
@@ -198,6 +198,15 @@ typedef enum {
      * @note not all transceivers may support this interrupt
      */
     NETOPT_TX_END_IRQ,
+
+     /**
+     * @brief en/disable the interrupt after packet transmission.
+     *
+     * This interrupt is triggered when the full packet is transmitted.
+     *
+     * @note not all transceivers may support this interrupt
+     */
+    NETOPT_AMI_IRQ,
 
     /**
      * @brief Check automatically before sending if the channel is clear.
@@ -338,6 +347,7 @@ typedef enum {
      */
     NETOPT_RF_TESTMODE,
 
+<<<<<<< d69cdb27f1c31cfa9208ba2660887f0f8acdcb59
     /**
      * @brief   add an address to a link layer filter list
      *
@@ -450,6 +460,12 @@ typedef enum {
      * Retries due to CCA failures are not counted.
      */
     NETOPT_TX_RETRIES_NEEDED,
+=======
+     /**
+      * @brief   en/disable radio duty-cycling
+      */
+    NETOPT_DUTYCYCLE,
+>>>>>>> Add initial PR for dutymac
 
     /* add more options if needed */
 

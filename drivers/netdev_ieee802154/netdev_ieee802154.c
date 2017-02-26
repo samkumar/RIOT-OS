@@ -144,7 +144,6 @@ int netdev_ieee802154_set(netdev_ieee802154_t *dev, netopt_t opt, const void *va
                            size_t len)
 {
     int res = -ENOTSUP;
-
     switch (opt) {
         case NETOPT_CHANNEL:
         {

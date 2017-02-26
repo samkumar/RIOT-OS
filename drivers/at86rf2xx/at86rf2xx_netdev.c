@@ -172,6 +172,7 @@ static int _recv(netdev_t *netdev, void *buf, size_t len, void *info)
 #else
         at86rf2xx_fb_stop(dev);
         radio_info->rssi = at86rf2xx_reg_read(dev, AT86RF2XX_REG__PHY_ED_LEVEL);
+        radio_info->rssi = radio_info->rssi % 32;
 #endif
     }
     else {
@@ -273,7 +274,10 @@ static int _get(netdev_t *netdev, netopt_t opt, void *val, size_t max_len)
             *((netopt_enable_t *)val) =
                 !!(dev->netdev.flags & AT86RF2XX_OPT_TELL_RX_START);
             return sizeof(netopt_enable_t);
-
+        case NETOPT_AMI_IRQ:
+            *((netopt_enable_t *)val) =
+                !!(dev->netdev.flags & AT86RF2XX_OPT_TELL_AMI);
+            return sizeof(netopt_enable_t);
         case NETOPT_RX_END_IRQ:
             *((netopt_enable_t *)val) =
                 !!(dev->netdev.flags & AT86RF2XX_OPT_TELL_RX_END);
@@ -461,7 +465,10 @@ static int _set(netdev_t *netdev, netopt_t opt, const void *val, size_t len)
 			at86rf2xx_set_option(dev, AT86RF2XX_OPT_ACK_PENDING,
 						         ((bool *)val)[0]);
             break;
-
+        case NETOPT_ACK_PENDING:
+            at86rf2xx_set_option(dev, AT86RF2XX_OPT_ACK_PENDING,
+                                 ((bool *)val)[0]);
+            break;
         case NETOPT_RETRANS:
             assert(len <= sizeof(uint8_t));
             at86rf2xx_set_max_retries(dev, *((const uint8_t *)val));
@@ -503,7 +510,11 @@ static int _set(netdev_t *netdev, netopt_t opt, const void *val, size_t len)
                                  ((const bool *)val)[0]);
             res = sizeof(netopt_enable_t);
             break;
-
+        case NETOPT_AMI_IRQ:
+            at86rf2xx_set_option(dev, AT86RF2XX_OPT_TELL_AMI,
+                                 ((bool *)val)[0]);
+            res = sizeof(netopt_enable_t);
+            break;
         case NETOPT_CSMA:
             at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA,
                                  ((const bool *)val)[0]);
@@ -573,6 +584,16 @@ static void _isr(netdev_t *netdev)
         DEBUG("[at86rf2xx] EVT - RX_START\n");
     }
 
+    if (irq_mask & AT86RF2XX_IRQ_STATUS_MASK__AMI) {
+        netdev->event_callback(netdev, NETDEV2_EVENT_RX_STARTED);
+        DEBUG("[at86rf2xx] EVT - AMI\n");
+    }
+
+    if (irq_mask & AT86RF2XX_IRQ_STATUS_MASK__CCA_ED_DONE) {
+        netdev->event_callback(netdev, NETDEV2_EVENT_RX_STARTED);
+        DEBUG("[at86rf2xx] EVT - CCA DONE\n");
+   }
+
     if (irq_mask & AT86RF2XX_IRQ_STATUS_MASK__TRX_END) {
         if (state == AT86RF2XX_STATE_RX_AACK_ON ||
             state == AT86RF2XX_STATE_BUSY_RX_AACK) {
@@ -592,7 +613,7 @@ static void _isr(netdev_t *netdev)
 #if LEAF_NODE
 				/* Wake up for a while when receiving an ACK with pending bit */
 				if (trac_status == AT86RF2XX_TRX_STATE__TRAC_SUCCESS_DATA_PENDING) {
-	                dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;		
+	                dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;
 				}
 #endif
 #endif

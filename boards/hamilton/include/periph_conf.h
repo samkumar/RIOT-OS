@@ -136,6 +136,16 @@ extern "C" {
 /** @} */
 
 /**
+ * @name UART configuration
+ * @{
+ */
+static const uart_conf_t uart_config[] = {
+};
+
+#define UART_NUMOF          (0U)
+/** @} */
+
+/**
  * @name ADC configuration
  * @{
  */
@@ -150,6 +160,7 @@ extern "C" {
 #define ADC_PIN_PA06        ADC_PIN(0, 6, 6)
 #define ADC_PIN_PA07        ADC_PIN(0, 7, 7)
 #define ADC_PIN_PA08        ADC_PIN(0, 8, 16)
+
 /** @} */
 
 /**
@@ -272,6 +283,33 @@ static const spi_conf_t spi_config[] = {
  * @{
  */
 #define PM_BLOCKER_INITIAL { .val_u32 = 0x00000000 }
+/**
+ * @name Random Number Generator configuration
+ * @{
+ */
+#define RANDOM_NUMOF       (0U)
+/** @} */
+
+/**
+ * @name RTC configuration
+ * @{
+ */
+#define RTC_NUMOF           (1U)
+#define RTC_DEV             RTC->MODE2
+/** @} */
+
+/**
+ * @name RTT configuration
+ * @{
+ */
+#define RTT_NUMOF           (1U)
+#define RTT_DEV             RTC->MODE0
+#define RTT_IRQ             RTC_IRQn
+#define RTT_IRQ_PRIO        10
+#define TIMER_RTT_ISR       isr_rtc
+#define RTT_MAX_VALUE       (0xffffffff)
+#define RTT_FREQUENCY       (32768U)    /* in Hz. For changes see `rtt.c` */
+#define RTT_RUNSTDBY        (1)         /* Keep RTT running in sleep states */
 /** @} */
 
 #ifdef __cplusplus

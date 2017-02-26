@@ -27,6 +27,7 @@
 #include "at86rf2xx_internal.h"
 #include "at86rf2xx_registers.h"
 #include "periph/spi.h"
+#include "pm_layered.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -388,6 +389,18 @@ void at86rf2xx_set_option(at86rf2xx_t *dev, uint16_t option, bool state)
                 tmp |= AT86RF2XX_IRQ_STATUS_MASK__RX_START;
                 at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK, tmp);
                 break;
+      			case AT86RF2XX_OPT_TELL_AMI:
+                DEBUG("[at86rf2xx] opt: enabling AMI IRQ\n");
+                tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_MASK);
+                tmp |= AT86RF2XX_IRQ_STATUS_MASK__AMI;
+                at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK, tmp);
+                break;
+      			case AT86RF2XX_OPT_TELL_CCA_DONE:
+                DEBUG("[at86rf2xx] opt: enabling CCA_ED IRQ\n");
+                tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_MASK);
+                tmp |= AT86RF2XX_IRQ_STATUS_MASK__CCA_ED_DONE;
+                at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK, tmp);
+                break;
             default:
                 /* do nothing */
                 break;
@@ -516,8 +529,13 @@ uint8_t at86rf2xx_set_state(at86rf2xx_t *dev, uint8_t state)
         /* Go to SLEEP mode from TRX_OFF */
         gpio_set(dev->params.sleep_pin);
         dev->state = state;
+		/* Allow CPU to go to the full sleep mode */
+		pm_unblock(PM_NUM_MODES-1);
     } else {
         _set_state(dev, state, state);
+		/* Prevent CPU from going to the full sleep mode */
+		if (old_state == AT86RF2XX_STATE_SLEEP)
+			pm_block(PM_NUM_MODES-1);
     }
 
     return old_state;

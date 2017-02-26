@@ -149,6 +149,9 @@ extern "C" {
                                                      *   start */
 #define AT86RF2XX_OPT_TELL_RX_END    (0x4000)       /**< notify MAC layer on RX
                                                      *   finished */
+#define AT86RF2XX_OPT_TELL_AMI       (0x8000)       /**< notify MAC layer on Address matching */
+#define AT86RF2XX_OPT_TELL_CCA_DONE  (0x9000)       /**< notify MAC layer on CCA
+                                                     *   finished */
 /** @} */
 
 /**
