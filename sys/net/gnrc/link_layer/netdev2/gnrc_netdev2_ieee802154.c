@@ -20,17 +20,21 @@
 #include "net/ieee802154.h"
 
 #include "net/gnrc/netdev2/ieee802154.h"
+#include "byteorder.h"
+#include "board.h"
 
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
 
 static gnrc_pktsnip_t *_recv(gnrc_netdev2_t *gnrc_netdev2);
 static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt);
+static int _send_beacon(gnrc_netdev2_t *gnrc_netdev2);
 
 int gnrc_netdev2_ieee802154_init(gnrc_netdev2_t *gnrc_netdev2,
                                  netdev2_ieee802154_t *dev)
 {
     gnrc_netdev2->send = _send;
+    gnrc_netdev2->send_beacon = _send_beacon;
     gnrc_netdev2->recv = _recv;
     gnrc_netdev2->dev = (netdev2_t *)dev;
 
@@ -42,14 +46,18 @@ static gnrc_pktsnip_t *_make_netif_hdr(uint8_t *mhr)
     gnrc_pktsnip_t *snip;
     uint8_t src[IEEE802154_LONG_ADDRESS_LEN], dst[IEEE802154_LONG_ADDRESS_LEN];
     int src_len, dst_len;
-    le_uint16_t _pan_tmp;   /* TODO: hand-up PAN IDs to GNRC? */
+    le_uint16_t _pan_tmp_src, _pan_tmp_dst;  /* TODO: hand-up PAN IDs to GNRC? */
 
-    dst_len = ieee802154_get_dst(mhr, dst, &_pan_tmp);
-    src_len = ieee802154_get_src(mhr, src, &_pan_tmp);
+    dst_len = ieee802154_get_dst(mhr, dst, &_pan_tmp_dst);
+    src_len = ieee802154_get_src(mhr, src, &_pan_tmp_src);
     if ((dst_len < 0) || (src_len < 0)) {
         DEBUG("_make_netif_hdr: unable to get addresses\n");
         return NULL;
     }
+
+    DEBUG("[Rx packet] %u/%2x%2x(%4x)->%u/%2x%2x(%4x), flag %2x, seq %u", src_len, src[0],src[1],
+ 			_pan_tmp_src.u16, dst_len, dst[0],dst[1], _pan_tmp_dst.u16, mhr[0], mhr[2]);
+
     /* allocate space for header */
     snip = gnrc_netif_hdr_build(src, (size_t)src_len, dst, (size_t)dst_len);
     if (snip == NULL) {
@@ -107,6 +115,25 @@ static gnrc_pktsnip_t *_recv(gnrc_netdev2_t *gnrc_netdev2)
                 return NULL;
             }
             netif_hdr = _make_netif_hdr(ieee802154_hdr->data);
+#if DUTYCYCLE_EN
+#if LEAF_NODE
+			/* Early sleep or additional wakeup */
+			if (((uint8_t*)ieee802154_hdr->data)[0] & IEEE802154_FCF_FRAME_PEND) {
+		        netdev->event_callback(netdev, NETDEV2_EVENT_RX_PENDING);
+			} else {
+				netopt_state_t sleepstate = NETOPT_STATE_SLEEP;
+				netdev->driver->set(netdev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));
+			}
+#endif
+#if ROUTER
+			/* Data request command or Data */
+			if ((((uint8_t*)ieee802154_hdr->data)[0] & IEEE802154_FCF_TYPE_MASK) == 
+				IEEE802154_FCF_TYPE_MACCMD) {
+		        netdev->event_callback(netdev, NETDEV2_EVENT_RX_DATAREQ);
+			}
+#endif
+#endif
+			DEBUG(", len %u/%u\n", mhr_len,nread);
             if (netif_hdr == NULL) {
                 DEBUG("_recv_ieee802154: no space left in packet buffer\n");
                 gnrc_pktbuf_release(pkt);
@@ -183,6 +210,18 @@ static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
         src_len = IEEE802154_SHORT_ADDRESS_LEN;
         src = state->short_addr;
     }
+#if DUTYCYCLE_EN
+	/* ToDo: Current version does not use a neighbor discovery protocol, which cannot support unicast.
+          We can manually set a destination (router's address) here */
+#if LEAF_NODE
+ 	int16_t ddd = 0x166d;
+ 	dst = (uint8_t*)&ddd;
+#endif
+#if ROUTER
+ 	int16_t ddd = 0x1e17;
+ 	dst = (uint8_t*)&ddd;
+#endif
+#endif
     /* fill MAC header, seq should be set by device */
     if ((res = ieee802154_set_frame_hdr(mhr, src, src_len,
                                         dst, dst_len, dev_pan,
@@ -190,6 +229,9 @@ static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
         DEBUG("_send_ieee802154: Error preperaring frame\n");
         return -EINVAL;
     }
+	DEBUG("[Tx Data] %u/%2x%2x->%u/%2x%2x, flag %2x, seq %u\n", src_len, src[0],src[1], dst_len,
+		dst[0],dst[1], flags, state->seq-1);
+
     /* prepare packet for sending */
     vec_snip = gnrc_pktbuf_get_iovec(pkt, &n);
     if (vec_snip != NULL) {
@@ -217,5 +259,50 @@ static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
     gnrc_pktbuf_release(pkt);
     return res;
 }
+
+/* hskim: send Data Request MAC command for MAC operation */
+ static int _send_beacon(gnrc_netdev2_t *gnrc_netdev2)
+ {
+     netdev2_t *netdev = gnrc_netdev2->dev;
+     netdev2_ieee802154_t *state = (netdev2_ieee802154_t *)gnrc_netdev2->dev;
+     struct iovec vector;
+     const uint8_t *src, *dst = NULL;
+     int res = 0;
+     size_t src_len, dst_len;
+     uint8_t mhr[IEEE802154_MAX_HDR_LEN+1];
+ 	 uint8_t command_id = 4; /* Data request commnad ID */
+     uint8_t flags = (uint8_t)(state->flags & NETDEV2_IEEE802154_SEND_MASK);
+     le_uint16_t dev_pan = byteorder_btols(byteorder_htons(state->pan));
+
+     flags |= (IEEE802154_FCF_ACK_REQ | IEEE802154_FCF_TYPE_MACCMD);
+
+     src_len = IEEE802154_SHORT_ADDRESS_LEN;
+     src = state->short_addr;
+
+ 	 /* ToDo: Current version does not use a neighbor discovery protocol, which cannot support unicast.
+              We can manually set a destination (router's address) here */
+     dst_len = IEEE802154_SHORT_ADDRESS_LEN;
+ 	 int16_t ddd = 0x166d;;
+ 	 dst = (uint8_t*)&ddd;
+
+     /* fill MAC header, seq should be set by device */
+     if ((res = ieee802154_set_frame_hdr(mhr, src, src_len,
+                                         dst, dst_len, dev_pan,
+                                         dev_pan, flags, state->seq++)) == 0) {
+         DEBUG("_send_ieee802154: Error preperaring frame\n");
+         return -EINVAL;
+     }
+ 	mhr[res++] = command_id; /* MAC command ID: Data Request */
+
+ 	DEBUG("[Tx DataReq] %u/%2x%2x->%u/%2x%2x, flag %2x, seq %u\n", src_len, src[0],src[1], dst_len, dst[0],dst[1], flags, state->seq-1);
+
+     /* prepare packet for sending */
+     vector.iov_base = mhr;
+     vector.iov_len = (size_t)res;
+     res = netdev->driver->send(netdev, &vector, 1);
+
+     return res;
+ }
+
 
 /** @} */

@@ -19,6 +19,7 @@
  * @author      Hauke Petersen <hauke.petersen@fu-berlin.de>
  * @author      Kaspar Schleiser <kaspar@schleiser.de>
  * @author      Oliver Hahm <oliver.hahm@inria.fr>
+ * @author      Hyung-Sin Kim <hs.kim@berkeley.edu>
  *
  * @}
  */
@@ -31,6 +32,7 @@
 #include "at86rf2xx_registers.h"
 #include "at86rf2xx_internal.h"
 #include "at86rf2xx_netdev.h"
+#include "xtimer.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -78,12 +80,12 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     at86rf2xx_set_txpower(dev, AT86RF2XX_DEFAULT_TXPOWER);
     /* set default options */
     at86rf2xx_set_option(dev, AT86RF2XX_OPT_AUTOACK, true);
-    at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA, true);
     at86rf2xx_set_option(dev, AT86RF2XX_OPT_TELL_RX_START, false);
     at86rf2xx_set_option(dev, AT86RF2XX_OPT_TELL_RX_END, true);
 #ifdef MODULE_NETSTATS_L2
     at86rf2xx_set_option(dev, AT86RF2XX_OPT_TELL_TX_END, true);
 #endif
+
     /* set default protocol */
 #ifdef MODULE_GNRC_SIXLOWPAN
     dev->netdev.proto = GNRC_NETTYPE_SIXLOWPAN;
@@ -109,9 +111,22 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     tmp |= (AT86RF2XX_TRX_CTRL_0_CLKM_CTRL__OFF);
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_CTRL_0, tmp);
 
+	/* AUTO_CSMA */
+#if AUTO_CSMA_EN
+    at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA, true);
+#else
+    at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA, false);				
+	/* CCA setting for manual CSMA */
+	tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__PHY_CC_CCA);
+	tmp |= AT86RF2XX_PHY_CC_CCA_DEFAULT__CCA_MODE;
+	at86rf2xx_reg_write(dev, AT86RF2XX_REG__PHY_CC_CCA, tmp);
+#endif
+
     /* enable interrupts */
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK,
                         AT86RF2XX_IRQ_STATUS_MASK__TRX_END);
+    at86rf2xx_set_option(dev, AT86RF2XX_OPT_ACK_PENDING, true);
+
     /* clear interrupt flags */
     at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_STATUS);
 
@@ -145,7 +160,7 @@ void at86rf2xx_tx_prepare(at86rf2xx_t *dev)
     } while (state == AT86RF2XX_STATE_BUSY_RX_AACK ||
              state == AT86RF2XX_STATE_BUSY_TX_ARET);
     if (state != AT86RF2XX_STATE_TX_ARET_ON) {
-        dev->idle_state = state;
+	    dev->idle_state = state;
     }
     at86rf2xx_set_state(dev, AT86RF2XX_STATE_TX_ARET_ON);
     dev->tx_frame_len = IEEE802154_FCS_LEN;
@@ -159,12 +174,56 @@ size_t at86rf2xx_tx_load(at86rf2xx_t *dev, uint8_t *data,
     return offset + len;
 }
 
+/* This CCA is needed for manual CSMA */
+bool at86rf2xx_cca(at86rf2xx_t *dev)
+{
+    uint8_t tmp;
+    uint8_t status;
+
+    at86rf2xx_assert_awake(dev);
+
+    /* trigger CCA measurment */
+    tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__PHY_CC_CCA);
+    tmp |= AT86RF2XX_PHY_CC_CCA_MASK__CCA_REQUEST;
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__PHY_CC_CCA, tmp);
+
+    /* wait for result to be ready */
+    do {
+        status = at86rf2xx_reg_read(dev, AT86RF2XX_REG__TRX_STATUS);
+    } while (!(status & AT86RF2XX_TRX_STATUS_MASK__CCA_DONE));
+    /* return according to measurement */
+    if (status & AT86RF2XX_TRX_STATUS_MASK__CCA_STATUS) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
 void at86rf2xx_tx_exec(at86rf2xx_t *dev)
 {
     netdev2_t *netdev = (netdev2_t *)dev;
-
+#if AUTO_CSMA_EN
+#else
+	uint8_t MAX_BE = 8;
+	uint8_t BE = 3;
+#endif
     /* write frame length field in FIFO */
     at86rf2xx_sram_write(dev, 0, &(dev->tx_frame_len), 1);
+
+#if AUTO_CSMA_EN
+#else
+    while(!at86rf2xx_cca(dev)) {
+      at86rf2xx_set_state(dev, AT86RF2XX_STATE_RX_AACK_ON); /* Listening during backoff */
+      xtimer_usleep((rand()%(2^BE))*320);
+      at86rf2xx_set_state(dev, AT86RF2XX_STATE_TX_ARET_ON);
+      printf("CCA busy %u\n", (2^BE)*320);
+      if (BE < MAX_BE) {
+        BE++;
+      }    
+    }
+#endif
+
     /* trigger sending of pre-loaded frame */
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_STATE,
                         AT86RF2XX_TRX_STATE__TX_START);

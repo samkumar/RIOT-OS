@@ -132,11 +132,11 @@ int netdev2_ieee802154_get(netdev2_ieee802154_t *dev, netopt_t opt, void *value,
     return res;
 }
 
+
 int netdev2_ieee802154_set(netdev2_ieee802154_t *dev, netopt_t opt, void *value,
                            size_t len)
 {
     int res = -ENOTSUP;
-
     switch (opt) {
         case NETOPT_CHANNEL:
         {

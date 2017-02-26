@@ -48,7 +48,7 @@ volatile pm_blocker_t pm_blocker = PM_BLOCKER_INITIAL;
 
 void pm_set_lowest(void)
 {
-    pm_blocker_t blocker = (pm_blocker_t) pm_blocker;
+	pm_blocker_t blocker = (pm_blocker_t) pm_blocker;
     unsigned mode = PM_NUM_MODES;
     while (mode) {
         if (blocker.val_u8[mode-1]) {
@@ -83,7 +83,8 @@ void pm_unblock(unsigned mode)
     assert(pm_blocker.val_u8[mode] > 0);
 
     unsigned state = irq_disable();
-    pm_blocker.val_u8[mode]--;
+	if (pm_blocker.val_u8[mode] > 0)
+	    pm_blocker.val_u8[mode]--;
     irq_restore(state);
 }
 

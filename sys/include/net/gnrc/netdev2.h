@@ -56,6 +56,19 @@ extern "C" {
 #define NETDEV2_MSG_TYPE_EVENT 0x1234
 
 /**
+ * @brief   Type for @ref msg_t if device updates dutycycle operation
+ */
+#define GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT (0x1235U)
+/**
+ * @brief   Type for @ref msg_t if device updates dutycycle operation
+ */
+#define GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_SND (0x1236U)
+/**
+ * @brief   Type for @ref msg_t if device updates dutycycle operation
+ */
+#define GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_REMOVE_QUEUE (0x1237U)
+
+/**
  * @brief   Mask for @ref gnrc_mac_tx_feedback_t
  */
 #define GNRC_NETDEV2_MAC_INFO_TX_FEEDBACK_MASK  (0x0003U)
@@ -82,6 +95,13 @@ typedef struct gnrc_netdev2 {
      * the underlying device understands and send it.
      */
     int (*send)(struct gnrc_netdev2 *dev, gnrc_pktsnip_t *snip);
+
+    /** hskim
+     * @brief Send a beacon using this device
+     *
+     * This function should make a beacon for the corresponding link layer type.
+     */
+    int (*send_beacon)(struct gnrc_netdev2 *dev);
 
     /**
      * @brief Receive a pktsnip from this device
@@ -203,6 +223,23 @@ static inline void gnrc_netdev2_set_tx_feedback(gnrc_netdev2_t *dev,
 }
 #endif
 
+#if DUTYCYCLE_EN
+/**
+  * @brief Initialize GNRC netdev2 handler thread for dutycycling
+  *
+  * @param[in] stack         ptr to preallocated stack buffer
+  * @param[in] stacksize     size of stack buffer
+  * @param[in] priority      priority of thread
+  * @param[in] name          name of thread
+  * @param[in] gnrc_netdev2  ptr to netdev2 device to handle in created thread
+  *
+  * @return pid of created thread
+  * @return KERNEL_PID_UNDEF on error
+  */
+kernel_pid_t gnrc_netdev2_dutymac_init(char *stack, int stacksize, char priority,
+                                const char *name, gnrc_netdev2_t *gnrc_netdev2);
+#else
+
 /**
  * @brief Initialize GNRC netdev2 handler thread
  *
@@ -217,6 +254,8 @@ static inline void gnrc_netdev2_set_tx_feedback(gnrc_netdev2_t *dev,
  */
 kernel_pid_t gnrc_netdev2_init(char *stack, int stacksize, char priority,
                                const char *name, gnrc_netdev2_t *gnrc_netdev2);
+
+#endif
 
 #ifdef __cplusplus
 }
