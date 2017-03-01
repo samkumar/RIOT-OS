@@ -224,8 +224,8 @@ static int _send(gnrc_netif2_t *netif, gnrc_pktsnip_t *pkt)
 	/* ToDo: Current version does not use a neighbor discovery protocol, which cannot support unicast.
           We can manually set a destination (router's address) here */
 #if LEAF_NODE
- 	int16_t ddd = 0x166d;
- 	dst = (uint8_t*)&ddd;
+ 	//int16_t ddd = 0x166d;
+ 	//dst = (uint8_t*)&ddd;
 #endif
 #if ROUTER
  	int16_t ddd = 0x1e17;
