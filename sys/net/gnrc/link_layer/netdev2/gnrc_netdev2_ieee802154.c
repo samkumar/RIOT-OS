@@ -127,7 +127,7 @@ static gnrc_pktsnip_t *_recv(gnrc_netdev2_t *gnrc_netdev2)
 #endif
 #if ROUTER
 			/* Data request command or Data */
-			if ((((uint8_t*)ieee802154_hdr->data)[0] & IEEE802154_FCF_TYPE_MASK) == 
+			if ((((uint8_t*)ieee802154_hdr->data)[0] & IEEE802154_FCF_TYPE_MASK) ==
 				IEEE802154_FCF_TYPE_MACCMD) {
 		        netdev->event_callback(netdev, NETDEV2_EVENT_RX_DATAREQ);
 			}
@@ -214,8 +214,8 @@ static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt)
 	/* ToDo: Current version does not use a neighbor discovery protocol, which cannot support unicast.
           We can manually set a destination (router's address) here */
 #if LEAF_NODE
- 	int16_t ddd = 0x166d;
- 	dst = (uint8_t*)&ddd;
+ 	//int16_t ddd = 0x166d;
+ 	//dst = (uint8_t*)&ddd;
 #endif
 #if ROUTER
  	int16_t ddd = 0x1e17;
