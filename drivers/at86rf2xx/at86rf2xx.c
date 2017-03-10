@@ -66,11 +66,12 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     /* get an 8-byte unique ID to use as hardware address */
     uuid_get(addr_long.uint8, IEEE802154_LONG_ADDRESS_LEN);
     /* make sure we mark the address as non-multicast and not globally unique */
-    addr_long.uint8[0] &= ~(0x01);
-    addr_long.uint8[0] |=  (0x02);
+
+  //  addr_long.uint8[0] &= ~(0x01);
+  //  addr_long.uint8[0] |=  (0x02);
     /* set short and long address */
-    at86rf2xx_set_addr_long(dev, NTOHLL(addr_long.uint64.u64));
-    at86rf2xx_set_addr_short(dev, NTOHS(addr_long.uint16[0].u16));
+    at86rf2xx_set_addr_long(dev, addr_long.uint64.u64);
+    at86rf2xx_set_addr_short(dev, addr_long.uint16[3].u16);
 
     /* set default PAN id */
     at86rf2xx_set_pan(dev, AT86RF2XX_DEFAULT_PANID);
@@ -115,7 +116,7 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
 #if AUTO_CSMA_EN
     at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA, true);
 #else
-    at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA, false);				
+    at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA, false);
 	/* CCA setting for manual CSMA */
 	tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__PHY_CC_CCA);
 	tmp |= AT86RF2XX_PHY_CC_CCA_DEFAULT__CCA_MODE;
@@ -220,7 +221,7 @@ void at86rf2xx_tx_exec(at86rf2xx_t *dev)
       printf("CCA busy %u\n", (2^BE)*320);
       if (BE < MAX_BE) {
         BE++;
-      }    
+      }
     }
 #endif
 
