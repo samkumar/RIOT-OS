@@ -30,7 +30,7 @@ inline uint16_t deref_safe(uint16_t* unaligned) {
         | (((uint16_t) *(((uint8_t*) unaligned) + 1)) << 8);
 }
 
-int gnrc_tcp_calc_csum(gnrc_pktsnip_t *hdr, gnrc_pktsnip_t *pseudo_hdr)
+int gnrc_tcp_calc_csum(const gnrc_pktsnip_t *hdr, const gnrc_pktsnip_t *pseudo_hdr)
 {
     if (hdr == NULL || pseudo_hdr == NULL) {
         return -EFAULT;
@@ -43,7 +43,7 @@ int gnrc_tcp_calc_csum(gnrc_pktsnip_t *hdr, gnrc_pktsnip_t *pseudo_hdr)
     struct tcphdr* th = hdr->data;
     th->th_sum = 0;
 
-    gnrc_pktsnip_t* snips[3];
+    const gnrc_pktsnip_t* snips[3];
     snips[0] = hdr;
     snips[1] = (hdr == NULL) ? NULL : hdr->next;
     snips[2] = NULL;
@@ -55,7 +55,7 @@ int gnrc_tcp_calc_csum(gnrc_pktsnip_t *hdr, gnrc_pktsnip_t *pseudo_hdr)
 }
 
 static uint16_t _calc_checksum(struct in6_addr* src, struct in6_addr* dest,
-                               uint32_t ip6hdr_len, gnrc_pktsnip_t** snips) {
+                               uint32_t ip6hdr_len, const gnrc_pktsnip_t** snips) {
     uint32_t total;
     uint16_t* current;
     uint16_t* end;
@@ -116,7 +116,7 @@ static uint16_t _calc_checksum(struct in6_addr* src, struct in6_addr* dest,
     return ~((uint16_t) total);
 }
 
-uint16_t get_tcp_checksum(gnrc_pktsnip_t *ip6snip, gnrc_pktsnip_t** snips)
+uint16_t get_tcp_checksum(const gnrc_pktsnip_t *ip6snip, const gnrc_pktsnip_t** snips)
 {
     struct ip6_hdr* ip6 = ip6snip->data;
     return _calc_checksum(&ip6->ip6_src, &ip6->ip6_dst,

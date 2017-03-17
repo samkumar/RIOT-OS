@@ -86,9 +86,10 @@ ifneq (,$(filter gnrc_netapi_mbox,$(USEMODULE)))
   USEMODULE += core_mbox
 endif
 
-ifneq (,$(filter gnrc_conn_tcp_freebsd,$(USEMODULE)))
+ifneq (,$(filter gnrc_sock_tcp_freebsd,$(USEMODULE)))
   USEMODULE += gnrc_tcp_freebsd
-  USEMODULE += gnrc_conn_tcp_freebsd_zalloc
+  USEMODULE += gnrc_sock_tcp_freebsd_zalloc
+  USEMODULE += sock_tcp_freebsd
 endif
 
 ifneq (,$(filter gnrc_tcp_freebsd,$(USEMODULE)))
