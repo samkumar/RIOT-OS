@@ -15,12 +15,12 @@
 
 #include <errno.h>
 #include "net/af.h"
-#include "net/gnrc/conn.h"
+#include "net/sock.h"
 #include "net/gnrc/ipv6.h"
 #include "net/gnrc/tcp_freebsd.h"
-#include "net/conn/tcp_freebsd.h"
+#include "net/sock/tcp_freebsd.h"
 #include "net/tcp_freebsd.h"
-#include "zone/gnrc_conn_tcp_freebsd_zalloc.h"
+#include "zone/gnrc_sock_tcp_freebsd_zalloc.h"
 
 #define ENABLE_DEBUG (0)
 
@@ -33,15 +33,19 @@
 #define COPYBUFSIZE (SENDMAXCOPY << 1)
 #define SENDBUFSIZE 864
 
-/* Cached copy buffer, which may help us avoid a dynamic memory allocation. */
-struct conn_tcp_freebsd_send_state* extracopybuf = NULL;
+#ifndef SOCK_HAS_IPV6
+#error "TCP FREEBSD requires IPv6"
+#endif
 
-static uint32_t _free_sendstates(conn_tcp_freebsd_t* conn, uint32_t howmany) {
+/* Cached copy buffer, which may help us avoid a dynamic memory allocation. */
+struct sock_tcp_freebsd_send_state* extracopybuf = NULL;
+
+static uint32_t _free_sendstates(sock_tcp_freebsd_t* conn, uint32_t howmany) {
     uint32_t totalbytesremoved = 0;
     uint32_t i;
 
-    struct conn_tcp_freebsd_send_state* head;
-    struct conn_tcp_freebsd_send_state* newhead;
+    struct sock_tcp_freebsd_send_state* head;
+    struct sock_tcp_freebsd_send_state* newhead;
     for (i = 0; (i < howmany) && (conn->sfields.active.send_head != NULL); i++) {
         head = conn->sfields.active.send_head;
         newhead = head->next;
@@ -50,7 +54,7 @@ static uint32_t _free_sendstates(conn_tcp_freebsd_t* conn, uint32_t howmany) {
             /* Hang on to the reference, to avoid a future memory allocation. */
             extracopybuf = head;
         } else {
-            conn_tcp_freebsd_zfree(head);
+            sock_tcp_freebsd_zfree(head);
         }
         conn->sfields.active.send_head = newhead;
     }
@@ -62,12 +66,12 @@ static uint32_t _free_sendstates(conn_tcp_freebsd_t* conn, uint32_t howmany) {
     return totalbytesremoved;
 }
 
-static void conn_tcp_freebsd_connectDone(uint8_t ai, struct sockaddr_in6* faddr, void* ctx)
+static void sock_tcp_freebsd_connectDone(uint8_t ai, struct sockaddr_in6* faddr, void* ctx)
 {
     assert(ctx != NULL);
     (void) ai;
     (void) faddr;
-    conn_tcp_freebsd_t* conn = ctx;
+    sock_tcp_freebsd_t* conn = ctx;
     mutex_lock(&conn->lock);
     assert(conn->hasactive && !conn->haspassive);
     conn->errstat = 0;
@@ -75,12 +79,12 @@ static void conn_tcp_freebsd_connectDone(uint8_t ai, struct sockaddr_in6* faddr,
     mutex_unlock(&conn->lock);
 }
 
-static void conn_tcp_freebsd_sendDone(uint8_t ai, uint32_t tofree, void* ctx)
+static void sock_tcp_freebsd_sendDone(uint8_t ai, uint32_t tofree, void* ctx)
 {
     (void) ai;
     uint32_t freed;
 
-    conn_tcp_freebsd_t* conn = ctx;
+    sock_tcp_freebsd_t* conn = ctx;
     assert(conn != NULL);
 
     mutex_lock(&conn->lock);
@@ -92,12 +96,12 @@ static void conn_tcp_freebsd_sendDone(uint8_t ai, uint32_t tofree, void* ctx)
     mutex_unlock(&conn->lock);
 }
 
-static void conn_tcp_freebsd_receiveReady(uint8_t ai, int gotfin, void* ctx)
+static void sock_tcp_freebsd_receiveReady(uint8_t ai, int gotfin, void* ctx)
 {
     // ctx might actually be NULL, in which case we just ignore this.
     (void) ai;
     (void) gotfin;
-    conn_tcp_freebsd_t* conn = ctx;
+    sock_tcp_freebsd_t* conn = ctx;
     if (conn == NULL) {
         // We got data on a socket on the accept queue that hasn't been accepted yet
         return;
@@ -109,11 +113,11 @@ static void conn_tcp_freebsd_receiveReady(uint8_t ai, int gotfin, void* ctx)
     mutex_unlock(&conn->lock);
 }
 
-static void conn_tcp_freebsd_connectionLost(uint8_t ai, uint8_t how, void* ctx)
+static void sock_tcp_freebsd_connectionLost(uint8_t ai, uint8_t how, void* ctx)
 {
     (void) ai;
     (void) how;
-    conn_tcp_freebsd_t* conn = ctx;
+    sock_tcp_freebsd_t* conn = ctx;
     mutex_lock(&conn->lock);
     assert(conn->hasactive && !conn->haspassive);
     conn->errstat = -((int) how);
@@ -123,26 +127,26 @@ static void conn_tcp_freebsd_connectionLost(uint8_t ai, uint8_t how, void* ctx)
     mutex_unlock(&conn->lock);
 }
 
-static acceptArgs_t conn_tcp_freebsd_acceptReady(uint8_t pi, void* ctx)
+static acceptArgs_t sock_tcp_freebsd_acceptReady(uint8_t pi, void* ctx)
 {
     /* To be returned after filling in members. */
     acceptArgs_t args;
 
     assert(ctx != NULL);
-    conn_tcp_freebsd_t* conn = ctx;
+    sock_tcp_freebsd_t* conn = ctx;
 
     mutex_lock(&conn->lock);
     assert(conn->haspassive && !conn->hasactive);
 
-    void* recvbuf = conn_tcp_freebsd_zalloc(RECV_BUF_LEN + REASS_BMP_LEN);
+    void* recvbuf = sock_tcp_freebsd_zalloc(RECV_BUF_LEN + REASS_BMP_LEN);
     if (recvbuf == NULL) {
         DEBUG("Out of memory in acceptReady\n");
         goto fail;
     }
 
-    int asockid = bsdtcp_active_socket(conn_tcp_freebsd_connectDone,
-        conn_tcp_freebsd_sendDone, conn_tcp_freebsd_receiveReady,
-        conn_tcp_freebsd_connectionLost, NULL);
+    int asockid = bsdtcp_active_socket(sock_tcp_freebsd_connectDone,
+        sock_tcp_freebsd_sendDone, sock_tcp_freebsd_receiveReady,
+        sock_tcp_freebsd_connectionLost, NULL);
 
     args.asockid = asockid;
     args.recvbuf = recvbuf;
@@ -162,14 +166,14 @@ fail:
     goto done;
 }
 
-static bool conn_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, int ai, void* ctx)
+static bool sock_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, int ai, void* ctx)
 {
     (void) pi;
     (void) faddr;
 
     int putidx;
 
-    conn_tcp_freebsd_t* conn = ctx;
+    sock_tcp_freebsd_t* conn = ctx;
     assert(conn != NULL);
 
     mutex_lock(&conn->lock);
@@ -192,7 +196,7 @@ static bool conn_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, 
 }
 
 
-static void conn_tcp_general_init(conn_tcp_freebsd_t* conn, uint16_t port)
+static void sock_tcp_freebsd_general_init(sock_tcp_freebsd_t* conn, uint16_t port)
 {
     conn->l3_type = GNRC_NETTYPE_IPV6;
     conn->l4_type = GNRC_NETTYPE_TCP;
@@ -205,7 +209,7 @@ static void conn_tcp_general_init(conn_tcp_freebsd_t* conn, uint16_t port)
     conn->haspassive = false;
 }
 
-static void conn_tcp_passive_clear(conn_tcp_freebsd_t* conn)
+static void sock_tcp_freebsd_passive_clear(sock_tcp_freebsd_t* conn)
 {
     if (conn->haspassive) {
         int asockidx;
@@ -217,16 +221,16 @@ static void conn_tcp_passive_clear(conn_tcp_freebsd_t* conn)
         while ((asockidx = cib_get(&conn->sfields.passive.accept_cib)) != -1) {
             bsdtcp_close(conn->sfields.passive.accept_queue[asockidx]);
         }
-        conn_tcp_freebsd_zfree(conn->sfields.passive.accept_queue);
+        sock_tcp_freebsd_zfree(conn->sfields.passive.accept_queue);
     }
 }
 
-static void conn_tcp_active_clear(conn_tcp_freebsd_t* conn)
+static void sock_tcp_freebsd_active_clear(sock_tcp_freebsd_t* conn)
 {
     if (conn->hasactive) {
         conn->hasactive = false;
         mutex_lock(&conn->sfields.active.connect_lock);
-        conn_tcp_freebsd_zfree(conn->sfields.active.recvbuf);
+        sock_tcp_freebsd_zfree(conn->sfields.active.recvbuf);
         bsdtcp_close(conn->sfields.active.asock);
         cond_broadcast(&conn->sfields.active.connect_cond);
         cond_broadcast(&conn->sfields.active.receive_cond);
@@ -236,21 +240,21 @@ static void conn_tcp_active_clear(conn_tcp_freebsd_t* conn)
     }
 }
 
-static bool conn_tcp_active_set(conn_tcp_freebsd_t* conn, int asock)
+static bool sock_tcp_freebsd_active_set(sock_tcp_freebsd_t* conn, int asock)
 {
-    conn_tcp_passive_clear(conn);
+    sock_tcp_freebsd_passive_clear(conn);
     if (!conn->hasactive) {
         conn->hasactive = true;
         if (asock == -1) {
-            conn->sfields.active.asock = bsdtcp_active_socket(conn_tcp_freebsd_connectDone,
-                conn_tcp_freebsd_sendDone, conn_tcp_freebsd_receiveReady,
-                conn_tcp_freebsd_connectionLost, conn);
+            conn->sfields.active.asock = bsdtcp_active_socket(sock_tcp_freebsd_connectDone,
+                sock_tcp_freebsd_sendDone, sock_tcp_freebsd_receiveReady,
+                sock_tcp_freebsd_connectionLost, conn);
             if (conn->sfields.active.asock == -1) {
                 conn->hasactive = false;
                 return false;
             }
 
-            conn->sfields.active.recvbuf = conn_tcp_freebsd_zalloc(RECV_BUF_LEN + REASS_BMP_LEN);
+            conn->sfields.active.recvbuf = sock_tcp_freebsd_zalloc(RECV_BUF_LEN + REASS_BMP_LEN);
             if (conn->sfields.active.recvbuf == NULL) {
                 conn->hasactive = false;
                 bsdtcp_close(conn->sfields.active.asock);
@@ -276,13 +280,13 @@ static bool conn_tcp_active_set(conn_tcp_freebsd_t* conn, int asock)
     return true;
 }
 
-static bool conn_tcp_passive_set(conn_tcp_freebsd_t* conn, int queue_len)
+static bool sock_tcp_freebsd_passive_set(sock_tcp_freebsd_t* conn, int queue_len)
 {
     assert(queue_len >= 0 && queue_len < (1 << (8 * sizeof(int) - 2)));
-    conn_tcp_active_clear(conn);
+    sock_tcp_freebsd_active_clear(conn);
     if (!conn->haspassive) {
         conn->haspassive = true;
-        conn->sfields.passive.psock = bsdtcp_passive_socket(conn_tcp_freebsd_acceptReady, conn_tcp_freebsd_acceptDone, conn);
+        conn->sfields.passive.psock = bsdtcp_passive_socket(sock_tcp_freebsd_acceptReady, sock_tcp_freebsd_acceptDone, conn);
         if (conn->sfields.passive.psock == -1) {
             conn->haspassive = false;
             return false;
@@ -301,7 +305,7 @@ static bool conn_tcp_passive_set(conn_tcp_freebsd_t* conn, int queue_len)
 
         cib_init(&conn->sfields.passive.accept_cib, adj_queue_len);
 
-        conn->sfields.passive.accept_queue = conn_tcp_freebsd_zalloc(adj_queue_len * sizeof(int));
+        conn->sfields.passive.accept_queue = sock_tcp_freebsd_zalloc(adj_queue_len * sizeof(int));
         if (conn->sfields.passive.accept_queue == NULL && adj_queue_len != 0) {
             conn->haspassive = false;
             bsdtcp_close(conn->sfields.passive.psock);
@@ -312,7 +316,28 @@ static bool conn_tcp_passive_set(conn_tcp_freebsd_t* conn, int queue_len)
     return true;
 }
 
-int conn_tcp_create(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len, int family,
+/* This used to be in sys/net/gnrc/conn/gnrc_conn.c, as the function
+ * gnrc_conn6_set_local_addr. I'm duplicating the code here, as conn is
+ * deprecated and so I don't want to pull it in as a dependency.
+ */
+bool sock_tcp_freebsd_set_local_ipv6_addr(uint8_t *conn_addr, const ipv6_addr_t *addr)
+{
+    ipv6_addr_t *tmp;
+    if (!ipv6_addr_is_unspecified(addr) &&
+        !ipv6_addr_is_loopback(addr) &&
+        gnrc_ipv6_netif_find_by_addr(&tmp, addr) == KERNEL_PID_UNDEF) {
+        return false;
+    }
+    else if (ipv6_addr_is_loopback(addr) || ipv6_addr_is_unspecified(addr)) {
+        ipv6_addr_set_unspecified((ipv6_addr_t *)conn_addr);
+    }
+    else {
+        memcpy(conn_addr, addr, sizeof(ipv6_addr_t));
+    }
+    return true;
+}
+
+int sock_tcp_freebsd_create(sock_tcp_freebsd_t *conn, const void *addr, size_t addr_len, int family,
                     uint16_t port)
 {
     conn->l4_type = GNRC_NETTYPE_TCP;
@@ -322,8 +347,8 @@ int conn_tcp_create(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len,
             if (addr_len != sizeof(ipv6_addr_t)) {
                 return -EINVAL;
             }
-            if (gnrc_conn6_set_local_addr((uint8_t*) &conn->local_addr, addr)) {
-                conn_tcp_general_init(conn, port);
+            if (sock_tcp_freebsd_set_local_ipv6_addr((uint8_t*) &conn->local_addr, addr)) {
+                sock_tcp_freebsd_general_init(conn, port);
             }
             else {
                 return -EADDRNOTAVAIL;
@@ -339,16 +364,16 @@ int conn_tcp_create(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len,
     return 0;
 }
 
-void conn_tcp_close(conn_tcp_freebsd_t *conn)
+void sock_tcp_freebsd_close(sock_tcp_freebsd_t *conn)
 {
     mutex_lock(&conn->lock);
     assert(!(conn->hasactive && conn->haspassive));
-    conn_tcp_active_clear(conn);
-    conn_tcp_passive_clear(conn);
+    sock_tcp_freebsd_active_clear(conn);
+    sock_tcp_freebsd_passive_clear(conn);
     mutex_unlock(&conn->lock);
 }
 
-int conn_tcp_getlocaladdr(conn_tcp_freebsd_t *conn, void *addr, uint16_t *port)
+int sock_tcp_freebsd_getlocaladdr(sock_tcp_freebsd_t *conn, void *addr, uint16_t *port)
 {
     mutex_lock(&conn->lock);
     memcpy(addr, &conn->local_addr, sizeof(ipv6_addr_t));
@@ -357,7 +382,7 @@ int conn_tcp_getlocaladdr(conn_tcp_freebsd_t *conn, void *addr, uint16_t *port)
     return 0;
 }
 
-int conn_tcp_getpeeraddr(conn_tcp_freebsd_t *conn, void *addr, uint16_t *port)
+int sock_tcp_freebsd_getpeeraddr(sock_tcp_freebsd_t *conn, void *addr, uint16_t *port)
 {
     struct in6_addr* addrptr;
     uint16_t* portptr;
@@ -374,7 +399,7 @@ int conn_tcp_getpeeraddr(conn_tcp_freebsd_t *conn, void *addr, uint16_t *port)
     return 0;
 }
 
-int conn_tcp_connect(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len, uint16_t port)
+int sock_tcp_freebsd_connect(sock_tcp_freebsd_t *conn, const void *addr, size_t addr_len, uint16_t port)
 {
     int rv;
 
@@ -387,7 +412,7 @@ int conn_tcp_connect(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len
     }
     memcpy(&faddrport.sin6_addr, addr, addr_len);
     faddrport.sin6_port = htons(port);
-    bool res = conn_tcp_active_set(conn, -1);
+    bool res = sock_tcp_freebsd_active_set(conn, -1);
     if (!res) {
         rv = -ENOMEM;
         goto unlockreturn;
@@ -419,11 +444,11 @@ unlockreturn:
     return rv;
 }
 
-int conn_tcp_listen(conn_tcp_freebsd_t *conn, int queue_len)
+int sock_tcp_freebsd_listen(sock_tcp_freebsd_t *conn, int queue_len)
 {
     int rv;
     mutex_lock(&conn->lock);
-    bool res = conn_tcp_passive_set(conn, queue_len);
+    bool res = sock_tcp_freebsd_passive_set(conn, queue_len);
     if (!res) {
         rv = -ENOMEM;
         goto unlockreturn;
@@ -436,7 +461,7 @@ unlockreturn:
     return rv;
 }
 
-int conn_tcp_accept(conn_tcp_freebsd_t* conn, conn_tcp_freebsd_t* out_conn)
+int sock_tcp_freebsd_accept(sock_tcp_freebsd_t* conn, sock_tcp_freebsd_t* out_conn)
 {
     mutex_lock(&conn->lock);
     if (!conn->haspassive) {
@@ -454,10 +479,10 @@ int conn_tcp_accept(conn_tcp_freebsd_t* conn, conn_tcp_freebsd_t* out_conn)
     int asock = conn->sfields.passive.accept_queue[asockidx];
 
     memcpy(&out_conn->local_addr, &conn->local_addr, sizeof(ipv6_addr_t));
-    conn_tcp_general_init(out_conn, conn->local_port);
+    sock_tcp_freebsd_general_init(out_conn, conn->local_port);
 
     mutex_lock(&out_conn->lock);
-    conn_tcp_active_set(out_conn, asock);
+    sock_tcp_freebsd_active_set(out_conn, asock);
     int rv = bsdtcp_set_ctx(asock, out_conn);
     assert(rv == 0);
     mutex_unlock(&out_conn->lock);
@@ -466,7 +491,7 @@ int conn_tcp_accept(conn_tcp_freebsd_t* conn, conn_tcp_freebsd_t* out_conn)
     return 0;
 }
 
-int conn_tcp_recv(conn_tcp_freebsd_t *conn, void *data, size_t max_len)
+int sock_tcp_freebsd_recv(sock_tcp_freebsd_t *conn, void *data, size_t max_len)
 {
     size_t bytes_read;
     int error;
@@ -499,11 +524,11 @@ int conn_tcp_recv(conn_tcp_freebsd_t *conn, void *data, size_t max_len)
  * Otherwise, the TCP stack is provided a reference to the buffer, with no
  * extra space.
  */
-int conn_tcp_send(conn_tcp_freebsd_t *conn, const void* data, size_t len)
+int sock_tcp_freebsd_send(sock_tcp_freebsd_t *conn, const void* data, size_t len)
 {
     int error = 0;
     struct lbufent* bufent;
-    struct conn_tcp_freebsd_send_state* sstate;
+    struct sock_tcp_freebsd_send_state* sstate;
 
     mutex_lock(&conn->lock);
     assert(conn->hasactive && !conn->haspassive);
@@ -526,7 +551,7 @@ int conn_tcp_send(conn_tcp_freebsd_t *conn, const void* data, size_t len)
         bool copy = (buflen <= SENDMAXCOPY);
         if (copy) {
             if (extracopybuf == NULL) {
-                sstate = conn_tcp_freebsd_zalloc(sizeof(*sstate) + COPYBUFSIZE);
+                sstate = sock_tcp_freebsd_zalloc(sizeof(*sstate) + COPYBUFSIZE);
                 sstate->buflen = COPYBUFSIZE;
             } else {
                 sstate = extracopybuf;
@@ -534,7 +559,7 @@ int conn_tcp_send(conn_tcp_freebsd_t *conn, const void* data, size_t len)
                 extracopybuf = NULL;
             }
         } else {
-            sstate = conn_tcp_freebsd_zalloc(sizeof(*sstate) + buflen);
+            sstate = sock_tcp_freebsd_zalloc(sizeof(*sstate) + buflen);
             sstate->buflen = buflen;
         }
 
@@ -571,7 +596,7 @@ int conn_tcp_send(conn_tcp_freebsd_t *conn, const void* data, size_t len)
                 /* Cache this copy, to avoid another dynamic memory allocation */
                 extracopybuf = sstate;
             } else {
-                conn_tcp_freebsd_zfree(sstate);
+                sock_tcp_freebsd_zfree(sstate);
             }
         }
 

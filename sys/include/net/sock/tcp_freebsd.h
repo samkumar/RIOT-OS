@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Martine Lenders <mlenders@inf.fu-berlin.de>
+ * Copyright (C) 2017 Sam Kumar <samkumar@berkeley.edu>
  *
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -7,39 +7,37 @@
  */
 
 /**
- * @defgroup    net_conn_tcp    TCP connections
- * @ingroup     net_conn
+ * @defgroup    net_sock_tcp    TCP connections
+ * @ingroup     net_sock
  * @brief       Connection submodule for TCP connections
  * @{
  *
  * @file
  * @brief   TCP connection definitions
  *
- * @author  Martine Lenders <mlenders@inf.fu-berlin.de>
+ * @author  Sam Kumar <samkumar@berkeley.edu>
  */
-#ifndef NET_CONN_TCP_FREEBSD_H_
-#define NET_CONN_TCP_FREEBSD_H_
+#ifndef NET_SOCK_TCP_FREEBSD_H_
+#define NET_SOCK_TCP_FREEBSD_H_
 
 #include <stdint.h>
 #include <stdlib.h>
 
-#ifdef MODULE_GNRC_CONN_TCP_FREEBSD
-#include "net/gnrc/conn.h"
-#endif
+#include "net/sock.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * @brief   Forward declaration of @ref conn_tcp_freebsd_t to allow for external definition.
+ * @brief   Forward declaration of @ref sock_tcp_freebsd_t to allow for external definition.
  */
-struct conn_tcp_freebsd;
+struct sock_tcp_freebsd;
 
 /**
  * @brief   Implementation-specific type of a TCP connection object
  */
-typedef struct conn_tcp_freebsd conn_tcp_freebsd_t;
+typedef struct sock_tcp_freebsd sock_tcp_freebsd_t;
 
 /**
  * @brief   Creates a new TCP connection object
@@ -55,15 +53,15 @@ typedef struct conn_tcp_freebsd conn_tcp_freebsd_t;
  * @return  any other negative number in case of an error. For portability implementations should
  *          draw inspiration of the errno values from the POSIX' bind() function specification.
  */
-int conn_tcp_create(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len, int family,
-                    uint16_t port);
+int sock_tcp_freebsd_create(sock_tcp_freebsd_t *conn, const void *addr, size_t addr_len, int family,
+                            uint16_t port);
 
 /**
  * @brief   Closes a TCP connection
  *
  * @param[in,out] conn  A TCP connection object.
  */
-void conn_tcp_close(conn_tcp_freebsd_t *conn);
+void sock_tcp_freebsd_close(sock_tcp_freebsd_t *conn);
 
 /**
  * @brief   Gets the local address of a TCP connection
@@ -78,7 +76,7 @@ void conn_tcp_close(conn_tcp_freebsd_t *conn);
  *          draw inspiration of the errno values from the POSIX' getsockname() function
  *          specification.
  */
-int conn_tcp_getlocaladdr(conn_tcp_freebsd_t *conn, void *addr, uint16_t *port);
+int sock_tcp_freebsd_getlocaladdr(sock_tcp_freebsd_t *conn, void *addr, uint16_t *port);
 
 /**
  * @brief   Gets the address of the connected peer of a TCP connection
@@ -93,7 +91,7 @@ int conn_tcp_getlocaladdr(conn_tcp_freebsd_t *conn, void *addr, uint16_t *port);
  *          draw inspiration of the errno values from the POSIX' getpeername() function
  *          specification.
  */
-int conn_tcp_getpeeraddr(conn_tcp_freebsd_t *conn, void *addr, uint16_t *port);
+int sock_tcp_freebsd_getpeeraddr(sock_tcp_freebsd_t *conn, void *addr, uint16_t *port);
 
 /**
  * @brief   Connects to a remote TCP peer
@@ -107,7 +105,7 @@ int conn_tcp_getpeeraddr(conn_tcp_freebsd_t *conn, void *addr, uint16_t *port);
  * @return  any other negative number in case of an error. For portability implementations should
  *          draw inspiration of the errno values from the POSIX' connect() function specification.
  */
-int conn_tcp_connect(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len, uint16_t port);
+int sock_tcp_freebsd_connect(sock_tcp_freebsd_t *conn, const void *addr, size_t addr_len, uint16_t port);
 
 /**
  * @brief   Marks connection to listen for a connection request by a remote TCP peer
@@ -122,7 +120,7 @@ int conn_tcp_connect(conn_tcp_freebsd_t *conn, const void *addr, size_t addr_len
  * @return  any other negative number in case of an error. For portability implementations should
  *          draw inspiration of the errno values from the POSIX' listen() function specification.
  */
-int conn_tcp_listen(conn_tcp_freebsd_t *conn, int queue_len);
+int sock_tcp_freebsd_listen(sock_tcp_freebsd_t *conn, int queue_len);
 
 /**
  * @brief   Receives and handles TCP connection requests from other peers
@@ -134,7 +132,7 @@ int conn_tcp_listen(conn_tcp_freebsd_t *conn, int queue_len);
  * @return  any other negative number in case of an error. For portability implementations should
  *          draw inspiration of the errno values from the POSIX' accept() function specification.
  */
-int conn_tcp_accept(conn_tcp_freebsd_t *conn, conn_tcp_freebsd_t *out_conn);
+int sock_tcp_freebsd_accept(sock_tcp_freebsd_t *conn, sock_tcp_freebsd_t *out_conn);
 
 /**
  * @brief   Receives a TCP message
@@ -151,7 +149,7 @@ int conn_tcp_accept(conn_tcp_freebsd_t *conn, conn_tcp_freebsd_t *out_conn);
  *          draw inspiration of the errno values from the POSIX' recv(), recvfrom(), or recvmsg()
  *          function specification.
  */
-int conn_tcp_recv(conn_tcp_freebsd_t *conn, void *data, size_t max_len);
+int sock_tcp_freebsd_recv(sock_tcp_freebsd_t *conn, void *data, size_t max_len);
 
 /**
  * @brief   Sends a TCP message
@@ -167,7 +165,9 @@ int conn_tcp_recv(conn_tcp_freebsd_t *conn, void *data, size_t max_len);
  *          draw inspiration of the errno values from the POSIX' send(), sendfrom(), or sendmsg()
  *          function specification.
  */
-int conn_tcp_send(conn_tcp_freebsd_t *conn, const void *data, size_t len);
+int sock_tcp_freebsd_send(sock_tcp_freebsd_t *conn, const void *data, size_t len);
+
+#include "sock_types.h"
 
 #ifdef __cplusplus
 }

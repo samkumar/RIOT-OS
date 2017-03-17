@@ -66,7 +66,7 @@ extern "C" {
  * @return  -EFAULT if @p hdr or @p pseudo_hdr is NULL
  * @return  -ENOENT if gnrc_pktsnip_t::type of @p pseudo_hdr is not known
  */
-int gnrc_tcp_calc_csum(gnrc_pktsnip_t *hdr, gnrc_pktsnip_t *pseudo_hdr);
+int gnrc_tcp_calc_csum(const gnrc_pktsnip_t *hdr, const gnrc_pktsnip_t *pseudo_hdr);
 
 #if 0
 /**

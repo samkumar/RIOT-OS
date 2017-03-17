@@ -1,4 +1,4 @@
-MODULE = gnrc_conn_tcp_freebsd
+MODULE = gnrc_sock_tcp_freebsd
 
 DIRS += zone
 

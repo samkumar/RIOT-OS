@@ -4,8 +4,8 @@
  * directory for more details.
  */
 
-#ifndef GNRC_CONN_TCP_FREEBSD_ZALLOC_H_
-#define GNRC_CONN_TCP_FREEBSD_ZALLOC_H_
+#ifndef GNRC_SOCK_TCP_FREEBSD_ZALLOC_H_
+#define GNRC_SOCK_TCP_FREEBSD_ZALLOC_H_
 
 #include "memmgr.h"
 
@@ -15,7 +15,7 @@
 
 static bool initialized = false;
 
-static inline void conn_tcp_freebsd_zone_init(void)
+static inline void sock_tcp_freebsd_zone_init(void)
 {
     if (!initialized) {
         initialized = true;
@@ -23,17 +23,17 @@ static inline void conn_tcp_freebsd_zone_init(void)
     }
 }
 
-static inline void* conn_tcp_freebsd_zalloc(unsigned long numbytes) {
+static inline void* sock_tcp_freebsd_zalloc(unsigned long numbytes) {
     if (numbytes == 0) {
         return NULL;
     }
-    conn_tcp_freebsd_zone_init();
+    sock_tcp_freebsd_zone_init();
     void* p = memmgr_alloc(numbytes);
     DEBUG("Allocating %lu bytes: %p\n", numbytes, p);
     return p;
 }
 
-static inline void conn_tcp_freebsd_zfree(void* ptr) {
+static inline void sock_tcp_freebsd_zfree(void* ptr) {
     if (ptr == NULL) {
         return;
     }

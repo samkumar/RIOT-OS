@@ -82,10 +82,6 @@
 #include "net/conn/tcp.h"
 #endif
 
-#ifdef MODULE_GNRC_CONN_TCP_FREEBSD
-#include "net/conn/tcp_freebsd.h"
-#endif
-
 #include "net/conn/udp.h"
 #include "net/ipv6/addr.h"
 

@@ -133,6 +133,10 @@ endif
 ifneq (,$(filter gnrc_sock_udp,$(USEMODULE)))
   DIRS += sock/udp
 endif
+ifneq (,$(filter gnrc_sock_tcp_freebsd,$(USEMODULE)))
+    DIRS += sock/tcp_freebsd
+    DIRS += sock/tcp_freebsd/zone
+endif
 ifneq (,$(filter gnrc_udp,$(USEMODULE)))
   DIRS += transport_layer/udp
 endif

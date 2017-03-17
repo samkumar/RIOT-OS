@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <errno.h>
 
+#include "gnrc_sock_internal.h"
 #include "gnrc_tcp_freebsd_internal.h"
 
 #include "msg.h"
@@ -286,7 +287,7 @@ static void _receive(gnrc_pktsnip_t* pkt)
         DEBUG("Too many options: header claims %" PRIu8 " words (pktsnip has %u bytes)\n", th->th_off, (unsigned int) tcp->size);
     }
 
-    gnrc_pktsnip_t* snips[2] = { tcp, NULL };
+    const gnrc_pktsnip_t* snips[2] = { tcp, NULL };
     uint16_t csum = get_tcp_checksum(ipv6, snips);
     if (csum != 0) {
         DEBUG("Dropping packet: bad checksum (%" PRIu16 ")\n", csum);
@@ -593,12 +594,8 @@ error_t asock_abort_impl(int asockid)
 
 /* The internal API. */
 
-static int ctr = 0;
 void send_message(gnrc_pktsnip_t* pkt)
 {
-    if (ctr++) {
-        //return;
-    }
     DEBUG("Sending TCP message: %d\n", pkt->type);
     if (!gnrc_netapi_dispatch_send(pkt->type, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
         DEBUG("tcp: cannot send packet: network layer not found\n");
