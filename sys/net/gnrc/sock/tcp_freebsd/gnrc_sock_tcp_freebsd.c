@@ -485,6 +485,7 @@ int sock_tcp_freebsd_accept(sock_tcp_freebsd_t* conn, sock_tcp_freebsd_t* out_co
     sock_tcp_freebsd_active_set(out_conn, asock);
     int rv = bsdtcp_set_ctx(asock, out_conn);
     assert(rv == 0);
+    (void) rv;
     mutex_unlock(&out_conn->lock);
 
     mutex_unlock(&conn->lock);
