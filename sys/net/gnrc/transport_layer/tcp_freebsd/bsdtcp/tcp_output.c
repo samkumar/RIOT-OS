@@ -1032,10 +1032,19 @@ send:
 #endif
 	/* Instead of the previous code that "grabs an mbuf", we need to do this the
 	   RIOT OS way, where we allocate a gnrc_pktsnip_t. */
-	// Need to ip_malloc an extra three bytes so that we can word-align the packet
-	gnrc_pktsnip_t* payload = gnrc_pktbuf_add(NULL, NULL, len, GNRC_NETTYPE_UNDEF);
-	if (payload == NULL && len != 0) {
-		goto memsendfail;
+	/* There was a change made upstream to the SPI driver which causes RIOT to
+	 * kernel panic if it sees an iovec of length 0. This means we can't attach
+	 * a gnrc_pktsnip_t of length 0. So if the length of the body is zero, we
+	 * need to make sure that the payload is NULL, not an empty gnrc_pktsnip_t.
+	 */
+	gnrc_pktsnip_t* payload;
+	if (len == 0) {
+		payload = NULL;
+	} else {
+		payload = gnrc_pktbuf_add(NULL, NULL, len, GNRC_NETTYPE_UNDEF);
+		if (payload == NULL) {
+			goto memsendfail;
+		}
 	}
 	gnrc_pktsnip_t* tcpsnip = gnrc_pktbuf_add(payload, NULL, sizeof(struct tcphdr) + optlen, GNRC_NETTYPE_TCP);
 	if (tcpsnip == NULL) {
