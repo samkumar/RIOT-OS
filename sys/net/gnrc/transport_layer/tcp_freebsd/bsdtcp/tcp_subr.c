@@ -528,6 +528,8 @@ tcpip_fillheaders(struct tcpcb* tp, void *ip_ptr, void *tcp_ptr)
 #endif
 	/* Fill in the IP header */
 	// The source address is copied here in send_message.
+    ip6->ip6_vfc = 0x60;
+    memset(&ip6->ip6_src, 0x00, sizeof(ip6->ip6_src));
 	ip6->ip6_dst = tp->faddr;
 	/* Fill in the TCP header */
 	//th->th_sport = inp->inp_lport;
@@ -586,6 +588,7 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 				win = (long)TCP_MAXWIN << tp->rcv_scale;
 		}
 	}
+    ip6->ip6_vfc = 0x60;
     ip6->ip6_nxt = IANA_TCP;
 	ip6->ip6_plen = htons(sizeof(struct tcphdr));
 	ip6->ip6_src = ip6gen->ip6_dst;

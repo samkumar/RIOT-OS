@@ -581,7 +581,7 @@ static void _isr(netdev2_t *netdev)
 #if DUTYCYCLE_EN
 #if LEAF_NODE
 				if (trac_status == AT86RF2XX_TRX_STATE__TRAC_SUCCESS_DATA_PENDING) {
-	                dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;		
+	                dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;
 				}
 #endif
 #endif
