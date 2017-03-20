@@ -46,6 +46,8 @@
 #include "od.h"
 #endif
 
+#define ENABLE_BROADCAST 1
+
 #define NETDEV2_NETAPI_MSG_QUEUE_SIZE 8
 #define NETDEV2_PKT_QUEUE_SIZE 4
 
@@ -87,6 +89,14 @@ gnrc_pktsnip_t *current_pkt;
 /* Rx data request command from a leaf node: I can send data to the leaf node */
 bool rx_data_request = false;
 
+/* TODO this should take a MAC address and return whether that is a duty-cycled
+ * node sending beacons to this router. For now, just hardcode to true or false.
+ */
+static bool addr_is_dutycycled(uint16_t addr) {
+	(void) addr;
+	return true;
+}
+
 // Exhaustive search version
 int msg_queue_add(msg_t* msg_queue, msg_t* msg) {
 	if (pending_num < NETDEV2_PKT_QUEUE_SIZE) {
@@ -95,6 +105,7 @@ int msg_queue_add(msg_t* msg_queue, msg_t* msg) {
 
 		// 1) Broadcasting packet (Insert head of the queue)
 		if (hdr->flags & (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)) {
+#if ENABLE_BROADCAST
 			if (broadcasting_num < pending_num) {
 				for (int i=pending_num-1; i>= broadcasting_num; i--) {
 					msg_queue[i+1].sender_pid = msg_queue[i].sender_pid;
@@ -116,6 +127,9 @@ int msg_queue_add(msg_t* msg_queue, msg_t* msg) {
 				printf("broadcast starts\n");
 			}
 			broadcasting_num++;
+#else
+			return 0;
+#endif
 		}
 		// 2) Unicasting packet
 		else {
@@ -173,8 +187,12 @@ void msg_queue_remove(msg_t* msg_queue) {
 	return;
 }
 
-
-void msg_queue_send(msg_t* msg_queue, uint16_t dst_l2addr, gnrc_netdev2_t* gnrc_dutymac_netdev2) {
+/* If to_dutycycled_dest is true, then we know that a dutycycled node is listening and
+ * are trying to find packets destined for that node.
+ * If to_dutycycled_dest is false, then we are looking for packets destined for a
+ * neighboring always-on node.
+ */
+void msg_queue_send(msg_t* msg_queue, bool to_dutycycled_dest, uint16_t dst_l2addr, gnrc_netdev2_t* gnrc_dutymac_netdev2) {
 	gnrc_pktsnip_t *pkt = NULL;
 
 	if (broadcasting) { // broadcasting
@@ -197,7 +215,7 @@ void msg_queue_send(msg_t* msg_queue, uint16_t dst_l2addr, gnrc_netdev2_t* gnrc_
 				pkt_dst_l2addr = (*dst<<8 | (*(dst+1)));
 			}
 
-			if (pkt_dst_l2addr == dst_l2addr) {
+			if ((to_dutycycled_dest && pkt_dst_l2addr == dst_l2addr) || (!to_dutycycled_dest && !addr_is_dutycycled(pkt_dst_l2addr))) {
 				pkt = msg_queue[i].content.ptr;
 				recent_dst_l2addr = pkt_dst_l2addr;
 				sending_pkt_key = i;
@@ -211,10 +229,12 @@ void msg_queue_send(msg_t* msg_queue, uint16_t dst_l2addr, gnrc_netdev2_t* gnrc_
 		gnrc_pktsnip_t* temp_pkt = pkt;
 		gnrc_pktsnip_t *p1, *p2;
 		current_pkt = gnrc_pktbuf_add(NULL, temp_pkt->data, temp_pkt->size, temp_pkt->type);
+		assert(current_pkt != NULL);
 		p1 = current_pkt;
 		temp_pkt = temp_pkt->next;
 		while(temp_pkt) {
 			p2 = gnrc_pktbuf_add(NULL, temp_pkt->data, temp_pkt->size, temp_pkt->type);
+			assert(p2 != NULL);
 			p1->next = p2;
 			p1 = p1->next;
 			temp_pkt = temp_pkt->next;
@@ -424,17 +444,21 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 			case GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_SND:
 				/* Send a packet in the packet queue if its destination matches to the input address */
 				if (pending_num && !radio_busy) {
-					msg_queue_send(pkt_queue, *((uint16_t*)msg.content.ptr), gnrc_dutymac_netdev2);
+					msg_queue_send(pkt_queue, true, *((uint16_t*)msg.content.ptr), gnrc_dutymac_netdev2);
 				}
 				break;
 			case GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_REMOVE_QUEUE:
 				/* Remove a packet from the packet queue */
-				msg_queue_remove(pkt_queue);	
+				msg_queue_remove(pkt_queue);
 				/* Send a packet in the packet queue */
 				/* */
 				if (pending_num && !radio_busy && recent_dst_l2addr != 0xffff) {
 					/* Send a packet to the same destination */
-					msg_queue_send(pkt_queue, recent_dst_l2addr, gnrc_dutymac_netdev2);
+					msg_queue_send(pkt_queue, true, recent_dst_l2addr, gnrc_dutymac_netdev2);
+					if (!radio_busy) {
+						/* If there are no packets with the same destination, check for packets destined for always-on nodes. */
+						msg_queue_send(pkt_queue, false, 0, gnrc_dutymac_netdev2);
+					}
 				} else if (!pending_num) {
 					bool pending = false;
                 	dev->driver->set(dev, NETOPT_ACK_PENDING, &pending, sizeof(bool));
@@ -446,13 +470,21 @@ static void *_gnrc_netdev2_duty_thread(void *args)
                 break;
             case GNRC_NETAPI_MSG_TYPE_SND:
                 DEBUG("gnrc_netdev2: GNRC_NETAPI_MSG_TYPE_SND received\n");
-				/* ToDo: We need to distingush sending operation according to the destination 
+				/* ToDo: We need to distingush sending operation according to the destination
 						characteristisc: duty-cycling or always-on */
 				/* Queue a packet */
 				if (msg_queue_add(pkt_queue, &msg)) {
 					/* If a packet exists, send ACKs with pending bit */
 					bool pending = true;
                 	dev->driver->set(dev, NETOPT_ACK_PENDING, &pending, sizeof(bool));
+
+					if (!radio_busy) {
+						/* If we added something to the queue, check for packets destined for always-on nodes.
+						 * If the radio is busy now, it's OK. We will do this same check whenever the radio
+						 * goes from busy to not busy.
+						 */
+						msg_queue_send(pkt_queue, false, 0, gnrc_dutymac_netdev2);
+					}
 				}
 		        break;
             case GNRC_NETAPI_MSG_TYPE_SET:

@@ -238,7 +238,7 @@ static int socket_close(int socket)
     socket_t *s;
     int res = 0;
 
-    assert((unsigned)(socket - 1) > (_ACTUAL_SOCKET_POOL_SIZE - 1));
+    assert(0 <= socket && socket < _ACTUAL_SOCKET_POOL_SIZE);
     s = &_socket_pool[socket];
     assert((s->domain == AF_INET) || (s->domain == AF_INET6));
     mutex_lock(&_socket_pool_mutex);
@@ -386,6 +386,13 @@ int accept(int socket, struct sockaddr *restrict address,
                 res = -1;
                 break;
             }
+            new_s->sock = _get_free_sock();
+            if (new_s->sock == NULL) {
+                new_s->domain = AF_UNSPEC;
+                errno = ENOMEM;
+                res = -1;
+                break;
+            }
 
 #ifdef MODULE_SOCK_TCP_FREEBSD
             if (s->domain != AF_INET6) {
@@ -395,13 +402,13 @@ int accept(int socket, struct sockaddr *restrict address,
             }
             sock = (sock_tcp_freebsd_t*) &new_s->sock->tcp_freebsd;
             if ((res = sock_tcp_freebsd_accept(&s->sock->tcp_freebsd, sock)) < 0) {
+
                 errno = -res;
                 res = -1;
                 break;
             }
 #else
             sock = (sock_tcp_t *)new_s->sock;
-
             /* TODO: apply configured timeout */
             if ((res = sock_tcp_accept(&s->sock->tcp.queue, &sock,
                                        SOCK_NO_TIMEOUT)) < 0) {
@@ -814,6 +821,10 @@ int listen(int socket, int backlog)
                                       s->queue_array, s->queue_array_len, 0);
 #endif
 #ifdef MODULE_SOCK_TCP_FREEBSD
+                if ((res = sock_tcp_freebsd_create(&sock->tcp_freebsd, &s->local.addr.ipv6, sizeof(s->local.addr.ipv6), s->domain, s->local.port)) < 0) {
+                    errno = -res;
+                    return -1;
+                }
                 res = sock_tcp_freebsd_listen(&sock->tcp_freebsd, backlog);
 #endif
             }
