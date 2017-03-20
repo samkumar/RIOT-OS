@@ -97,6 +97,7 @@ tcp_twrespond(struct tcpcb* tp, int flags)
     }
     gnrc_pktsnip_t* ip6snip = gnrc_pktbuf_add(tcpsnip, NULL, sizeof(struct ip6_hdr), GNRC_NETTYPE_IPV6);
     if (ip6snip == NULL) {
+        gnrc_pktbuf_release(tcpsnip);
         return 0; // drop the message;
     }
 
@@ -128,10 +129,11 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 	msg->ip6_data = iov;
 	ip6 = &msg->ip6_hdr;
     #endif
+    ip6->ip6_vfc = 0x60;
 	ip6->ip6_nxt = IANA_TCP;
 	ip6->ip6_plen = htons(sizeof(struct tcphdr) + optlen);
+    memset(&ip6->ip6_src, 0x00, sizeof(ip6->ip6_src));
 	ip6->ip6_dst = tp->faddr;
-	nth = (struct tcphdr*) (ip6 + 1);
 	nth->th_sport = tp->lport;
 	nth->th_dport = tp->fport;
 	nth->th_seq = htonl(tp->snd_nxt);

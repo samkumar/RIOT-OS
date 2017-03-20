@@ -596,7 +596,7 @@ error_t asock_abort_impl(int asockid)
 
 void send_message(gnrc_pktsnip_t* pkt)
 {
-    DEBUG("Sending TCP message: %d\n", pkt->type);
+    DEBUG("Sending TCP message: %d, payload_size = %d\n", pkt->type, pkt->next->next == NULL ? 0 : pkt->next->next->size);
     if (!gnrc_netapi_dispatch_send(pkt->type, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
         DEBUG("tcp: cannot send packet: network layer not found\n");
         gnrc_pktbuf_release(pkt);
