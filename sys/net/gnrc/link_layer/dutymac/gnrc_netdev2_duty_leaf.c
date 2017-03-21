@@ -254,17 +254,17 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 						radio_busy = 0; /* radio is free now */
 						msg_t msg;
 						if (dutycycle_state == DUTY_TX_BEACON) { /* Sleep again */
-							xtimer_remove(&timer);											
+							xtimer_remove(&timer);
 							dutycycle_state = DUTY_SLEEP;
 							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
-							msg_send(&msg, gnrc_dutymac_netdev2->pid);							
+							msg_send(&msg, gnrc_dutymac_netdev2->pid);
 						} else if (dutycycle_state == DUTY_TX_DATA && !pending_num) {
-							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;				
-							msg_send(&msg, gnrc_dutymac_netdev2->pid);							
+							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
+							msg_send(&msg, gnrc_dutymac_netdev2->pid);
 						} else if (pending_num) { /* Remove the packet from the queue */
-							xtimer_remove(&timer);											
+							xtimer_remove(&timer);
 							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_REMOVE_QUEUE;
-							msg_send(&msg, gnrc_dutymac_netdev2->pid);							
+							msg_send(&msg, gnrc_dutymac_netdev2->pid);
 						}
 					}
 			        break;
@@ -278,17 +278,17 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 						radio_busy = 0; /* radio is free now */
 						msg_t msg;
 						if (dutycycle_state == DUTY_TX_BEACON) { /* Sleep again */
-							xtimer_remove(&timer);											
+							xtimer_remove(&timer);
 							dutycycle_state = DUTY_SLEEP;
 							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
-							msg_send(&msg, gnrc_dutymac_netdev2->pid);							
+							msg_send(&msg, gnrc_dutymac_netdev2->pid);
 						} else if (dutycycle_state == DUTY_TX_DATA && !pending_num) {
 							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
-							msg_send(&msg, gnrc_dutymac_netdev2->pid);							
+							msg_send(&msg, gnrc_dutymac_netdev2->pid);
 						} else if (pending_num) { /* Remove the packet from the queue */
-							xtimer_remove(&timer);											
+							xtimer_remove(&timer);
 							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_REMOVE_QUEUE;
-							msg_send(&msg, gnrc_dutymac_netdev2->pid);							
+							msg_send(&msg, gnrc_dutymac_netdev2->pid);
 						}
 					}
 					break;
@@ -370,20 +370,20 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 							dutycycling = NETOPT_ENABLE;
 							dutycycle_state = DUTY_SLEEP;
 							sleepstate = NETOPT_STATE_SLEEP;
-							dev->driver->set(dev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));	
+							dev->driver->set(dev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));
 							dev->driver->set(dev, NETOPT_SRC_LEN, &src_len, sizeof(src_len));
 							xtimer_set(&timer,random_uint32_range(0, DUTYCYCLE_SLEEP_INTERVAL));
-							DEBUG("gnrc_netdev2: INIT DUTYCYCLE\n");					
+							DEBUG("gnrc_netdev2: INIT DUTYCYCLE\n");
 							break;
 						case DUTY_TX_BEACON: /* Tx a beacon after wake-up */
 							gnrc_dutymac_netdev2->send_beacon(gnrc_dutymac_netdev2);
-							DEBUG("gnrc_netdev2: SEND BEACON\n");					
+							DEBUG("gnrc_netdev2: SEND BEACON\n");
 							break;
 						case DUTY_TX_DATA:  /* After Tx all data packets */
 							dutycycle_state = DUTY_SLEEP;
 							sleepstate = NETOPT_STATE_SLEEP;
 							dev->driver->set(dev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));
-							DEBUG("gnrc_netdev2: RADIO OFF\n\n");		
+							DEBUG("gnrc_netdev2: RADIO OFF\n\n");
 							break;
 						case DUTY_TX_DATA_BEFORE_BEACON:
 							msg_queue_send(pkt_queue, gnrc_dutymac_netdev2);
@@ -420,14 +420,14 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 					msg_queue_send(pkt_queue, gnrc_dutymac_netdev2);
 				} else {
 					if (dutycycle_state == DUTY_TX_DATA_BEFORE_BEACON) {
-						dutycycle_state = DUTY_TX_BEACON;						
+						dutycycle_state = DUTY_TX_BEACON;
 						gnrc_dutymac_netdev2->send_beacon(gnrc_dutymac_netdev2);
-						DEBUG("gnrc_netdev2: SEND BEACON AFTER DATA\n");					
+						DEBUG("gnrc_netdev2: SEND BEACON AFTER DATA\n");
 					} else {
 						dutycycle_state = DUTY_SLEEP;
 						sleepstate = NETOPT_STATE_SLEEP;
 						dev->driver->set(dev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));
-						DEBUG("gnrc_netdev2: RADIO OFF\n\n");					
+						DEBUG("gnrc_netdev2: RADIO OFF\n\n");
 					}
 				}
 				break;
@@ -439,10 +439,10 @@ static void *_gnrc_netdev2_duty_thread(void *args)
                 DEBUG("gnrc_netdev2: GNRC_NETAPI_MSG_TYPE_SND received\n");
 				if (dutycycle_state == DUTY_INIT) {
 					gnrc_pktsnip_t *pkt = msg.content.ptr;
-					gnrc_dutymac_netdev2->send(gnrc_dutymac_netdev2, pkt);	
-					DEBUG("gnrc_netdev2: SENDING IMMEDIATELY %lu\n");						
+					gnrc_dutymac_netdev2->send(gnrc_dutymac_netdev2, pkt);
+					DEBUG("gnrc_netdev2: SENDING IMMEDIATELY %lu\n");
 				} else {
-					if (_xtimer_usec_from_ticks(timer.target - xtimer_now().ticks32) < 50000 || 
+					if (_xtimer_usec_from_ticks(timer.target - xtimer_now().ticks32) < 50000 ||
 						pending_num || radio_busy) {
 						/* Queue a packet */
 						msg_queue_add(pkt_queue, &msg);
@@ -452,8 +452,8 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 						dutycycle_state = DUTY_TX_DATA;
 						radio_busy = 1; /* radio is now busy */
 						gnrc_pktsnip_t *pkt = msg.content.ptr;
-						gnrc_dutymac_netdev2->send(gnrc_dutymac_netdev2, pkt);	
-						DEBUG("gnrc_netdev2: SENDING IMMEDIATELY %lu\n", _xtimer_usec_from_ticks(timer.target - xtimer_now().ticks32));	
+						gnrc_dutymac_netdev2->send(gnrc_dutymac_netdev2, pkt);
+						DEBUG("gnrc_netdev2: SENDING IMMEDIATELY %lu\n", _xtimer_usec_from_ticks(timer.target - xtimer_now().ticks32));
 					}
 				}
 		        break;
@@ -470,7 +470,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 						dutycycle_state = DUTY_SLEEP;
 						sleepstate = NETOPT_STATE_SLEEP;
 						xtimer_set(&timer, random_uint32_range(0, DUTYCYCLE_SLEEP_INTERVAL));
-						DEBUG("gnrc_netdev2: INIT DUTYCYCLE\n");											
+						DEBUG("gnrc_netdev2: INIT DUTYCYCLE\n");
 					} else {
 						/* Dutycycle end triggered by application layer */
 						dutycycle_state = DUTY_INIT;

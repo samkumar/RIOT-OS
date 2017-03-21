@@ -32,9 +32,9 @@
 #include "net/ethernet/hdr.h"
 #include "random.h"
 #include "net/ieee802154.h"
-
-
 #include "xtimer.h"
+
+#include "send.h"
 
 #if DUTYCYCLE_EN
 #if ROUTER
@@ -46,7 +46,7 @@
 #include "od.h"
 #endif
 
-#define ENABLE_BROADCAST 1
+#define ENABLE_BROADCAST 0
 
 #define NETDEV2_NETAPI_MSG_QUEUE_SIZE 8
 #define NETDEV2_PKT_QUEUE_SIZE 4
@@ -84,17 +84,57 @@ uint16_t recent_dst_l2addr = 0;
 bool radio_busy = false;
 
 /* This is the packet being sent by the radio now */
-gnrc_pktsnip_t *current_pkt;
+
 
 /* Rx data request command from a leaf node: I can send data to the leaf node */
 bool rx_data_request = false;
+
+kernel_pid_t dutymac_netdev2_pid;
 
 /* TODO this should take a MAC address and return whether that is a duty-cycled
  * node sending beacons to this router. For now, just hardcode to true or false.
  */
 static bool addr_is_dutycycled(uint16_t addr) {
 	(void) addr;
-	return true;
+	return false;
+}
+
+void send_packet(gnrc_pktsnip_t* pkt, gnrc_netdev2_t* gnrc_dutymac_netdev2, bool retransmission) {
+	gnrc_pktsnip_t* temp_pkt = pkt;
+	gnrc_pktsnip_t *p1, *p2;
+	gnrc_pktsnip_t* current_pkt = gnrc_pktbuf_add(NULL, temp_pkt->data, temp_pkt->size, temp_pkt->type);
+	if (current_pkt == NULL) {
+		goto fail;
+	}
+	p1 = current_pkt;
+	temp_pkt = temp_pkt->next;
+	while(temp_pkt) {
+		p2 = gnrc_pktbuf_add(NULL, temp_pkt->data, temp_pkt->size, temp_pkt->type);
+		if (p2 == NULL) {
+			gnrc_pktbuf_release(current_pkt);
+			goto fail;
+		}
+		p1->next = p2;
+		p1 = p1->next;
+		temp_pkt = temp_pkt->next;
+	}
+	if (retransmission) {
+		gnrc_dutymac_netdev2->resend(gnrc_dutymac_netdev2, current_pkt);
+	} else {
+		gnrc_dutymac_netdev2->send(gnrc_dutymac_netdev2, current_pkt);
+	}
+	return;
+
+fail:
+	{
+		msg_t msg;
+		msg.type = NETDEV2_EVENT_TX_NOACK;
+		msg_send(&msg, dutymac_netdev2_pid);
+	}
+}
+
+void send_packet_csma(gnrc_pktsnip_t* pkt, gnrc_netdev2_t* gnrc_dutymac_netdev2, bool retransmission) {
+	send_with_csma(pkt, send_packet, gnrc_dutymac_netdev2, retransmission);
 }
 
 // Exhaustive search version
@@ -226,21 +266,11 @@ void msg_queue_send(msg_t* msg_queue, bool to_dutycycled_dest, uint16_t dst_l2ad
 
 	if (pkt != NULL && sending_pkt_key != 0xFF) {
 		//printf("sending %u to %4x (%u/%u)\n", sending_pkt_key, recent_dst_l2addr, broadcasting_num, pending_num);
-		gnrc_pktsnip_t* temp_pkt = pkt;
-		gnrc_pktsnip_t *p1, *p2;
-		current_pkt = gnrc_pktbuf_add(NULL, temp_pkt->data, temp_pkt->size, temp_pkt->type);
-		assert(current_pkt != NULL);
-		p1 = current_pkt;
-		temp_pkt = temp_pkt->next;
-		while(temp_pkt) {
-			p2 = gnrc_pktbuf_add(NULL, temp_pkt->data, temp_pkt->size, temp_pkt->type);
-			assert(p2 != NULL);
-			p1->next = p2;
-			p1 = p1->next;
-			temp_pkt = temp_pkt->next;
-		}
+
 		radio_busy = true; /* radio is now busy */
-		gnrc_dutymac_netdev2->send(gnrc_dutymac_netdev2, current_pkt);
+		//send_packet(pkt, gnrc_dutymac_netdev2);
+		//send_with_retries(pkt, send_packet, gnrc_dutymac_netdev2, false);
+		send_with_retries(pkt, send_packet_csma, gnrc_dutymac_netdev2, false);
 	}
 }
 
@@ -290,6 +320,7 @@ void neighbor_table_update(uint16_t l2addr, gnrc_netif_hdr_t *hdr) {
 static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 {
 	gnrc_netdev2_t* gnrc_dutymac_netdev2 = (gnrc_netdev2_t*)dev->context;
+	dutymac_netdev2_pid = sched_active_pid;
     if (event == NETDEV2_EVENT_ISR) {
         msg_t msg;
         msg.type = NETDEV2_MSG_TYPE_EVENT;
@@ -344,6 +375,8 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 #ifdef MODULE_NETSTATS_L2
          	    dev->stats.tx_success++;
 #endif
+				csma_send_succeeded();
+				retry_send_succeeded();
 				radio_busy = false; /* radio is free now */
 				/* Remove only unicasting packets, broadcasting packets are removed by timer expires */
 				if (broadcasting) {
@@ -355,6 +388,17 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 				}
 			    break;
 			case NETDEV2_EVENT_TX_NOACK:
+				{
+					bool will_retry = csma_send_failed();
+					if (will_retry) {
+						break;
+					}
+					will_retry = retry_send_failed();
+					if (will_retry) {
+						break;
+					}
+				}
+
 				radio_busy = false; /* radio is free now */
 				/* Remove only unicasting packets, broadcasting packets are removed by timer expires */
 				if (broadcasting) {
@@ -528,6 +572,9 @@ kernel_pid_t gnrc_netdev2_dutymac_init(char *stack, int stacksize, char priority
 {
 
 	kernel_pid_t res;
+
+	retry_init();
+	csma_init();
 
     /* check if given netdev device is defined and the driver is set */
     if (gnrc_netdev2 == NULL || gnrc_netdev2->dev == NULL) {
