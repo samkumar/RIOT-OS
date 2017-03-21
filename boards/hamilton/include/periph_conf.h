@@ -100,7 +100,7 @@ extern "C" {
                         												   but uses the value for downlink transmissions */
 #endif
 
-#define ROUTER    (0)        /* Plugged-in router */
+#define ROUTER    (1)        /* Plugged-in router */
 #define LEAF_NODE (1-ROUTER) /* Duty-cycling node */
 #define AUTO_CSMA_EN               (0)
 /** @} */
