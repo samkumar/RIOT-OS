@@ -120,6 +120,8 @@ typedef struct gnrc_netdev {
     int (*send_dataReq)(struct gnrc_netdev *dev);
 #endif
 
+    int (*resend)(struct gnrc_netdev2 *dev, gnrc_pktsnip_t *snip);
+
     /** hskim
      * @brief Send a beacon using this device
      *

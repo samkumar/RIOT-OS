@@ -228,14 +228,17 @@ static int _send(gnrc_netif2_t *netif, gnrc_pktsnip_t *pkt)
  	//dst = (uint8_t*)&ddd;
 #endif
 #if ROUTER
- 	int16_t ddd = 0x1e17;
- 	dst = (uint8_t*)&ddd;
+ 	//int16_t ddd = 0x1e17;
+ 	//dst = (uint8_t*)&ddd;
 #endif
 #endif
+    if (!retransmission) {
+        state->seq++;
+    }
     /* fill MAC header, seq should be set by device */
     if ((res = ieee802154_set_frame_hdr(mhr, src, src_len,
                                         dst, dst_len, dev_pan,
-                                        dev_pan, flags, state->seq++)) == 0) {
+                                        dev_pan, flags, state->seq)) == 0) {
         DEBUG("_send_ieee802154: Error preperaring frame\n");
         return -EINVAL;
     }
@@ -278,56 +281,9 @@ static int _send(gnrc_netif2_t *netif, gnrc_pktsnip_t *pkt)
     gnrc_pktbuf_release(pkt);
     return res;
 }
-<<<<<<< d69cdb27f1c31cfa9208ba2660887f0f8acdcb59:sys/net/gnrc/netif2/gnrc_netif2_ieee802154.c
+
 #else   /* MODULE_NETDEV_IEEE802154 */
 typedef int dont_be_pedantic;
 #endif  /* MODULE_NETDEV_IEEE802154 */
-=======
 
-/* hskim: send Data Request MAC command for MAC operation */
- static int _send_beacon(gnrc_netdev2_t *gnrc_netdev2)
- {
-     netdev2_t *netdev = gnrc_netdev2->dev;
-     netdev2_ieee802154_t *state = (netdev2_ieee802154_t *)gnrc_netdev2->dev;
-     struct iovec vector;
-     const uint8_t *src, *dst = NULL;
-     int res = 0;
-     size_t src_len, dst_len;
-     uint8_t mhr[IEEE802154_MAX_HDR_LEN+1];
- 	 uint8_t command_id = 4; /* Data request commnad ID */
-     uint8_t flags = (uint8_t)(state->flags & NETDEV2_IEEE802154_SEND_MASK);
-     le_uint16_t dev_pan = byteorder_btols(byteorder_htons(state->pan));
-
-     flags |= (IEEE802154_FCF_ACK_REQ | IEEE802154_FCF_TYPE_MACCMD);
-
-     src_len = IEEE802154_SHORT_ADDRESS_LEN;
-     src = state->short_addr;
-
- 	 /* ToDo: Current version does not use a neighbor discovery protocol, which cannot support unicast.
-              We can manually set a destination (router's address) here */
-     dst_len = IEEE802154_SHORT_ADDRESS_LEN;
- 	 int16_t ddd = 0x166d;;
- 	 dst = (uint8_t*)&ddd;
-
-     /* fill MAC header, seq should be set by device */
-     if ((res = ieee802154_set_frame_hdr(mhr, src, src_len,
-                                         dst, dst_len, dev_pan,
-                                         dev_pan, flags, state->seq++)) == 0) {
-         DEBUG("_send_ieee802154: Error preperaring frame\n");
-         return -EINVAL;
-     }
- 	mhr[res++] = command_id; /* MAC command ID: Data Request */
-
- 	DEBUG("[Tx DataReq] %u/%2x%2x->%u/%2x%2x, flag %2x, seq %u\n", src_len, src[0],src[1], dst_len, dst[0],dst[1], flags, state->seq-1);
-
-     /* prepare packet for sending */
-     vector.iov_base = mhr;
-     vector.iov_len = (size_t)res;
-     res = netdev->driver->send(netdev, &vector, 1);
-
-     return res;
- }
-
-
->>>>>>> Add initial PR for dutymac:sys/net/gnrc/link_layer/netdev2/gnrc_netdev2_ieee802154.c
 /** @} */
