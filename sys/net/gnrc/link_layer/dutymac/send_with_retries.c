@@ -3,7 +3,7 @@
 #include "net/netdev2.h"
 #include "xtimer.h"
 
-#define ENABLE_DEBUG    (1)
+#define ENABLE_DEBUG    (0)
 #include "debug.h"
 
 #define NUM_RETRIES SOFTWARE_MAX_FRAME_RETRIES
