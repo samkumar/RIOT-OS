@@ -357,8 +357,13 @@ void at86rf2xx_set_option(at86rf2xx_t *dev, uint16_t option, bool state)
                       "(4 retries, min BE: 3 max BE: 5)\n");
                 /* Initialize CSMA seed with hardware address */
                 at86rf2xx_set_csma_seed(dev, dev->netdev.long_addr);
-                at86rf2xx_set_csma_max_retries(dev, 4);
-                at86rf2xx_set_csma_backoff_exp(dev, 3, 5);
+#if HARDWARE_CSMA_EN
+                at86rf2xx_set_csma_max_retries(dev, HARDWARE_CSMA_MAX_TRIES - 1);
+                at86rf2xx_set_csma_backoff_exp(dev, HARDWARE_CSMA_MIN_BACKOFF_EXP, HARDWARE_CSMA_MAX_BACKOFF_EXP);
+#else
+                at86rf2xx_set_csma_max_retries(dev, 0);
+                at86rf2xx_set_csma_backoff_exp(dev, 0, 0);
+#endif
                 break;
             case AT86RF2XX_OPT_PROMISCUOUS:
                 DEBUG("[at86rf2xx] opt: enabling PROMISCUOUS mode\n");
