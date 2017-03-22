@@ -334,6 +334,7 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 	}
     else {
         DEBUG("gnrc_netdev2: event triggered -> %i\n", event);
+		bool will_retry;
         switch(event) {
             case NETDEV2_EVENT_RX_COMPLETE:
                 {
@@ -366,11 +367,6 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
                     }
                     break;
                 }
-            case NETDEV2_EVENT_TX_MEDIUM_BUSY:
-#ifdef MODULE_NETSTATS_L2
-                dev->stats.tx_failed++;
-#endif
-                break;
             case NETDEV2_EVENT_TX_COMPLETE:
 #ifdef MODULE_NETSTATS_L2
          	    dev->stats.tx_success++;
@@ -387,16 +383,24 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 					msg_send(&msg, gnrc_dutymac_netdev2->pid);
 				}
 			    break;
+			case NETDEV2_EVENT_TX_MEDIUM_BUSY:
+#ifdef MODULE_NETSTATS_L2
+                dev->stats.tx_failed++;
+#endif
+				will_retry = csma_send_failed();
+				if (will_retry) {
+					break;
+				}
+				/* Fallthrough intentional */
 			case NETDEV2_EVENT_TX_NOACK:
-				{
-					bool will_retry = csma_send_failed();
-					if (will_retry) {
-						break;
-					}
-					will_retry = retry_send_failed();
-					if (will_retry) {
-						break;
-					}
+				if (event == NETDEV2_EVENT_TX_NOACK) {
+					/* CSMA succeeded... */
+					csma_send_succeeded();
+				}
+				/* ... but the retry failed. */
+				will_retry = retry_send_failed();
+				if (will_retry) {
+					break;
 				}
 
 				radio_busy = false; /* radio is free now */
