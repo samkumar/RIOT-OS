@@ -102,7 +102,20 @@ extern "C" {
 
 #define ROUTER    (1)        /* Plugged-in router */
 #define LEAF_NODE (1-ROUTER) /* Duty-cycling node */
-#define AUTO_CSMA_EN               (0)
+
+#define HARDWARE_CSMA_EN               (0)
+
+#define HARDWARE_CSMA_MAX_TRIES (5)
+#define HARDWARE_CSMA_MIN_BACKOFF_EXP (3) /* Hardware default. */
+#define HARDWARE_CSMA_MAX_BACKOFF_EXP (5) /* Hardware default. */
+#define HARDWARE_MAX_FRAME_RETRIES (1) /* No delay between these. */
+
+#define SOFTWARE_MAX_FRAME_RETRIES (0)
+#define SOFTWARE_FRAME_RETRY_DELAY_MICROS (20000)
+#define SOFTWARE_CSMA_MAX_TRIES (4)
+#define SOFTWARE_CSMA_BACKOFF_MICROS (320)
+#define SOFTWARE_CSMA_MIN_BACKOFF_EXP (3) /* Hardware default. */
+#define SOFTWARE_CSMA_MAX_BACKOFF_EXP (5) /* Hardware default. */
 /** @} */
 
 /**
