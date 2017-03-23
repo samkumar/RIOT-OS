@@ -50,13 +50,20 @@ void uuid_base(void *buf, size_t len)
 
     memset(buf, UUID_BACKUP_SEED, len);
 
-#if CPUID_LEN
-    uint8_t *out = (uint8_t *)buf;
-    uint8_t cid[CPUID_LEN];
-
-    cpuid_get(cid);
-    for (size_t i = 0; i < CPUID_LEN; i++) {
-        out[i % len] ^= cid[i];
-    }
+#if defined(HAS_FACTORY_BLOCK)
+    if (HAS_FACTORY_BLOCK) {
+        memcpy(buf, fb_eui64, 8);
+    } else
 #endif
+    {
+#if CPUID_LEN
+        uint8_t *out = (uint8_t *)buf;
+        uint8_t cid[CPUID_LEN];
+
+        cpuid_get(cid);
+        for (size_t i = 0; i < CPUID_LEN; i++) {
+            out[i % len] ^= cid[i];
+        }
+#endif
+    }
 }

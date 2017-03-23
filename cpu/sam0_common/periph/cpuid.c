@@ -32,6 +32,14 @@
 
 void cpuid_get(void *id)
 {
-    uint32_t addr[] = { WORD0, WORD1, WORD2, WORD3 };
-    memcpy(id, (void *)addr, CPUID_LEN);
+#if defined(HAS_FACTORY_BLOCK)
+    if (HAS_FACTORY_BLOCK) {
+        memset(id, 0, CPUID_LEN);
+        memcpy(id, fb_eui64, 8);
+    } else
+#endif
+    {
+        uint32_t addr[] = { WORD0, WORD1, WORD2, WORD3 };
+        memcpy(id, (void *)addr, CPUID_LEN);
+    }
 }
