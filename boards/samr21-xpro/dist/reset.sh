@@ -14,5 +14,5 @@ echo "g" >> $BINDIR/reset.seg
 echo "exit" >> $BINDIR/reset.seg
 
 # reset the board
-JLinkExe -device atsamr21e18a < $BINDIR/reset.seg
+JLinkExe -device atsamr21g18a < $BINDIR/reset.seg
 echo ""

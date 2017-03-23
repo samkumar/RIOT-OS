@@ -13,12 +13,13 @@ HEXFILE=$2
 FLASHADDR=0
 
 # setup JLink command file
-echo "speed 1000" > $BINDIR/burn.seg
+echo "power on" > $BINDIR/burn.seg
+echo "speed 1000" >> $BINDIR/burn.seg
 echo "loadbin $HEXFILE $FLASHADDR" >> $BINDIR/burn.seg
 echo "r" >> $BINDIR/burn.seg
 echo "g" >> $BINDIR/burn.seg
 echo "exit" >> $BINDIR/burn.seg
 
 # flash new binary to the board
-JLinkExe -if swd -device atsamr21e18a < $BINDIR/burn.seg
+JLinkExe -if swd -device atsamr21g18a < $BINDIR/burn.seg
 echo ""
