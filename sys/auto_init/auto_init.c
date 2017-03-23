@@ -194,7 +194,7 @@ void auto_init(void)
     auto_init_enc28j60();
 #endif
 
-#ifdef MODULE_ETHOS
+#if defined(MODULE_ETHOS) || defined(MODULE_RETHOS)
     extern void auto_init_ethos(void);
     auto_init_ethos();
 #endif
