@@ -46,7 +46,7 @@
 #include "od.h"
 #endif
 
-#define ENABLE_BROADCAST 0
+#define ENABLE_BROADCAST_QUEUEING 0
 
 #define NETDEV2_NETAPI_MSG_QUEUE_SIZE 8
 #define NETDEV2_PKT_QUEUE_SIZE 4
@@ -138,14 +138,15 @@ void send_packet_csma(gnrc_pktsnip_t* pkt, gnrc_netdev2_t* gnrc_dutymac_netdev2,
 }
 
 // Exhaustive search version
-int msg_queue_add(msg_t* msg_queue, msg_t* msg) {
+int msg_queue_add(msg_t* msg_queue, msg_t* msg, gnrc_netdev2_t* gnrc_dutymac_netdev2) {
 	if (pending_num < NETDEV2_PKT_QUEUE_SIZE) {
 		gnrc_pktsnip_t *pkt = msg->content.ptr;
 		gnrc_netif_hdr_t* hdr = pkt->data;
 
 		// 1) Broadcasting packet (Insert head of the queue)
 		if (hdr->flags & (GNRC_NETIF_HDR_FLAGS_BROADCAST | GNRC_NETIF_HDR_FLAGS_MULTICAST)) {
-#if ENABLE_BROADCAST
+#if ENABLE_BROADCAST_QUEUEING
+			(void) gnrc_dutymac_netdev2;
 			if (broadcasting_num < pending_num) {
 				for (int i=pending_num-1; i>= broadcasting_num; i--) {
 					msg_queue[i+1].sender_pid = msg_queue[i].sender_pid;
@@ -168,6 +169,9 @@ int msg_queue_add(msg_t* msg_queue, msg_t* msg) {
 			}
 			broadcasting_num++;
 #else
+			/* Don't queue the packet; send it right away. */
+			radio_busy = true;
+			send_with_retries(pkt, 0, send_packet_csma, gnrc_dutymac_netdev2, false);
 			return 0;
 #endif
 		}
@@ -270,7 +274,7 @@ void msg_queue_send(msg_t* msg_queue, bool to_dutycycled_dest, uint16_t dst_l2ad
 		radio_busy = true; /* radio is now busy */
 		//send_packet(pkt, gnrc_dutymac_netdev2);
 		//send_with_retries(pkt, send_packet, gnrc_dutymac_netdev2, false);
-		send_with_retries(pkt, send_packet_csma, gnrc_dutymac_netdev2, false);
+		send_with_retries(pkt, -1, send_packet_csma, gnrc_dutymac_netdev2, false);
 	}
 }
 
@@ -521,7 +525,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 				/* ToDo: We need to distingush sending operation according to the destination
 						characteristisc: duty-cycling or always-on */
 				/* Queue a packet */
-				if (msg_queue_add(pkt_queue, &msg)) {
+				if (msg_queue_add(pkt_queue, &msg, gnrc_dutymac_netdev2)) {
 					/* If a packet exists, send ACKs with pending bit */
 					bool pending = true;
                 	dev->driver->set(dev, NETOPT_ACK_PENDING, &pending, sizeof(bool));
