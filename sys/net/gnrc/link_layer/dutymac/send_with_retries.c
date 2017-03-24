@@ -23,11 +23,15 @@ void retry_init(void) {
     retry_timer.callback = try_send_packet;
 }
 
-int send_with_retries(gnrc_pktsnip_t* pkt, void (*send_packet_fn)(gnrc_pktsnip_t*, gnrc_netdev2_t*, bool), gnrc_netdev2_t* gnrc_dutymac_netdev2, bool rexmit) {
+int send_with_retries(gnrc_pktsnip_t* pkt, int num_retries, void (*send_packet_fn)(gnrc_pktsnip_t*, gnrc_netdev2_t*, bool), gnrc_netdev2_t* gnrc_dutymac_netdev2, bool rexmit) {
     assert(!send_in_progress);
     DEBUG("[send_with_retries] Initiating send...\n");
     retry_timer.arg = pkt;
-    tries_left = NUM_RETRIES;
+    if (num_retries < 0) {
+        tries_left = NUM_RETRIES;
+    } else {
+        tries_left = num_retries;
+    }
     send_packet = send_packet_fn;
     dev = gnrc_dutymac_netdev2;
     send_in_progress = true;
