@@ -78,6 +78,47 @@ extern "C" {
 #endif
 /** @} */
 
+#define PM_BLOCKER_INITIAL { .val_u32=0x00000000 }
+
+/**
+ * @name Network configuration
+ * @{
+ */
+#ifndef DUTYCYCLE_EN
+#define DUTYCYCLE_EN               (1)
+#endif
+
+#ifndef DUTYCYCLE_WAKEUP_INTERVAL
+#define DUTYCYCLE_WAKEUP_INTERVAL  6000UL    /* Don't change it w/o particular reasons */
+#endif
+
+#ifndef DUTYCYCLE_SLEEP_INTERVAL
+#define DUTYCYCLE_SLEEP_INTERVAL   2000000UL /* 1) When it is ZERO, a leaf node does not send beacons
+                        												(i.e., extremely low duty-cycle,
+                                                        but downlink transmission is disabled)
+                                                2) Router and leaf node should have same sleep interval.
+                        												   Router does not sleep
+                        												   but uses the value for downlink transmissions */
+#endif
+
+#define ROUTER    (1)        /* Plugged-in router */
+#define LEAF_NODE (1-ROUTER) /* Duty-cycling node */
+
+#define HARDWARE_CSMA_EN               (0)
+
+#define HARDWARE_CSMA_MAX_TRIES (5)
+#define HARDWARE_CSMA_MIN_BACKOFF_EXP (3) /* Hardware default. */
+#define HARDWARE_CSMA_MAX_BACKOFF_EXP (5) /* Hardware default. */
+#define HARDWARE_MAX_FRAME_RETRIES (1) /* No delay between these. */
+
+#define SOFTWARE_MAX_FRAME_RETRIES (3)
+#define SOFTWARE_FRAME_RETRY_DELAY_MICROS (20000)
+#define SOFTWARE_CSMA_MAX_TRIES (4)
+#define SOFTWARE_CSMA_BACKOFF_MICROS (320)
+#define SOFTWARE_CSMA_MIN_BACKOFF_EXP (3) /* Hardware default. */
+#define SOFTWARE_CSMA_MAX_BACKOFF_EXP (5) /* Hardware default. */
+/** @} */
+
 /**
  * @name Timer peripheral configuration
  * @{
