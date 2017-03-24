@@ -170,8 +170,10 @@ int msg_queue_add(msg_t* msg_queue, msg_t* msg, gnrc_netdev2_t* gnrc_dutymac_net
 			broadcasting_num++;
 #else
 			/* Don't queue the packet; send it right away. */
-			radio_busy = true;
-			send_with_retries(pkt, 0, send_packet_csma, gnrc_dutymac_netdev2, false);
+			if (!radio_busy) {
+				radio_busy = true;
+				send_with_retries(pkt, 0, send_packet_csma, gnrc_dutymac_netdev2, false);
+			}
 			return 0;
 #endif
 		}
