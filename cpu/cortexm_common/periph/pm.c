@@ -23,11 +23,13 @@
 #include "cpu.h"
 #include "periph/pm.h"
 
+#if 0
 #ifndef FEATURES_PERIPH_PM
 void pm_set_lowest(void)
 {
     cortexm_sleep(0);
 }
+#endif
 #endif
 
 void pm_reboot(void)
