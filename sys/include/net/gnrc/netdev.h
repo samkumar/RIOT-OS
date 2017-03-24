@@ -277,7 +277,7 @@ static inline void gnrc_netdev_set_tx_feedback(gnrc_netdev_t *dev,
   */
 kernel_pid_t gnrc_netdev2_dutymac_init(char *stack, int stacksize, char priority,
                                 const char *name, gnrc_netdev2_t *gnrc_netdev2);
-#else
+#endif
 
 /**
  * @brief Initialize GNRC netdev handler thread
@@ -294,7 +294,7 @@ kernel_pid_t gnrc_netdev2_dutymac_init(char *stack, int stacksize, char priority
 kernel_pid_t gnrc_netdev_init(char *stack, int stacksize, char priority,
                                const char *name, gnrc_netdev_t *gnrc_netdev);
 
-#endif
+//#endif
 
 #ifdef __cplusplus
 }
