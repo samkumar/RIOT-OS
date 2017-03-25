@@ -169,9 +169,14 @@ int msg_queue_add(msg_t* msg_queue, msg_t* msg, gnrc_netdev2_t* gnrc_dutymac_net
 			}
 			broadcasting_num++;
 #else
-			/* Don't queue the packet; send it right away. */
+			/* Send it right away. */
 			if (!radio_busy) {
 				radio_busy = true;
+				msg_queue[pending_num].sender_pid = msg->sender_pid;
+				msg_queue[pending_num].type = msg->type;
+				msg_queue[pending_num].content.ptr = msg->content.ptr;
+				sending_pkt_key = pending_num;
+				pending_num++;
 				send_with_retries(pkt, 0, send_packet_csma, gnrc_dutymac_netdev2, false);
 			}
 			return 0;
@@ -539,6 +544,8 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 						 */
 						msg_queue_send(pkt_queue, false, 0, gnrc_dutymac_netdev2);
 					}
+				} else {
+					gnrc_pktbuf_release(msg.content.ptr);
 				}
 		        break;
             case GNRC_NETAPI_MSG_TYPE_SET:
