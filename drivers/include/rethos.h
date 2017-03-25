@@ -173,7 +173,7 @@ typedef struct {
 
 struct _rethos_handler {
   struct _rethos_handler *_next;
-  void (*cb)(ethos_t *dev, uint8_t channel, const uint8_t *data, uint16_t length);
+  void (*cb)(ethos_t *dev, uint8_t channel, uint8_t *data, uint16_t length);
   uint8_t channel;
 };
 
