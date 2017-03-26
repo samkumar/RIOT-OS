@@ -21,7 +21,12 @@
 
 #include "log.h"
 #include "debug.h"
+#ifdef MODULE_ETHOS
 #include "ethos.h"
+#endif
+#ifdef MODULE_RETHOS
+#include "rethos.h"
+#endif
 #include "periph/uart.h"
 #include "net/gnrc/netdev2.h"
 #include "net/gnrc/netdev2/eth.h"

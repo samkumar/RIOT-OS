@@ -184,11 +184,16 @@ static void process_frame(ethos_t *dev)
 
     //Handle the special channels
     switch(dev->rx_channel) {
+    /* Sam: I'm not using REthos as a netdev, and this fails when I enable rtt_stdio... */
+    /*
       case RETHOS_CHANNEL_NETDEV:
         tsrb_add(&dev->netdev_inbuf, (char*) dev->rx_buffer, dev->rx_buffer_index);
         dev->netdev_packetsz = dev->rx_buffer_index;
         dev->netdev.event_callback((netdev2_t*) dev, NETDEV2_EVENT_ISR);
         break;
+    */
+    /* Sam: this fails to compile if we disable -DUSE_ETHOS_FOR_STDIO, so I'm removing it. */
+    /*
       case RETHOS_CHANNEL_STDIO:
         for (size_t i = 0; i < dev->rx_buffer_index; i++)
         {
@@ -196,6 +201,7 @@ static void process_frame(ethos_t *dev)
           isrpipe_write_one(&uart_stdio_isrpipe, dev->rx_buffer[i]);
         }
         break;
+    */
       default:
         break;
     }
@@ -552,10 +558,13 @@ static int _recv(netdev2_t *netdev, void *buf, size_t len, void* info)
         len = dev->netdev_packetsz;
         dev->netdev_packetsz = 0;
 
+/* Sam: I'm not using REthos as a netdev... */
+/*
         if ((tsrb_get(&dev->netdev_inbuf, buf, len) != len)) {
             DEBUG("ethos _recv(): inbuf doesn't contain enough bytes.\n");
             return -1;
         }
+*/
 
         return (int)len;
     }
