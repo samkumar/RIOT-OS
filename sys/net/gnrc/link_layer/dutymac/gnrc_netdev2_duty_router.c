@@ -170,15 +170,16 @@ int msg_queue_add(msg_t* msg_queue, msg_t* msg, gnrc_netdev2_t* gnrc_dutymac_net
 			broadcasting_num++;
 #else
 			/* Send it right away. */
-			if (!radio_busy) {
-				radio_busy = true;
-				msg_queue[pending_num].sender_pid = msg->sender_pid;
-				msg_queue[pending_num].type = msg->type;
-				msg_queue[pending_num].content.ptr = msg->content.ptr;
-				sending_pkt_key = pending_num;
-				pending_num++;
-				send_with_retries(pkt, 0, send_packet_csma, gnrc_dutymac_netdev2, false);
-			}
+			// if (!radio_busy) {
+			// 	radio_busy = true;
+			// 	msg_queue[pending_num].sender_pid = msg->sender_pid;
+			// 	msg_queue[pending_num].type = msg->type;
+			// 	msg_queue[pending_num].content.ptr = msg->content.ptr;
+			// 	sending_pkt_key = pending_num;
+			// 	pending_num++;
+			// 	send_with_retries(pkt, 0, send_packet_csma, gnrc_dutymac_netdev2, false);
+			// 	return 1;
+			// }
 			return 0;
 #endif
 		}
