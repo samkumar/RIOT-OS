@@ -31,6 +31,9 @@ endif
 ifneq (,$(filter gnrc_ipv6_nc,$(USEMODULE)))
     DIRS += network_layer/ipv6/nc
 endif
+ifneq (,$(filter gnrc_ipv6_autoconf_onehop,$(USEMODULE)))
+	DIRS += network_layer/ipv6/autoconf_onehop
+endif
 ifneq (,$(filter gnrc_ipv6_netif,$(USEMODULE)))
     DIRS += network_layer/ipv6/netif
 endif
