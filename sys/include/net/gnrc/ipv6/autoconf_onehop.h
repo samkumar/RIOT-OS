@@ -29,10 +29,12 @@
 extern "C" {
 #endif
 
-static inline void _revert_iid(uint8_t *iid)
-{
-    iid[0] ^= 0x02;
-}
+kernel_pid_t get_6lowpan_pid(void);
+
+/* ipv6addr should already have the top 64 bits for the prefix set. */
+int gnrc_ipv6_autoconf_l2addr_to_ipv6(ipv6_addr_t* ipv6addr, eui64_t* l2addr);
+
+void gnrc_ipv6_autoconf_ipv6_to_l2addr(eui64_t* l2addr, ipv6_addr_t* ipv6addr);
 
 kernel_pid_t gnrc_ipv6_autoconf_next_hop_l2addr(uint8_t *l2addr, uint8_t *l2addr_len, kernel_pid_t iface, ipv6_addr_t *dst);
 
