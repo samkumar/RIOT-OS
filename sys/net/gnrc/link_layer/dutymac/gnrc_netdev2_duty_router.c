@@ -69,7 +69,7 @@ static void _pass_on_packet(gnrc_pktsnip_t *pkt);
  *     a router does not discard a broadcasting packet during a sleep interval
  */
 xtimer_t timer;
-bool broadcasting = 0;
+bool broadcasting = false;
 uint8_t pending_num = 0;
 uint8_t broadcasting_num = 0;
 uint8_t sending_pkt_key = 0xFF;
@@ -99,38 +99,13 @@ static bool addr_is_dutycycled(uint16_t addr) {
 	return false;
 }
 
+bool retry_rexmit = false;
 void send_packet(gnrc_pktsnip_t* pkt, gnrc_netdev2_t* gnrc_dutymac_netdev2, bool retransmission) {
-	gnrc_pktsnip_t* temp_pkt = pkt;
-	gnrc_pktsnip_t *p1, *p2;
-	gnrc_pktsnip_t* current_pkt = gnrc_pktbuf_add(NULL, temp_pkt->data, temp_pkt->size, temp_pkt->type);
-	if (current_pkt == NULL) {
-		goto fail;
-	}
-	p1 = current_pkt;
-	temp_pkt = temp_pkt->next;
-	while(temp_pkt) {
-		p2 = gnrc_pktbuf_add(NULL, temp_pkt->data, temp_pkt->size, temp_pkt->type);
-		if (p2 == NULL) {
-			gnrc_pktbuf_release(current_pkt);
-			goto fail;
-		}
-		p1->next = p2;
-		p1 = p1->next;
-		temp_pkt = temp_pkt->next;
-	}
-	if (retransmission) {
-		gnrc_dutymac_netdev2->resend(gnrc_dutymac_netdev2, current_pkt);
-	} else {
-		gnrc_dutymac_netdev2->send(gnrc_dutymac_netdev2, current_pkt);
-	}
-	return;
-
-fail:
-	{
-		msg_t msg;
-		msg.type = NETDEV2_EVENT_TX_NOACK;
-		msg_send(&msg, dutymac_netdev2_pid);
-	}
+	retry_rexmit = retransmission;
+	msg_t msg;
+	msg.type = GNRC_NETDEV2_MSG_TYPE_LINK_RETRANSMIT;
+	msg.content.ptr = pkt;
+	msg_send(&msg, dutymac_netdev2_pid);
 }
 
 void send_packet_csma(gnrc_pktsnip_t* pkt, gnrc_netdev2_t* gnrc_dutymac_netdev2, bool retransmission) {
@@ -275,6 +250,8 @@ void msg_queue_send(msg_t* msg_queue, bool to_dutycycled_dest, uint16_t dst_l2ad
 			}
 		}
 	}
+
+	assert(!radio_busy);
 
 	if (pkt != NULL && sending_pkt_key != 0xFF) {
 		//printf("sending %u to %4x (%u/%u)\n", sending_pkt_key, recent_dst_l2addr, broadcasting_num, pending_num);
@@ -575,6 +552,17 @@ static void *_gnrc_netdev2_duty_thread(void *args)
                 reply.content.value = (uint32_t)res;
                 msg_reply(&msg, &reply);
                 break;
+			case GNRC_NETDEV2_MSG_TYPE_LINK_RETRANSMIT:
+				if (retry_rexmit) {
+					res = gnrc_dutymac_netdev2->resend_without_release(gnrc_dutymac_netdev2, msg.content.ptr);
+				} else {
+					res = gnrc_dutymac_netdev2->send_without_release(gnrc_dutymac_netdev2, msg.content.ptr);
+				}
+				if (res < 0) {
+					msg_t nmsg;
+					nmsg.type = NETDEV2_EVENT_TX_MEDIUM_BUSY;
+					msg_send(&nmsg, dutymac_netdev2_pid);
+				}
             default:
                 DEBUG("gnrc_netdev2: Unknown command %" PRIu16 "\n", msg.type);
                 break;
