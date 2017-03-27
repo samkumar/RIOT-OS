@@ -28,14 +28,16 @@
 
 static gnrc_pktsnip_t *_recv(gnrc_netdev2_t *gnrc_netdev2);
 static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt);
-static int _resend(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt);
+static int _send_without_release(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt);
+static int _resend_without_release(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt);
 static int _send_beacon(gnrc_netdev2_t *gnrc_netdev2);
 
 int gnrc_netdev2_ieee802154_init(gnrc_netdev2_t *gnrc_netdev2,
                                  netdev2_ieee802154_t *dev)
 {
     gnrc_netdev2->send = _send;
-    gnrc_netdev2->resend = _resend;
+    gnrc_netdev2->send_without_release = _send_without_release;
+    gnrc_netdev2->resend_without_release = _resend_without_release;
     gnrc_netdev2->send_beacon = _send_beacon;
     gnrc_netdev2->recv = _recv;
     gnrc_netdev2->dev = (netdev2_t *)dev;
@@ -167,7 +169,7 @@ static gnrc_pktsnip_t *_recv(gnrc_netdev2_t *gnrc_netdev2)
     return pkt;
 }
 
-static int _send_impl(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt, bool retransmission)
+static int _send_impl(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt, bool retransmission, bool release_pkt)
 {
     netdev2_t *netdev = gnrc_netdev2->dev;
     netdev2_ieee802154_t *state = (netdev2_ieee802154_t *)gnrc_netdev2->dev;
@@ -260,17 +262,26 @@ static int _send_impl(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt, bool re
     else {
         return -ENOBUFS;
     }
+
+    /* If release_pkt is false, then only release the iovec, not the rest. */
+    if (!release_pkt) {
+        pkt->next = NULL;
+    }
     /* release old data */
     gnrc_pktbuf_release(pkt);
     return res;
 }
 
 static int _send(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt) {
-    return _send_impl(gnrc_netdev2, pkt, false);
+    return _send_impl(gnrc_netdev2, pkt, false, true);
 }
 
-static int _resend(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt) {
-    return _send_impl(gnrc_netdev2, pkt, true);
+static int _send_without_release(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt) {
+    return _send_impl(gnrc_netdev2, pkt, false, false);
+}
+
+static int _resend_without_release(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt) {
+    return _send_impl(gnrc_netdev2, pkt, true, false);
 }
 
 /* hskim: send Data Request MAC command for MAC operation */
