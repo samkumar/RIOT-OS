@@ -277,6 +277,11 @@ static int _send(gnrc_netif2_t *netif, gnrc_pktsnip_t *pkt)
     else {
         return -ENOBUFS;
     }
+
+    /* If release_pkt is false, then only release the iovec, not the rest. */
+    if (!release_pkt) {
+        pkt->next = NULL;
+    }
     /* release old data */
     gnrc_pktbuf_release(pkt);
     return res;
