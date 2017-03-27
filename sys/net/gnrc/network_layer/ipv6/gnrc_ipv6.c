@@ -911,7 +911,7 @@ static void _receive(gnrc_pktsnip_t *pkt)
     if (_pkt_not_for_me(&iface, hdr)) { /* if packet is not for me */
         DEBUG("ipv6: packet destination not this host\n");
 
-#ifdef MODULE_GNRC_IPV6_ROUTER    /* only routers redirect */
+#if defined(MODULE_GNRC_IPV6_ROUTER) || defined(I_AM_HAMILTON_BORDER_ROUTER)    /* only routers redirect */
         /* redirect to next hop */
         DEBUG("ipv6: decrement hop limit to %u\n", (uint8_t) (hdr->hl - 1));
 
