@@ -182,7 +182,6 @@ bool accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struc
     addrport.sin6_port = port;
     memcpy(&addrport.sin6_addr, addr, sizeof(struct in6_addr));
     accepted_successfully = event_acceptDone((uint8_t) tpl->index, &addrport, accepted->index);
-    tpl->t_state = TCPS_CLOSED;
     mutex_lock(&tcp_lock);
 
     return accepted_successfully;

@@ -120,5 +120,5 @@ uint16_t get_tcp_checksum(const gnrc_pktsnip_t *ip6snip, const gnrc_pktsnip_t** 
 {
     struct ip6_hdr* ip6 = ip6snip->data;
     return _calc_checksum(&ip6->ip6_src, &ip6->ip6_dst,
-                            (uint32_t) ip6->ip6_plen, snips);
+                            (uint32_t) htons(ip6->ip6_plen), snips);
 }

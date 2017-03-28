@@ -502,7 +502,7 @@ int sock_tcp_freebsd_recv(sock_tcp_freebsd_t *conn, void *data, size_t max_len)
 
     conn->errstat = 0;
     error = bsdtcp_receive(conn->sfields.active.asock, data, max_len, &bytes_read);
-    while (bytes_read == 0 && error == 0 && conn->errstat == 0) {
+    while (bytes_read == 0 && error == 0 && conn->errstat == 0 && !bsdtcp_hasrcvdfin(conn->sfields.active.asock)) {
         cond_wait(&conn->sfields.active.receive_cond, &conn->lock);
         error = bsdtcp_receive(conn->sfields.active.asock, data, max_len, &bytes_read);
     }

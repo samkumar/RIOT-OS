@@ -985,6 +985,13 @@ ssize_t sendto(int socket, const void *buffer, size_t length, int flags,
 #endif
 #ifdef MODULE_SOCK_TCP_FREEBSD
                 res = sock_tcp_freebsd_send(&s->sock->tcp_freebsd, buffer, length);
+                if (res < 0) {
+                    errno = -res;
+                    res = -1;
+                } else {
+                    errno = 0;
+                    res = length;
+                }
 #endif
             }
             else {
