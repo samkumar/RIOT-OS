@@ -8,12 +8,15 @@
 #define GNRC_SOCK_TCP_FREEBSD_ZALLOC_H_
 
 #include "memmgr.h"
+#include "mutex.h"
 
-#define ENABLE_DEBUG (0)
+//#define ENABLE_DEBUG (0)
 
 #include "debug.h"
 
 static bool initialized = false;
+
+mutex_t sock_tcp_freebsd_zalloc_mutex = MUTEX_INIT;
 
 static inline void sock_tcp_freebsd_zone_init(void)
 {
@@ -27,9 +30,11 @@ static inline void* sock_tcp_freebsd_zalloc(unsigned long numbytes) {
     if (numbytes == 0) {
         return NULL;
     }
+    //mutex_lock(&sock_tcp_freebsd_zalloc_mutex);
     sock_tcp_freebsd_zone_init();
     void* p = memmgr_alloc(numbytes);
-    DEBUG("Allocating %lu bytes: %p\n", numbytes, p);
+    //mutex_unlock(&sock_tcp_freebsd_zalloc_mutex);
+    printf("Allocating %lu bytes: %p\n", numbytes, p);
     return p;
 }
 
@@ -37,9 +42,11 @@ static inline void sock_tcp_freebsd_zfree(void* ptr) {
     if (ptr == NULL) {
         return;
     }
+    //mutex_lock(&sock_tcp_freebsd_zalloc_mutex);
     assert(initialized);
-    DEBUG("Freeing %p\n", ptr);
     memmgr_free(ptr);
+    //mutex_unlock(&sock_tcp_freebsd_zalloc_mutex);
+    printf("Freeing %p\n", ptr);
 }
 
 #endif

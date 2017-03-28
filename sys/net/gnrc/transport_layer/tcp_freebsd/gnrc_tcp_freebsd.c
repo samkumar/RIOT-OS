@@ -142,13 +142,22 @@ void handle_signals(struct tcpcb* tp, uint8_t signals, uint32_t freedentries)
     }
 }
 
+void _fill_acceptArgs_from_tcpcb(acceptArgs_t* args, struct tcpcb* tcb) {
+    args->asockid = tcb->index;
+    args->recvbuf = tcb->recvbuf.buf;
+    args->recvbuflen = tcb->recvbuf.size;
+    args->reassbmp = tcb->reassbmp;
+}
+
 /**
  * Called when an active socket loses a connection.
  */
 void connection_lost(struct tcpcb* tcb, uint8_t errnum)
 {
+    acceptArgs_t args;
+    _fill_acceptArgs_from_tcpcb(&args, tcb);
     mutex_unlock(&tcp_lock);
-    event_connectionLost((uint8_t) tcb->index, errnum);
+    event_connectionLost(&args, errnum);
     mutex_lock(&tcp_lock);
 }
 
@@ -178,10 +187,12 @@ bool accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struc
 {
     bool accepted_successfully;
     struct sockaddr_in6 addrport;
+    acceptArgs_t acceptedArgs;
+    _fill_acceptArgs_from_tcpcb(&acceptedArgs, accepted);
     mutex_unlock(&tcp_lock);
     addrport.sin6_port = port;
     memcpy(&addrport.sin6_addr, addr, sizeof(struct in6_addr));
-    accepted_successfully = event_acceptDone((uint8_t) tpl->index, &addrport, accepted->index);
+    accepted_successfully = event_acceptDone((uint8_t) tpl->index, &addrport, &acceptedArgs);
     mutex_lock(&tcp_lock);
 
     return accepted_successfully;

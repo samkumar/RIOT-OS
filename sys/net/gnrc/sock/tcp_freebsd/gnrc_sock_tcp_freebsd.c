@@ -113,10 +113,18 @@ static void sock_tcp_freebsd_receiveReady(uint8_t ai, int gotfin, void* ctx)
     mutex_unlock(&conn->lock);
 }
 
-static void sock_tcp_freebsd_connectionLost(uint8_t ai, uint8_t how, void* ctx)
+static void sock_tcp_freebsd_connectionLost(acceptArgs_t* lost, uint8_t how, void* ctx)
 {
-    (void) ai;
     (void) how;
+    if (ctx == NULL) {
+        /* This could happen if we get a SYN, so that acceptReady is called, but the
+         * connection dies before a SYN-ACK is received, so the socket never hits
+         * the accept queue.
+         * In that case, we need to free the receive buffer, which we allocated.
+         */
+        sock_tcp_freebsd_zfree(lost->recvbuf);
+        return;
+    }
     sock_tcp_freebsd_t* conn = ctx;
     mutex_lock(&conn->lock);
     assert(conn->hasactive && !conn->haspassive);
@@ -148,6 +156,11 @@ static acceptArgs_t sock_tcp_freebsd_acceptReady(uint8_t pi, void* ctx)
         sock_tcp_freebsd_sendDone, sock_tcp_freebsd_receiveReady,
         sock_tcp_freebsd_connectionLost, NULL);
 
+    if (asockid == -1) {
+        sock_tcp_freebsd_zfree(recvbuf);
+        goto fail;
+    }
+
     args.asockid = asockid;
     args.recvbuf = recvbuf;
     args.recvbuflen = RECV_BUF_LEN;
@@ -166,7 +179,7 @@ fail:
     goto done;
 }
 
-static bool sock_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, int ai, void* ctx)
+static bool sock_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, acceptArgs_t* accepted, void* ctx)
 {
     (void) pi;
     (void) faddr;
@@ -186,7 +199,9 @@ static bool sock_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, 
         mutex_unlock(&conn->lock);
         return false;
     }
-    conn->sfields.passive.accept_queue[putidx] = ai;
+    struct sock_tcp_freebsd_accept_queue_entry* queue_slot = &conn->sfields.passive.accept_queue[putidx];
+    queue_slot->asockid = accepted->asockid;
+    queue_slot->recvbuf = accepted->recvbuf;
 
     cond_signal(&conn->sfields.passive.accept_cond);
 
@@ -218,8 +233,11 @@ static void sock_tcp_freebsd_passive_clear(sock_tcp_freebsd_t* conn)
         bsdtcp_close(conn->sfields.passive.psock);
         cond_broadcast(&conn->sfields.passive.accept_cond);
 
+        struct sock_tcp_freebsd_accept_queue_entry* queue_slot;
         while ((asockidx = cib_get(&conn->sfields.passive.accept_cib)) != -1) {
-            bsdtcp_close(conn->sfields.passive.accept_queue[asockidx]);
+            queue_slot = &conn->sfields.passive.accept_queue[asockidx];
+            sock_tcp_freebsd_zfree(queue_slot->recvbuf);
+            bsdtcp_close(queue_slot->asockid);
         }
         sock_tcp_freebsd_zfree(conn->sfields.passive.accept_queue);
     }
@@ -305,7 +323,7 @@ static bool sock_tcp_freebsd_passive_set(sock_tcp_freebsd_t* conn, int queue_len
 
         cib_init(&conn->sfields.passive.accept_cib, adj_queue_len);
 
-        conn->sfields.passive.accept_queue = sock_tcp_freebsd_zalloc(adj_queue_len * sizeof(int));
+        conn->sfields.passive.accept_queue = sock_tcp_freebsd_zalloc(adj_queue_len * sizeof(struct sock_tcp_freebsd_accept_queue_entry));
         if (conn->sfields.passive.accept_queue == NULL && adj_queue_len != 0) {
             conn->haspassive = false;
             bsdtcp_close(conn->sfields.passive.psock);
@@ -476,12 +494,14 @@ int sock_tcp_freebsd_accept(sock_tcp_freebsd_t* conn, sock_tcp_freebsd_t* out_co
         cond_wait(&conn->sfields.passive.accept_cond, &conn->lock);
     }
 
-    int asock = conn->sfields.passive.accept_queue[asockidx];
+    struct sock_tcp_freebsd_accept_queue_entry* queue_slot = &conn->sfields.passive.accept_queue[asockidx];
+    int asock = queue_slot->asockid;
 
     memcpy(&out_conn->local_addr, &conn->local_addr, sizeof(ipv6_addr_t));
     sock_tcp_freebsd_general_init(out_conn, conn->local_port);
 
     mutex_lock(&out_conn->lock);
+    out_conn->sfields.active.recvbuf = queue_slot->recvbuf;
     sock_tcp_freebsd_active_set(out_conn, asock);
     int rv = bsdtcp_set_ctx(asock, out_conn);
     assert(rv == 0);

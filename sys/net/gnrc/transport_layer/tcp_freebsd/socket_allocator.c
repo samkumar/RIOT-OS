@@ -361,7 +361,7 @@ acceptArgs_t event_acceptReady(uint8_t pi)
         return args;
     }
 }
-bool event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid)
+bool event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, acceptArgs_t* accepted)
 {
     assert(pi >= 0 && pi < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS);
     assert(_is_allocated(passivemask, pi));
@@ -369,7 +369,7 @@ bool event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, int asockid)
     passive_socket_t* psock = &passivesockets[pi];
 
     if (psock->acceptDone != NULL) {
-        return psock->acceptDone(pi, addr, asockid, psock->context);
+        return psock->acceptDone(pi, addr, accepted, psock->context);
     }
 
     return false;
@@ -411,15 +411,16 @@ void event_sendDone(uint8_t ai, uint32_t numentries)
     }
 }
 
-void event_connectionLost(uint8_t ai, uint8_t how)
+void event_connectionLost(acceptArgs_t* lost, uint8_t how)
 {
+    int ai = lost->asockid;
     assert(ai >= 0 && ai < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
     // Doesn't need t be allocated
 
     active_socket_t* asock = &activesockets[ai];
 
     if (asock->connectionLost != NULL) {
-        asock->connectionLost(ai, how, asock->context);
+        asock->connectionLost(lost, how, asock->context);
     }
 }
 

@@ -130,7 +130,7 @@ struct sock_tcp_freebsd {
 
             /* Circular buffer for accept queue. */
             cib_t accept_cib;
-            int* accept_queue;
+            struct sock_tcp_freebsd_accept_queue_entry* accept_queue;
         } passive;
     } sfields; /* specific fields */
     int errstat;
