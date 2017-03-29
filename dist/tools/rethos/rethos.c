@@ -1020,7 +1020,7 @@ int main(int argc, char *argv[])
                 dsock = domain_sockets[i].server_socket;
                 if (FD_ISSET(dsock, &readfds)) {
                     struct sockaddr_un client_addr;
-                    socklen_t client_addr_len;
+                    socklen_t client_addr_len = sizeof(client_addr);
                     int client_socket = accept(dsock, (struct sockaddr*) &client_addr, &client_addr_len);
                     if (client_socket == -1) {
                         check_fatal_error("accept connection on domain socket");
@@ -1038,6 +1038,7 @@ int main(int argc, char *argv[])
                     ssize_t res = read(dsock, inbuf, sizeof(inbuf));
                     if (res <= 0) {
                         assert(errno != EWOULDBLOCK);
+                        perror("read from domain socket");
                         close(dsock);
                         domain_sockets[i].client_socket = -1;
                         channel_listen(&domain_sockets[i], i);
