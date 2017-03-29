@@ -166,6 +166,7 @@ typedef struct {
     uint8_t rexmit_frame[RETHOS_TX_BUF_SZ];
     bool rexmit_acked;
 
+    bool nack_ready;
     bool rexmit_ready;
     bool rx_ready;
 

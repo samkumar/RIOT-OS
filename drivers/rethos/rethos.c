@@ -98,6 +98,7 @@ void rethos_setup(ethos_t *dev, const ethos_params_t *params)
     dev->stats_rx_cksum_fail = 0;
     dev->stats_rx_bytes = 0;
 
+    dev->nack_ready = false;
     dev->rx_ready = false;
     dev->rexmit_ready = false;
     dev->rexmit_acked = true;
@@ -260,7 +261,10 @@ static void sm_char(ethos_t *dev, uint8_t c)
         {
             dev->stats_rx_cksum_fail++;
             //SAM: do nack or something
-            rethos_send_nack_frame(dev);
+            dev->nack_ready = true;
+            if (dev->netdev.event_callback != NULL) {
+                dev->netdev.event_callback((netdev2_t*) dev, NETDEV2_EVENT_ISR);
+            }
         } else {
             dev->stats_rx_frames++;
             dev->stats_rx_bytes += r->rx_buffer_index;
@@ -340,6 +344,10 @@ static void _isr(netdev2_t *netdev)
     //This is what we would do if we were acting like a normal netdev...
     //dev->netdev.event_callback((netdev2_t*) dev, NETDEV2_EVENT_RX_COMPLETE);
 
+    if (dev->nack_ready) {
+        dev->nack_ready = false;
+        rethos_send_nack_frame(dev);
+    }
     if (dev->rx_ready) {
         dev->rx_ready = false;
         process_frame(dev);
