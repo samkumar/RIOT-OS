@@ -14,6 +14,7 @@
  */
 
 #include <errno.h>
+#include "gnrc_sock_internal.h"
 #include "net/af.h"
 #include "net/sock.h"
 #include "net/gnrc/ipv6.h"
@@ -355,6 +356,29 @@ bool sock_tcp_freebsd_set_local_ipv6_addr(uint8_t *conn_addr, const ipv6_addr_t 
     return true;
 }
 
+static uint16_t _dyn_port_next = 0;
+/**
+ * @brief   returns a UDP port, and checks for reuse if required
+ * I copied this from the sock_udp module, with a minor modification.
+ *
+ * complies to RFC 6056, see https://tools.ietf.org/html/rfc6056#section-3.3.3
+ */
+static uint16_t _get_dyn_port(sock_tcp_freebsd_t *sock)
+{
+    uint16_t port;
+    unsigned count = GNRC_SOCK_DYN_PORTRANGE_NUM;
+    do {
+        port = GNRC_SOCK_DYN_PORTRANGE_MIN +
+               (_dyn_port_next * GNRC_SOCK_DYN_PORTRANGE_OFF) % GNRC_SOCK_DYN_PORTRANGE_NUM;
+        _dyn_port_next++;
+        if ((sock == NULL) || gnrc_tcp_freebsd_portisfree(port)) {
+            return port;
+        }
+        --count;
+    } while (count > 0);
+    return GNRC_SOCK_DYN_PORTRANGE_ERR;
+}
+
 int sock_tcp_freebsd_create(sock_tcp_freebsd_t *conn, const void *addr, size_t addr_len, int family,
                     uint16_t port)
 {
@@ -364,6 +388,12 @@ int sock_tcp_freebsd_create(sock_tcp_freebsd_t *conn, const void *addr, size_t a
         case AF_INET6:
             if (addr_len != sizeof(ipv6_addr_t)) {
                 return -EINVAL;
+            }
+            if (port == 0) {
+                port = _get_dyn_port(conn);
+                if (port == GNRC_SOCK_DYN_PORTRANGE_ERR) {
+                    return -EADDRINUSE;
+                }
             }
             if (sock_tcp_freebsd_set_local_ipv6_addr((uint8_t*) &conn->local_addr, addr)) {
                 sock_tcp_freebsd_general_init(conn, port);

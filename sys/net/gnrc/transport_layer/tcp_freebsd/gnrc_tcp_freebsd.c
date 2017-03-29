@@ -442,7 +442,7 @@ int gnrc_tcp_freebsd_init(void)
 }
 
 /* A helper function. PORT is in network byte order. */
-bool portisfree(uint16_t port)
+bool gnrc_tcp_freebsd_portisfree(uint16_t port)
 {
     int i;
     for (i = 0; i < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
@@ -491,7 +491,7 @@ error_t asock_bind_impl(int asockid, uint16_t port)
     oldport = tcbs[asockid].lport;
     port = htons(port);
     tcbs[asockid].lport = 0;
-    if (port == 0 || portisfree(port)) {
+    if (port == 0 || gnrc_tcp_freebsd_portisfree(port)) {
         tcbs[asockid].lport = port;
         rv = SUCCESS;
         goto done;
@@ -511,7 +511,7 @@ error_t psock_bind_impl(int psockid, uint16_t port)
     oldport = tcbls[psockid].lport;
     port = htons(port);
     tcbls[psockid].lport = 0;
-    if (port == 0 || portisfree(port)) {
+    if (port == 0 || gnrc_tcp_freebsd_portisfree(port)) {
         tcbls[psockid].lport = port;
         rv = SUCCESS;
         goto done;

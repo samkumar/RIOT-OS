@@ -45,6 +45,7 @@ typedef void (*connectionLost_t)(acceptArgs_t*, uint8_t, void*);
 typedef acceptArgs_t (*acceptReady_t)(uint8_t, void*);
 typedef bool (*acceptDone_t)(uint8_t, struct sockaddr_in6*, acceptArgs_t*, void*);
 
+bool gnrc_tcp_freebsd_portisfree(uint16_t port);
 int bsdtcp_active_socket(connectDone_t cd, sendDone_t sd, receiveReady_t rr, connectionLost_t cl, void* ctx);
 int bsdtcp_passive_socket(acceptReady_t ar, acceptDone_t ad, void* ctx);
 int bsdtcp_set_ctx(int fd, void* newctx);
