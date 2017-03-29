@@ -105,7 +105,9 @@ void send_packet(gnrc_pktsnip_t* pkt, gnrc_netdev2_t* gnrc_dutymac_netdev2, bool
 	msg_t msg;
 	msg.type = GNRC_NETDEV2_MSG_TYPE_LINK_RETRANSMIT;
 	msg.content.ptr = pkt;
-	msg_send(&msg, dutymac_netdev2_pid);
+	if (msg_send(&msg, dutymac_netdev2_pid) <= 0) {
+		assert(false);
+	}
 }
 
 void send_packet_csma(gnrc_pktsnip_t* pkt, gnrc_netdev2_t* gnrc_dutymac_netdev2, bool retransmission) {
@@ -309,7 +311,6 @@ void neighbor_table_update(uint16_t l2addr, gnrc_netif_hdr_t *hdr) {
 static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 {
 	gnrc_netdev2_t* gnrc_dutymac_netdev2 = (gnrc_netdev2_t*)dev->context;
-	dutymac_netdev2_pid = sched_active_pid;
     if (event == NETDEV2_EVENT_ISR) {
         msg_t msg;
         msg.type = NETDEV2_MSG_TYPE_EVENT;
@@ -403,7 +404,7 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 				}
 				break;
             default:
-                DEBUG("gnrc_netdev2: warning: unhandled event %u.\n", event);
+                printf("gnrc_netdev2: warning: unhandled event %u.\n", event);
         }
     }
 }
@@ -433,6 +434,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
     gnrc_netdev2_t* gnrc_dutymac_netdev2 = (gnrc_netdev2_t*) args;
     netdev2_t *dev = gnrc_dutymac_netdev2->dev;
     gnrc_dutymac_netdev2->pid = thread_getpid();
+	dutymac_netdev2_pid = gnrc_dutymac_netdev2->pid;
 
 	timer.callback = broadcast_cb;
 	timer.arg = (void*) gnrc_dutymac_netdev2;
