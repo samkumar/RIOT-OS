@@ -45,7 +45,6 @@ extern isrpipe_t uart_stdio_isrpipe;
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
-static void _get_mac_addr(netdev2_t *dev, uint8_t* buf);
 static void ethos_isr(void *arg, uint8_t c);
 static const netdev2_driver_t netdev2_driver_ethos;
 
@@ -82,13 +81,14 @@ static uint16_t fletcher16_fin(uint16_t sum1, uint16_t sum2)
     return (sum2 << 8) | sum1;
 }
 
-void ethos_setup(ethos_t *dev, const ethos_params_t *params)
+void rethos_setup(ethos_t *dev, const ethos_params_t *params)
 {
     dev->netdev.driver = &netdev2_driver_ethos;
     dev->uart = params->uart;
     dev->state = SM_WAIT_FRAMESTART;
-    dev->netdev_packetsz = 0;
-    dev->rx_buffer_index = 0;
+    dev->recv_ctx_index = 0;
+    dev->recv_ctx[0].rx_buffer_index = 0;
+    dev->recv_ctx[1].rx_buffer_index = 0;
     dev->handlers = NULL;
     dev->txseq = 0;
     dev->stats_tx_frames = 0;
@@ -98,19 +98,12 @@ void ethos_setup(ethos_t *dev, const ethos_params_t *params)
     dev->stats_rx_cksum_fail = 0;
     dev->stats_rx_bytes = 0;
 
+    dev->rx_ready = false;
+    dev->rexmit_ready = false;
     dev->rexmit_acked = true;
     dev->received_data = false;
 
-    tsrb_init(&dev->netdev_inbuf, (char*)params->buf, params->bufsize);
     mutex_init(&dev->out_mutex);
-
-    uint32_t a = random_uint32();
-    memcpy(dev->mac_addr, (char*)&a, 4);
-    a = random_uint32();
-    memcpy(dev->mac_addr+4, (char*)&a, 2);
-
-    dev->mac_addr[0] &= (0x2);      /* unset globally unique bit */
-    dev->mac_addr[0] &= ~(0x1);     /* set unicast bit*/
 
     rexmit_timer.callback = rethos_rexmit_callback;
 
@@ -125,11 +118,16 @@ void ethos_setup(ethos_t *dev, const ethos_params_t *params)
 
 static void sm_invalidate(ethos_t *dev)
 {
+    struct rethos_recv_ctx* r = &dev->recv_ctx[dev->recv_ctx_index];
     dev->state = SM_WAIT_FRAMESTART;
-    dev->rx_buffer_index = 0;
+    r->rx_buffer_index = 0;
 }
 static void process_frame(ethos_t *dev)
 {
+    /* We want to process the frame in the buffer that isn't being used to
+     * receive new data right now...
+     */
+    struct rethos_recv_ctx* r = &dev->recv_ctx[1 - dev->recv_ctx_index];
     /* Sam: Michael, I have no idea what you're doing here.
     if (dev->rx_frame_type == RETHOS_FRAME_TYPE_SETMAC)
     {
@@ -137,20 +135,20 @@ static void process_frame(ethos_t *dev)
       rethos_send_frame(dev, dev->mac_addr, 6, RETHOS_CHANNEL_CONTROL, RETHOS_FRAME_TYPE_SETMAC);
     }
     */
-    if (dev->rx_frame_type != RETHOS_FRAME_TYPE_DATA)
+    if (r->rx_frame_type != RETHOS_FRAME_TYPE_DATA)
     {
         /* All ACKs and NACKs happen on the RETHOS-reserved channel. */
-        if (dev->rx_channel == RETHOS_CHANNEL_CONTROL)
+        if (r->rx_channel == RETHOS_CHANNEL_CONTROL)
         {
-            if (dev->rx_frame_type == RETHOS_FRAME_TYPE_ACK)
+            if (r->rx_frame_type == RETHOS_FRAME_TYPE_ACK)
             {
-                if (dev->rx_seqno == dev->rexmit_seqno)
+                if (r->rx_seqno == dev->rexmit_seqno)
                 {
                     dev->rexmit_acked = true;
                     xtimer_remove(&rexmit_timer);
                 }
             }
-            else if (dev->rx_frame_type == RETHOS_FRAME_TYPE_NACK)
+            else if (r->rx_frame_type == RETHOS_FRAME_TYPE_NACK)
             {
                 if (dev->rexmit_acked)
                 {
@@ -162,7 +160,7 @@ static void process_frame(ethos_t *dev)
                      */
                     if (dev->received_data)
                     {
-                        rethos_send_ack_frame(dev, dev->rx_seqno);
+                        rethos_send_ack_frame(dev, r->rx_seqno);
                     }
                 }
                 else
@@ -177,13 +175,17 @@ static void process_frame(ethos_t *dev)
     }
 
     dev->received_data = true;
-    dev->last_rcvd_seqno = dev->rx_seqno;
+
+    if (dev->last_rcvd_seqno == r->rx_seqno) {
+        return;
+    }
+    dev->last_rcvd_seqno = r->rx_seqno;
 
     /* ACK the frame we just received. */
-    rethos_send_ack_frame(dev, dev->rx_seqno);
+    rethos_send_ack_frame(dev, r->rx_seqno);
 
     //Handle the special channels
-    switch(dev->rx_channel) {
+    switch(r->rx_channel) {
     /* Sam: I'm not using REthos as a netdev, and this fails when I enable rtt_stdio... */
     /*
       case RETHOS_CHANNEL_NETDEV:
@@ -209,112 +211,124 @@ static void process_frame(ethos_t *dev)
     rethos_handler_t *h = dev->handlers;
     while (h != NULL)
     {
-      if (h->channel == dev->rx_channel) {
-        h->cb(dev, dev->rx_channel, dev->rx_buffer, dev->rx_buffer_index);
-      }
-      h = h->_next;
+        if (h->channel == r->rx_channel) {
+            h->cb(dev, r->rx_channel, r->rx_buffer, r->rx_buffer_index);
+        }
+        h = h->_next;
     }
 }
 
 static void sm_char(ethos_t *dev, uint8_t c)
 {
-  switch (dev->state)
-  {
+    struct rethos_recv_ctx* r = &dev->recv_ctx[dev->recv_ctx_index];
+    switch (dev->state)
+    {
     case SM_WAIT_TYPE:
-      dev->rx_frame_type = c;
-      fletcher16_add(&c, 1, &dev->rx_cksum1, &dev->rx_cksum2);
-      dev->state = SM_WAIT_SEQ0;
-      return;
+        r->rx_frame_type = c;
+        fletcher16_add(&c, 1, &r->rx_cksum1, &r->rx_cksum2);
+        dev->state = SM_WAIT_SEQ0;
+        return;
     case SM_WAIT_SEQ0:
-      dev->rx_seqno = c;
-      fletcher16_add(&c, 1, &dev->rx_cksum1, &dev->rx_cksum2);
-      dev->state = SM_WAIT_SEQ1;
-      return;
+        r->rx_seqno = c;
+        fletcher16_add(&c, 1, &r->rx_cksum1, &r->rx_cksum2);
+        dev->state = SM_WAIT_SEQ1;
+        return;
     case SM_WAIT_SEQ1:
-      dev->rx_seqno |= (((uint16_t)c)<<8);
-      fletcher16_add(&c, 1, &dev->rx_cksum1, &dev->rx_cksum2);
-      dev->state = SM_WAIT_CHANNEL;
-      return;
+        r->rx_seqno |= (((uint16_t)c)<<8);
+        fletcher16_add(&c, 1, &r->rx_cksum1, &r->rx_cksum2);
+        dev->state = SM_WAIT_CHANNEL;
+        return;
     case SM_WAIT_CHANNEL:
-      dev->rx_channel = c;
-      fletcher16_add(&c, 1, &dev->rx_cksum1, &dev->rx_cksum2);
-      dev->state = SM_IN_FRAME;
-      return;
+        r->rx_channel = c;
+        fletcher16_add(&c, 1, &r->rx_cksum1, &r->rx_cksum2);
+        dev->state = SM_IN_FRAME;
+        return;
     case SM_IN_FRAME:
-      dev->rx_buffer[dev->rx_buffer_index] = c;
-      fletcher16_add(&c, 1, &dev->rx_cksum1, &dev->rx_cksum2);
-      if ((++dev->rx_buffer_index) >= RETHOS_RX_BUF_SZ) {
-        sm_invalidate(dev);
-      }
-      return;
+        r->rx_buffer[r->rx_buffer_index] = c;
+        fletcher16_add(&c, 1, &r->rx_cksum1, &r->rx_cksum2);
+        if ((++r->rx_buffer_index) >= RETHOS_RX_BUF_SZ) {
+            sm_invalidate(dev);
+        }
+        return;
     case SM_WAIT_CKSUM1:
-      dev->rx_expected_cksum = c;
-      dev->state = SM_WAIT_CKSUM2;
-      return;
+        r->rx_expected_cksum = c;
+        dev->state = SM_WAIT_CKSUM2;
+        return;
     case SM_WAIT_CKSUM2:
-      dev->rx_expected_cksum |= (((uint16_t)c)<<8);
-      if (dev->rx_expected_cksum != dev->rx_actual_cksum)
-      {
-        dev->stats_rx_cksum_fail++;
-        //SAM: do nack or something
-        rethos_send_nack_frame(dev);
-      } else {
-        dev->stats_rx_frames++;
-        dev->stats_rx_bytes += dev->rx_buffer_index;
-        process_frame(dev);
-      }
-      sm_invalidate(dev);
-      return;
+        r->rx_expected_cksum |= (((uint16_t)c)<<8);
+        if (r->rx_expected_cksum != r->rx_actual_cksum)
+        {
+            dev->stats_rx_cksum_fail++;
+            //SAM: do nack or something
+            rethos_send_nack_frame(dev);
+        } else {
+            dev->stats_rx_frames++;
+            dev->stats_rx_bytes += r->rx_buffer_index;
+
+            /* Switch the active receive context so the next frame doesn't trample over this one (while it's being processed). */
+            dev->recv_ctx_index = 1 - dev->recv_ctx_index;
+
+            /* Schedule processing of received frame in a thread. */
+            dev->rx_ready = true;
+            if (dev->netdev.event_callback != NULL) {
+                dev->netdev.event_callback((netdev2_t*) dev, NETDEV2_EVENT_ISR);
+            }
+        }
+        sm_invalidate(dev);
+        return;
     default:
-      return;
-  }
+        return;
+    }
 }
 static void sm_frame_start(ethos_t *dev)
 {
-  //Drop everything, we are beginning a new frame reception
-  dev->state = SM_WAIT_TYPE;
-  dev->rx_buffer_index = 0;
-  dev->rx_cksum1 = 0xFF;
-  dev->rx_cksum2 = 0xFF;
+    struct rethos_recv_ctx* r = &dev->recv_ctx[dev->recv_ctx_index];
+    //Drop everything, we are beginning a new frame reception
+    dev->state = SM_WAIT_TYPE;
+    r->rx_buffer_index = 0;
+    r->rx_cksum1 = 0xFF;
+    r->rx_cksum2 = 0xFF;
 }
 //This is not quite the real end of the frame, we still expect the checksum
 static void sm_frame_end(ethos_t *dev)
 {
-  uint16_t cksum = fletcher16_fin(dev->rx_cksum1, dev->rx_cksum2);
-  dev->rx_actual_cksum = cksum;
-  dev->state = SM_WAIT_CKSUM1;
+    struct rethos_recv_ctx* r = &dev->recv_ctx[dev->recv_ctx_index];
+    uint16_t cksum = fletcher16_fin(r->rx_cksum1, r->rx_cksum2);
+    r->rx_actual_cksum = cksum;
+    dev->state = SM_WAIT_CKSUM1;
 }
+
 static void ethos_isr(void *arg, uint8_t c)
 {
     ethos_t *dev = (ethos_t *) arg;
 
     if (dev->state == SM_IN_ESCAPE) {
-      switch (c) {
+        switch (c) {
         case RETHOS_LITERAL_ESC:
-          dev->state = dev->fromstate;
-          sm_char(dev, RETHOS_ESC_CHAR);
-          return;
+            dev->state = dev->fromstate;
+            sm_char(dev, RETHOS_ESC_CHAR);
+            return;
         case RETHOS_FRAME_START:
-          sm_frame_start(dev);
-          return;
+            sm_frame_start(dev);
+            return;
         case RETHOS_FRAME_END:
-          sm_frame_end(dev);
-          return;
+            sm_frame_end(dev);
+            return;
         default:
-          //any other character is invalid
-          sm_invalidate(dev);
-          return;
-      }
+            //any other character is invalid
+            sm_invalidate(dev);
+            return;
+        }
     } else {
-      switch(c) {
+        switch(c) {
         case RETHOS_ESC_CHAR:
-          dev->fromstate = dev->state;
-          dev->state = SM_IN_ESCAPE;
-          return;
+            dev->fromstate = dev->state;
+            dev->state = SM_IN_ESCAPE;
+            return;
         default:
-          sm_char(dev, c);
-          return;
-      }
+            sm_char(dev, c);
+            return;
+        }
     }
 }
 
@@ -322,7 +336,19 @@ static void ethos_isr(void *arg, uint8_t c)
 static void _isr(netdev2_t *netdev)
 {
     ethos_t *dev = (ethos_t *) netdev;
-    dev->netdev.event_callback((netdev2_t*) dev, NETDEV2_EVENT_RX_COMPLETE);
+
+    //This is what we would do if we were acting like a normal netdev...
+    //dev->netdev.event_callback((netdev2_t*) dev, NETDEV2_EVENT_RX_COMPLETE);
+
+    if (dev->rx_ready) {
+        dev->rx_ready = false;
+        process_frame(dev);
+    }
+    if (dev->rexmit_ready) {
+        dev->rexmit_ready = false;
+        rethos_rexmit_data_frame(dev);
+        xtimer_set(&rexmit_timer, (uint32_t) RETHOS_REXMIT_MICROS);
+    }
 }
 
 static int _init(netdev2_t *encdev)
@@ -363,9 +389,10 @@ static void _write_escaped(uart_t uart, uint8_t c)
 void rethos_rexmit_callback(void* arg)
 {
     ethos_t* dev = (ethos_t*) arg;
-    rethos_rexmit_data_frame(dev);
-
-    xtimer_set(&rexmit_timer, (uint32_t) RETHOS_REXMIT_MICROS);
+    dev->rexmit_ready = true;
+    if (dev->netdev.event_callback != NULL) {
+        dev->netdev.event_callback((netdev2_t*) dev, NETDEV2_EVENT_ISR);
+    }
 }
 
 void _start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type)
@@ -538,14 +565,11 @@ static int _send(netdev2_t *netdev, const struct iovec *vector, unsigned count)
     return pktlen;
 }
 
-static void _get_mac_addr(netdev2_t *encdev, uint8_t* buf)
-{
-    ethos_t * dev = (ethos_t *) encdev;
-    memcpy(buf, dev->mac_addr, 6);
-}
-
 static int _recv(netdev2_t *netdev, void *buf, size_t len, void* info)
 {
+    /* Sam: I'm not using REthos as a netdev... */
+    return 0;
+/*
     (void) info;
     ethos_t * dev = (ethos_t *) netdev;
 
@@ -556,21 +580,19 @@ static int _recv(netdev2_t *netdev, void *buf, size_t len, void* info)
         }
 
         len = dev->netdev_packetsz;
-        dev->netdev_packetsz = 0;
 
-/* Sam: I'm not using REthos as a netdev... */
-/*
+
         if ((tsrb_get(&dev->netdev_inbuf, buf, len) != len)) {
             DEBUG("ethos _recv(): inbuf doesn't contain enough bytes.\n");
             return -1;
         }
-*/
 
         return (int)len;
     }
     else {
         return dev->netdev_packetsz;
     }
+*/
 }
 
 static int _get(netdev2_t *dev, netopt_t opt, void *value, size_t max_len)
@@ -583,7 +605,7 @@ static int _get(netdev2_t *dev, netopt_t opt, void *value, size_t max_len)
                 res = -EINVAL;
             }
             else {
-                _get_mac_addr(dev, (uint8_t*)value);
+                //_get_mac_addr(dev, (uint8_t*)value);
                 res = ETHERNET_ADDR_LEN;
             }
             break;

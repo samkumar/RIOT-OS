@@ -114,26 +114,8 @@ struct _rethos_handler;
 
 typedef struct _rethos_handler rethos_handler_t;
 
-/**
- * @brief ethos netdev2 device
- * @extends netdev2_t
- */
-typedef struct {
-    netdev2_t netdev;       /**< extended netdev2 structure */
-    uart_t uart;            /**< UART device the to use */
-    uint8_t mac_addr[6];    /**< this device's MAC address */
-    uint8_t remote_mac_addr[6]; /**< this device's MAC address */
 
-    line_state_t state;     /**< Line status variable */
-    line_state_t fromstate; /**< what you go back to after escape */
-  //  size_t framesize;       /**< size of currently incoming frame */
-  //  unsigned frametype;     /**< type of currently incoming frame */
-  //  size_t last_framesize;  /**< size of last completed frame */
-    mutex_t out_mutex;      /**< mutex used for locking concurrent sends */
-
-    tsrb_t netdev_inbuf;           /**< ringbuffer for incoming netdev data */
-    size_t netdev_packetsz;
-
+struct rethos_recv_ctx {
     uint8_t rx_buffer [RETHOS_RX_BUF_SZ];
     size_t rx_buffer_index;
     uint8_t rx_frame_type;
@@ -143,6 +125,25 @@ typedef struct {
     uint16_t rx_cksum2;
     uint16_t rx_actual_cksum; //The data
     uint16_t rx_expected_cksum; //The header
+};
+
+/**
+ * @brief ethos netdev2 device
+ * @extends netdev2_t
+ */
+typedef struct {
+    netdev2_t netdev;       /**< extended netdev2 structure */
+    uart_t uart;            /**< UART device the to use */
+
+    line_state_t state;     /**< Line status variable */
+    line_state_t fromstate; /**< what you go back to after escape */
+  //  size_t framesize;       /**< size of currently incoming frame */
+  //  unsigned frametype;     /**< type of currently incoming frame */
+  //  size_t last_framesize;  /**< size of last completed frame */
+    mutex_t out_mutex;      /**< mutex used for locking concurrent sends */
+
+    int recv_ctx_index;
+    struct rethos_recv_ctx recv_ctx[2]; /* One to store received frame for processing, another to store state while receiving frames. */
 
     rethos_handler_t *handlers;
 
@@ -154,9 +155,7 @@ typedef struct {
     uint32_t stats_tx_frames;
     uint32_t stats_tx_retries;
 
-  //  uint8_t txframebuf [RETHOS_TX_BUF];
     uint16_t txseq;
-  //  uint16_t txlen;
     uint16_t flsum1;
     uint16_t flsum2;
 
@@ -166,6 +165,9 @@ typedef struct {
     size_t rexmit_numbytes;
     uint8_t rexmit_frame[RETHOS_TX_BUF_SZ];
     bool rexmit_acked;
+
+    bool rexmit_ready;
+    bool rx_ready;
 
     bool received_data;
     uint16_t last_rcvd_seqno;
@@ -200,7 +202,7 @@ typedef struct {
  * @param[out]  dev         handle of the device to initialize
  * @param[in]   params      parameters for device initialization
  */
-void ethos_setup(ethos_t *dev, const ethos_params_t *params);
+void rethos_setup(ethos_t *dev, const ethos_params_t *params);
 
 void rethos_rexmit_callback(void* arg);
 

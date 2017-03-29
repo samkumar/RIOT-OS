@@ -208,7 +208,7 @@ void auto_init(void)
     auto_init_enc28j60();
 #endif
 
-#if defined(MODULE_ETHOS) || defined(MODULE_RETHOS)
+#if defined(MODULE_ETHOS)
     extern void auto_init_ethos(void);
     auto_init_ethos();
 #endif
@@ -216,6 +216,11 @@ void auto_init(void)
 #ifdef MODULE_SLIPDEV
     extern void auto_init_slipdev(void);
     auto_init_slipdev();
+#endif
+
+#if defined(MODULE_RETHOS)
+    extern void auto_init_rethos(void);
+    auto_init_rethos();
 #endif
 
 #ifdef MODULE_CC110X
