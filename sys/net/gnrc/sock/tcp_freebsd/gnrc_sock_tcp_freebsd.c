@@ -249,8 +249,8 @@ static void sock_tcp_freebsd_active_clear(sock_tcp_freebsd_t* conn)
     if (conn->hasactive) {
         conn->hasactive = false;
         mutex_lock(&conn->sfields.active.connect_lock);
-        sock_tcp_freebsd_zfree(conn->sfields.active.recvbuf);
         bsdtcp_close(conn->sfields.active.asock);
+        sock_tcp_freebsd_zfree(conn->sfields.active.recvbuf);
         cond_broadcast(&conn->sfields.active.connect_cond);
         cond_broadcast(&conn->sfields.active.receive_cond);
         cond_broadcast(&conn->sfields.active.send_cond);
