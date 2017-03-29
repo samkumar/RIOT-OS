@@ -48,7 +48,7 @@
 #define hz 1000 // number of ticks per second
 #define MICROS_PER_TICK 1000 // number of microseconds per tick
 
-#define FRAMES_PER_SEG 3
+#define FRAMES_PER_SEG 4
 #define FRAMECAP_6LOWPAN (122 - 22 - 12) // Fragmentation limit: maximum frame size of the IP and TCP headers
 
 #define COMPRESSED_IP6HDR_SIZE (2 + 1 + 1 + 16 + 8) // IPHC header (2) + Next header (1) + Hop count (1) + Dest. addr (16) + Src. addr (8)
