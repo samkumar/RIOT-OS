@@ -10,8 +10,6 @@
 #include "memmgr.h"
 #include "mutex.h"
 
-//#define ENABLE_DEBUG (0)
-
 #include "debug.h"
 
 static bool initialized = false;
@@ -30,11 +28,11 @@ static inline void* sock_tcp_freebsd_zalloc(unsigned long numbytes) {
     if (numbytes == 0) {
         return NULL;
     }
-    //mutex_lock(&sock_tcp_freebsd_zalloc_mutex);
+    mutex_lock(&sock_tcp_freebsd_zalloc_mutex);
     sock_tcp_freebsd_zone_init();
     void* p = memmgr_alloc(numbytes);
-    //mutex_unlock(&sock_tcp_freebsd_zalloc_mutex);
-    printf("Allocating %lu bytes: %p\n", numbytes, p);
+    mutex_unlock(&sock_tcp_freebsd_zalloc_mutex);
+    DEBUG("Allocating %lu bytes: %p\n", numbytes, p);
     return p;
 }
 
@@ -42,11 +40,11 @@ static inline void sock_tcp_freebsd_zfree(void* ptr) {
     if (ptr == NULL) {
         return;
     }
-    //mutex_lock(&sock_tcp_freebsd_zalloc_mutex);
+    mutex_lock(&sock_tcp_freebsd_zalloc_mutex);
     assert(initialized);
     memmgr_free(ptr);
-    //mutex_unlock(&sock_tcp_freebsd_zalloc_mutex);
-    printf("Freeing %p\n", ptr);
+    mutex_unlock(&sock_tcp_freebsd_zalloc_mutex);
+    DEBUG("Freeing %p\n", ptr);
 }
 
 #endif
