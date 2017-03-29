@@ -322,7 +322,6 @@ static serial_event_t _serial_handle_byte(serial_t *serial, char c)
             /* If we receive the start sequence, then drop the current frame and start receiving. */
             if (serial->state != WAIT_FRAMESTART) {
                 fprintf(stderr, "Got unexpected start-of-frame sequence: dropping current frame\n");
-                goto handle_corrupt_frame;
             }
             serial->sum1 = 0xFF;
             serial->sum2 = 0xFF;
@@ -1038,6 +1037,9 @@ int main(int argc, char *argv[])
                     ssize_t res = read(dsock, inbuf, sizeof(inbuf));
                     if (res <= 0) {
                         assert(errno != EWOULDBLOCK);
+                        if (errno == EINTR) {
+                            continue;
+                        }
                         perror("read from domain socket");
                         close(dsock);
                         domain_sockets[i].client_socket = -1;
