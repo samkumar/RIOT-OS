@@ -30,6 +30,8 @@
 #include "net/gnrc/netdev2.h"
 #include "net/ethernet/hdr.h"
 
+#include "rethos.h"
+
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
 
