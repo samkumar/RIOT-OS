@@ -103,7 +103,7 @@ bool retry_rexmit = false;
 void send_packet(gnrc_pktsnip_t* pkt, gnrc_netdev2_t* gnrc_dutymac_netdev2, bool retransmission) {
 	retry_rexmit = retransmission;
 	msg_t msg;
-	msg.type = GNRC_NETDEV2_MSG_TYPE_LINK_RETRANSMIT;
+	msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_LINK_RETRANSMIT;
 	msg.content.ptr = pkt;
 	if (msg_send(&msg, dutymac_netdev2_pid) <= 0) {
 		assert(false);
@@ -166,7 +166,7 @@ int msg_queue_add(msg_t* msg_queue, msg_t* msg, gnrc_netdev2_t* gnrc_dutymac_net
 			msg_queue[pending_num].sender_pid = msg->sender_pid;
 			msg_queue[pending_num].type = msg->type;
 			msg_queue[pending_num].content.ptr = msg->content.ptr;
-			printf("\nqueue add success [%u/%u/%4x]\n", pending_num, msg_queue[pending_num].sender_pid,
+			DEBUG("\nqueue add success [%u/%u/%4x]\n", pending_num, msg_queue[pending_num].sender_pid,
 					msg_queue[pending_num].type);
 		}
 		pending_num++; /* Number of packets in the queue */
@@ -303,6 +303,16 @@ void neighbor_table_update(uint16_t l2addr, gnrc_netif_hdr_t *hdr) {
 	//printf("neighbor: addr %4x, rssi %d, lqi %u\n", neighbor_table[key].addr, neighbor_table[key].rssi, neighbor_table[key].lqi);
 }
 
+static bool is_receiving(netdev2_t* dev) {
+	netopt_state_t state;
+	int rv = dev->driver->get(dev, NETOPT_STATE, &state, sizeof(state));
+	if (rv != sizeof(state)) {
+		assert(false);
+	}
+	return state == NETOPT_STATE_RX;
+}
+
+bool irq_pending = false;
 /**
  * @brief   Function called by the device driver on device events
  *
@@ -312,6 +322,7 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 {
 	gnrc_netdev2_t* gnrc_dutymac_netdev2 = (gnrc_netdev2_t*)dev->context;
     if (event == NETDEV2_EVENT_ISR) {
+		irq_pending = true;
         msg_t msg;
         msg.type = NETDEV2_MSG_TYPE_EVENT;
         msg.content.ptr = gnrc_dutymac_netdev2;
@@ -491,10 +502,10 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 				msg_queue_remove(pkt_queue);
 				/* Send a packet in the packet queue */
 				/* */
-				if (pending_num && !radio_busy && recent_dst_l2addr != 0xffff) {
+				if (pending_num && !radio_busy && recent_dst_l2addr != 0xffff && !irq_pending && !is_receiving(dev)) {
 					/* Send a packet to the same destination */
 					msg_queue_send(pkt_queue, true, recent_dst_l2addr, gnrc_dutymac_netdev2);
-					if (!radio_busy) {
+					if (!radio_busy && !irq_pending && !is_receiving(dev)) {
 						/* If there are no packets with the same destination, check for packets destined for always-on nodes. */
 						msg_queue_send(pkt_queue, false, 0, gnrc_dutymac_netdev2);
 					}
@@ -503,9 +514,21 @@ static void *_gnrc_netdev2_duty_thread(void *args)
                 	dev->driver->set(dev, NETOPT_ACK_PENDING, &pending, sizeof(bool));
 				}
 				break;
+			case GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_CHECK_QUEUE:
+				if (!radio_busy && !irq_pending && !is_receiving(dev)) {
+					msg_queue_send(pkt_queue, false, 0, gnrc_dutymac_netdev2);
+				}
+				break;
             case NETDEV2_MSG_TYPE_EVENT:
                 DEBUG("gnrc_netdev2: GNRC_NETDEV_MSG_TYPE_EVENT received\n");
+				irq_pending = false;
                 dev->driver->isr(dev);
+				{
+					msg_t nmsg;
+					nmsg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_CHECK_QUEUE;
+					nmsg.content.ptr = NULL;
+					msg_send_to_self(&nmsg);
+				}
                 break;
             case GNRC_NETAPI_MSG_TYPE_SND:
                 DEBUG("gnrc_netdev2: GNRC_NETAPI_MSG_TYPE_SND received\n");
@@ -517,7 +540,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 					bool pending = true;
                 	dev->driver->set(dev, NETOPT_ACK_PENDING, &pending, sizeof(bool));
 
-					if (!radio_busy) {
+					if (!radio_busy && !irq_pending && !is_receiving(dev)) {
 						/* If we added something to the queue, check for packets destined for always-on nodes.
 						 * If the radio is busy now, it's OK. We will do this same check whenever the radio
 						 * goes from busy to not busy.
@@ -554,16 +577,21 @@ static void *_gnrc_netdev2_duty_thread(void *args)
                 reply.content.value = (uint32_t)res;
                 msg_reply(&msg, &reply);
                 break;
-			case GNRC_NETDEV2_MSG_TYPE_LINK_RETRANSMIT:
-				if (retry_rexmit) {
-					res = gnrc_dutymac_netdev2->resend_without_release(gnrc_dutymac_netdev2, msg.content.ptr);
+			case GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_LINK_RETRANSMIT:
+				if (!irq_pending && !is_receiving(dev)) {
+					if (retry_rexmit) {
+						res = gnrc_dutymac_netdev2->resend_without_release(gnrc_dutymac_netdev2, msg.content.ptr);
+					} else {
+						res = gnrc_dutymac_netdev2->send_without_release(gnrc_dutymac_netdev2, msg.content.ptr);
+					}
+					if (res < 0) {
+						_event_cb(dev, NETDEV2_EVENT_TX_MEDIUM_BUSY);
+					}
 				} else {
-					res = gnrc_dutymac_netdev2->send_without_release(gnrc_dutymac_netdev2, msg.content.ptr);
-				}
-				if (res < 0) {
 					msg_t nmsg;
-					nmsg.type = NETDEV2_EVENT_TX_MEDIUM_BUSY;
-					msg_send(&nmsg, dutymac_netdev2_pid);
+					nmsg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_LINK_RETRANSMIT;
+					nmsg.content.ptr = msg.content.ptr;
+					msg_send_to_self(&nmsg);
 				}
             default:
                 DEBUG("gnrc_netdev2: Unknown command %" PRIu16 "\n", msg.type);

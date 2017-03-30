@@ -70,7 +70,11 @@ extern "C" {
 /**
  * @brief   Type for @ref msg_t if a link-layer retransmission or CSMA attempt needs to be performed
  */
-#define GNRC_NETDEV2_MSG_TYPE_LINK_RETRANSMIT (0x1238U)
+#define GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_LINK_RETRANSMIT (0x1238U)
+/**
+ * @brief   Type for @ref msg_t if a link-layer retransmission or CSMA attempt needs to be performed
+ */
+#define GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_CHECK_QUEUE (0x1239U)
 
 /**
  * @brief   Mask for @ref gnrc_mac_tx_feedback_t
