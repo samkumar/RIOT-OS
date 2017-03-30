@@ -101,9 +101,9 @@ void xtimer_init(void)
 static uint32_t _stimer_diff(uint32_t prev, uint32_t now) {
     if (now >= prev) {
         return now - prev;
-    } else { 
+    } else {
         return (0xFFFFFFFF-prev) + now;
-    }	
+    }
 }
 #endif
 
@@ -212,22 +212,22 @@ static inline void _lltimer_set(uint32_t target)
 
 int _xtimer_set_absolute(xtimer_t *timer, uint32_t target, uint32_t now)
 {
-#if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
-#else 
-    now = _xtimer_now();
-#endif
+    uint32_t now;
     int res = 0;
 
     DEBUG("timer_set_absolute(): now=%" PRIu32 " target=%" PRIu32 "\n", now, target);
+
+    unsigned state = irq_disable();
     timer->next = NULL;
+    now = _xtimer_now();
     if ((target >= now) && ((target - XTIMER_BACKOFF) < now)) {
+        irq_restore(state);
         /* backoff */
         xtimer_spin_until(target + XTIMER_BACKOFF);
         _shoot(timer);
         return 0;
     }
 
-    unsigned state = irq_disable();
     if (_is_set(timer)) {
         _remove(timer);
     }
@@ -597,9 +597,9 @@ overflow:
     }
     else if (overflow_list_head != NULL) {
         /* there's no timer planned for this timer period */
-        /* schedule callback on next overflow */  
+        /* schedule callback on next overflow */
         next_target = _xtimer_lltimer_mask(0xFFFFFFFF);
-      
+
         /* update current time */
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
         now_s = _stimer_lltimer_now();
