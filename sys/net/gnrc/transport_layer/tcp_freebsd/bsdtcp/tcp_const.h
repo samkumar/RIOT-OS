@@ -22,7 +22,7 @@
 #include "tcp_var.h"
 #include "tcp_timer.h"
 
-#define MSS_6LOWPAN ((FRAMES_PER_SEG * FRAMECAP_6LOWPAN) - COMPRESSED_IP6HDR_SIZE - sizeof(struct tcphdr))
+#define MSS_6LOWPAN ((FRAMES_PER_SEG * FRAMECAP_6LOWPAN) - IP6HDR_SIZE - sizeof(struct tcphdr))
 
 // I may change some of these flags later
 enum tcp_input_consts {

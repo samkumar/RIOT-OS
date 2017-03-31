@@ -3605,7 +3605,7 @@ tcp_mss_update(struct tcpcb *tp, int offer, int mtuoffer,
 //#ifdef INET6
 //	int isipv6 = ((inp->inp_vflag & INP_IPV6) != 0) ? 1 : 0;
 	size_t min_protoh = /*isipv6 ?*/
-			    COMPRESSED_IP6HDR_SIZE + sizeof (struct tcphdr)/* :
+			    IP6HDR_SIZE + sizeof (struct tcphdr)/* :
 			    sizeof (struct tcpiphdr)*/;
 //#else
 //	const size_t min_protoh = sizeof(struct tcpiphdr);
@@ -3857,7 +3857,7 @@ tcp_mssopt(/*struct in_conninfo *inc*/struct tcpcb* tp)
 //	if (inc->inc_flags & INC_ISIPV6) {
 		mss = V_tcp_v6mssdflt;
 		maxmtu = tcp_maxmtu6(/*inc*/tp, NULL);
-		min_protoh = COMPRESSED_IP6HDR_SIZE + sizeof(struct tcphdr);
+		min_protoh = IP6HDR_SIZE + sizeof(struct tcphdr);
 //	}
 //#endif
 #if 0

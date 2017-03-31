@@ -49,9 +49,13 @@
 #define MICROS_PER_TICK 1000 // number of microseconds per tick
 
 #define FRAMES_PER_SEG 4
-#define FRAMECAP_6LOWPAN (122 - 22 - 12) // Fragmentation limit: maximum frame size of the IP and TCP headers
+#define FRAMECAP_6LOWPAN (124 - 23 - 5) // Fragmentation limit: maximum frame size of the IP and TCP headers
 
-#define COMPRESSED_IP6HDR_SIZE (2 + 1 + 1 + 16 + 8) // IPHC header (2) + Next header (1) + Hop count (1) + Dest. addr (16) + Src. addr (8)
+#ifdef MODULE_GNRC_SIXLOWPAN_IPHC
+#define IP6HDR_SIZE (2 + 1 + 1 + 16 + 8) // IPHC header (2) + Next header (1) + Hop count (1) + Dest. addr (16) + Src. addr (8)
+#else
+#define IP6HDR_SIZE 40
+#endif
 
 #define SIG_CONN_ESTABLISHED 0x01
 #define SIG_RECVBUF_NOTEMPTY 0x02
