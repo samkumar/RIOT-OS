@@ -40,8 +40,12 @@ void backoff_and_send(void) {
         be = MAX_BE;
     }
     uint32_t max_possible_backoff = ((uint32_t) BACKOFF_PERIOD_MICROS) << be;
-    uint32_t micros_to_wait = random_uint32_range(0, max_possible_backoff);
-    xtimer_set(&backoff_timer, micros_to_wait);
+    if (max_possible_backoff == 0) {
+        try_send_packet(backoff_timer.arg);
+    } else {
+        uint32_t micros_to_wait = random_uint32_range(0, max_possible_backoff);
+        xtimer_set(&backoff_timer, micros_to_wait);
+    }
 }
 
 int send_with_csma(gnrc_pktsnip_t* pkt, void (*send_packet_fn)(gnrc_pktsnip_t*, gnrc_netdev2_t*, bool), gnrc_netdev2_t* gnrc_dutymac_netdev2, bool rexmit) {
