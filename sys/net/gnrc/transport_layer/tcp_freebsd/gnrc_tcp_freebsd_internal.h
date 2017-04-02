@@ -48,7 +48,7 @@
 #define hz 1000 // number of ticks per second
 #define MICROS_PER_TICK 1000 // number of microseconds per tick
 
-#define FRAMES_PER_SEG 4
+#define FRAMES_PER_SEG 5
 #define FRAMECAP_6LOWPAN (124 - 23 - 5) // Fragmentation limit: maximum frame size of the IP and TCP headers
 
 #ifdef MODULE_GNRC_SIXLOWPAN_IPHC

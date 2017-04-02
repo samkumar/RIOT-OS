@@ -27,12 +27,12 @@
 
 #include "debug.h"
 
-#define RECV_BUF_LEN 864
+#define RECV_BUF_LEN 1633
 #define REASS_BMP_LEN ((RECV_BUF_LEN + 7) >> 3)
 
 #define SENDMAXCOPY 52
 #define COPYBUFSIZE (SENDMAXCOPY << 1)
-#define SENDBUFSIZE 864
+#define SENDBUFSIZE 1280
 
 #ifndef SOCK_HAS_IPV6
 #error "TCP FREEBSD requires IPv6"
@@ -584,6 +584,8 @@ int sock_tcp_freebsd_send(sock_tcp_freebsd_t *conn, const void* data, size_t len
     mutex_lock(&conn->lock);
     assert(conn->hasactive && !conn->haspassive);
 
+    const char* buffer = data;
+
     while (len > 0 && error == 0) {
         /*
          * Look at the remaining space in the send buffer to figure out how much
@@ -593,7 +595,6 @@ int sock_tcp_freebsd_send(sock_tcp_freebsd_t *conn, const void* data, size_t len
             assert(conn->sfields.active.in_send_buffer == SENDBUFSIZE);
             cond_wait(&conn->sfields.active.send_cond, &conn->lock);
         }
-        const char* buffer = data;
         size_t buflen = SENDBUFSIZE - conn->sfields.active.in_send_buffer;
         if (len < buflen) {
             buflen = len;
@@ -603,7 +604,9 @@ int sock_tcp_freebsd_send(sock_tcp_freebsd_t *conn, const void* data, size_t len
         if (copy) {
             if (extracopybuf == NULL) {
                 sstate = sock_tcp_freebsd_zalloc(sizeof(*sstate) + COPYBUFSIZE);
-                sstate->buflen = COPYBUFSIZE;
+                if (sstate != NULL) {
+                    sstate->buflen = COPYBUFSIZE;
+                }
             } else {
                 sstate = extracopybuf;
                 assert(sstate->buflen == COPYBUFSIZE);
@@ -611,7 +614,9 @@ int sock_tcp_freebsd_send(sock_tcp_freebsd_t *conn, const void* data, size_t len
             }
         } else {
             sstate = sock_tcp_freebsd_zalloc(sizeof(*sstate) + buflen);
-            sstate->buflen = buflen;
+            if (sstate != NULL) {
+                sstate->buflen = buflen;
+            }
         }
 
         if (sstate == NULL) {
