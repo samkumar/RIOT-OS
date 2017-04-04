@@ -48,7 +48,7 @@ void backoff_and_send(void) {
     }
 }
 
-int send_with_csma(gnrc_pktsnip_t* pkt, void (*send_packet_fn)(gnrc_pktsnip_t*, gnrc_netdev2_t*, bool), gnrc_netdev2_t* gnrc_dutymac_netdev2, bool rexmit) {
+int send_with_csma(gnrc_pktsnip_t* pkt, void (*send_packet_fn)(gnrc_pktsnip_t*, gnrc_netdev2_t*, bool), gnrc_netdev2_t* gnrc_dutymac_netdev2, bool rexmit, bool skip_first_backoff) {
     assert(!send_in_progress);
     backoff_timer.arg = pkt;
     num_tries = 0;
@@ -57,7 +57,11 @@ int send_with_csma(gnrc_pktsnip_t* pkt, void (*send_packet_fn)(gnrc_pktsnip_t*, 
     is_rexmit = rexmit;
     send_in_progress = true;
 
-    backoff_and_send();
+    if (skip_first_backoff) {
+        try_send_packet(pkt);
+    } else {
+        backoff_and_send();
+    }
     return 0;
 }
 

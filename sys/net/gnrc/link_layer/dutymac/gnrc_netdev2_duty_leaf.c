@@ -99,8 +99,10 @@ void send_packet(gnrc_pktsnip_t* pkt, gnrc_netdev2_t* gnrc_dutymac_netdev2, bool
 	}
 }
 
+bool sending_beacon = false;
+
 void send_packet_csma(gnrc_pktsnip_t* pkt, gnrc_netdev2_t* gnrc_dutymac_netdev2, bool retransmission) {
-	send_with_csma(pkt, send_packet, gnrc_dutymac_netdev2, retransmission);
+	send_with_csma(pkt, send_packet, gnrc_dutymac_netdev2, retransmission, sending_beacon);
 }
 
 // FIFO QUEUE
@@ -143,7 +145,6 @@ void msg_queue_remove_head(msg_t* msg_queue) {
 	return;
 }
 
-bool sending_beacon = false;
 void msg_queue_send(msg_t* msg_queue, gnrc_netdev2_t* gnrc_dutymac_netdev2) {
 	gnrc_pktsnip_t *pkt = msg_queue[0].content.ptr;
 	radio_busy = true;
