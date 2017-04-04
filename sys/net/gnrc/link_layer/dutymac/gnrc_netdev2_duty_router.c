@@ -239,9 +239,9 @@ void msg_queue_send(msg_t* msg_queue, bool to_dutycycled_dest, uint16_t dst_l2ad
 			temp_hdr = temp_pkt->data;
 			dst = gnrc_netif_hdr_get_dst_addr(temp_hdr);
 			if (temp_hdr->dst_l2addr_len == IEEE802154_SHORT_ADDRESS_LEN) {
-				pkt_dst_l2addr = (*dst | (*(dst+1) << 8));
+				pkt_dst_l2addr = (((uint16_t) dst[1]) << 8) | (uint16_t) dst[0];
 			} else {
-				pkt_dst_l2addr = (*dst<<8 | (*(dst+1)));
+				pkt_dst_l2addr = (((uint16_t) dst[7]) << 8) | (uint16_t) dst[6];
 			}
 
 			if ((to_dutycycled_dest && pkt_dst_l2addr == dst_l2addr) || (!to_dutycycled_dest && !addr_is_dutycycled(pkt_dst_l2addr))) {
@@ -312,6 +312,7 @@ static bool is_receiving(netdev2_t* dev) {
 	return state == NETOPT_STATE_RX;
 }
 
+uint16_t global_src_l2addr;
 bool irq_pending = false;
 /**
  * @brief   Function called by the device driver on device events
@@ -348,18 +349,20 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 					uint8_t* src_addr = gnrc_netif_hdr_get_src_addr(hdr);
 					uint16_t src_l2addr = 0;
 					if (hdr->src_l2addr_len == IEEE802154_SHORT_ADDRESS_LEN) {
-						src_l2addr = (*src_addr | (*(src_addr+1) << 8));
+						src_l2addr = (((uint16_t) src_addr[1]) << 8) | (uint16_t) src_addr[0];
 					} else {
-						src_l2addr = (*src_addr << 8| (*(src_addr+1)));
+						src_l2addr = (((uint16_t) src_addr[7]) << 8) | (uint16_t) src_addr[6];
 					}
 					neighbor_table_update(src_l2addr, hdr);
 
+					global_src_l2addr = src_l2addr;
+
 					/* Send packets when receiving a data req from a leaf node */
-					if (rx_data_request & pending_num) {
+					if (rx_data_request && pending_num) {
 						rx_data_request = false;
 						msg_t msg;
 						msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_SND;
-						msg.content.ptr = &src_l2addr;
+						msg.content.ptr = &global_src_l2addr;
 						msg_send(&msg, gnrc_dutymac_netdev2->pid);
 					}
 
@@ -430,6 +433,8 @@ static void _pass_on_packet(gnrc_pktsnip_t *pkt)
     }
 }
 
+msg_t pkt_queue[NETDEV2_PKT_QUEUE_SIZE];
+
 /**
  * @brief   Startup code and event loop of the gnrc_netdev2 layer
  *
@@ -458,7 +463,6 @@ static void *_gnrc_netdev2_duty_thread(void *args)
     msg_init_queue(msg_queue, NETDEV2_NETAPI_MSG_QUEUE_SIZE);
 
 	/* setup the MAC layers packet queue (only for packet transmission) */
-	msg_t pkt_queue[NETDEV2_PKT_QUEUE_SIZE];
 	for (int i=0; i<NETDEV2_PKT_QUEUE_SIZE; i++) {
 		pkt_queue[i].sender_pid = 0;
 		pkt_queue[i].type = 0;
@@ -580,9 +584,9 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 			case GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_LINK_RETRANSMIT:
 				if (!irq_pending && !is_receiving(dev)) {
 					if (retry_rexmit) {
-						res = gnrc_dutymac_netdev2->resend_without_release(gnrc_dutymac_netdev2, msg.content.ptr);
+						res = gnrc_dutymac_netdev2->resend_without_release(gnrc_dutymac_netdev2, msg.content.ptr, pending_num > 1);
 					} else {
-						res = gnrc_dutymac_netdev2->send_without_release(gnrc_dutymac_netdev2, msg.content.ptr);
+						res = gnrc_dutymac_netdev2->send_without_release(gnrc_dutymac_netdev2, msg.content.ptr, pending_num > 1);
 					}
 					if (res < 0) {
 						_event_cb(dev, NETDEV2_EVENT_TX_MEDIUM_BUSY);

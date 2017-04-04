@@ -128,8 +128,8 @@ typedef struct gnrc_netdev {
     int (*send_dataReq)(struct gnrc_netdev *dev);
 #endif
 
-    int (*send_without_release)(struct gnrc_netdev2 *dev, gnrc_pktsnip_t *snip);
-    int (*resend_without_release)(struct gnrc_netdev2 *dev, gnrc_pktsnip_t *snip);
+    int (*send_without_release)(struct gnrc_netdev2 *dev, gnrc_pktsnip_t *snip, bool set_pending_bit);
+    int (*resend_without_release)(struct gnrc_netdev2 *dev, gnrc_pktsnip_t *snip, bool set_pending_bit);
 
     /** hskim
      * @brief Send a beacon using this device

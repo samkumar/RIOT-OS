@@ -201,6 +201,9 @@ static int _send(gnrc_netif2_t *netif, gnrc_pktsnip_t *pkt)
         DEBUG("_send_ieee802154: first header is not generic netif header\n");
         return -EBADMSG;
     }
+    if (set_pending_bit) {
+        flags |= IEEE802154_FCF_FRAME_PEND;
+    }
     netif_hdr = pkt->data;
     /* prepare destination address */
     if (netif_hdr->flags & /* If any of these flags is set assume broadcast */
