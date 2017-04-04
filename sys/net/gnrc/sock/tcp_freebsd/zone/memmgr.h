@@ -65,7 +65,7 @@
 
 //#define DEBUG_MEMMGR_SUPPORT_STATS 1
 
-#define POOL_SIZE (7 * 1024)
+#define POOL_SIZE (7 * 1024 + 256)
 #define MIN_POOL_ALLOC_QUANTAS 4
 
 

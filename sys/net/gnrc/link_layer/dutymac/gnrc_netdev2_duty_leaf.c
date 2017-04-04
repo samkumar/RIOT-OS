@@ -53,6 +53,31 @@
 #define NETDEV2_NETAPI_MSG_QUEUE_SIZE 16
 #define NETDEV2_PKT_QUEUE_SIZE 128
 
+
+static uint8_t sleep_interval_shift = 0;
+
+static void reset_sleep_interval(void) {
+	int state = irq_disable();
+	sleep_interval_shift = 0;
+	irq_restore(state);
+}
+static void backoff_sleep_interval(void) {
+	int state = irq_disable();
+	uint32_t interval = (DUTYCYCLE_SLEEP_INTERVAL_MIN << sleep_interval_shift);
+	if (interval < DUTYCYCLE_SLEEP_INTERVAL_MAX) {
+		assert((interval << 1) >= interval); // check for overflow
+		sleep_interval_shift++;
+	}
+	irq_restore(state);
+}
+static uint32_t get_sleep_interval(void) {
+	uint32_t interval = (DUTYCYCLE_SLEEP_INTERVAL_MIN << sleep_interval_shift);
+	if (interval > DUTYCYCLE_SLEEP_INTERVAL_MAX) {
+		interval = DUTYCYCLE_SLEEP_INTERVAL_MAX;
+	}
+	return interval;
+}
+
 static void _pass_on_packet(gnrc_pktsnip_t *pkt);
 
 /** 1) For a leaf node (battery-powered), 'dutycycling' is set to NETOPT_ENABLE by application
@@ -152,7 +177,6 @@ void msg_queue_send(msg_t* msg_queue, gnrc_netdev2_t* gnrc_dutymac_netdev2) {
 	send_with_retries(pkt, -1, send_packet_csma, gnrc_dutymac_netdev2, false);
 }
 
-
 /**
  * @brief   Function called by the dutycycle timer
  *
@@ -178,7 +202,7 @@ void dutycycle_cb(void* arg) {
 			break;
 		case DUTY_LISTEN:
 			if (pending_num > 0) {
-				xtimer_set(&timer, DUTYCYCLE_SLEEP_INTERVAL);
+				xtimer_set(&timer, get_sleep_interval());
 				dutycycle_state = DUTY_TX_DATA;
 				msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_CHECK_QUEUE;
 				msg_send(&msg, gnrc_dutymac_netdev2->pid);
@@ -242,7 +266,7 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 						msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
 					} else {
 						//printf("Send data after reception...\n");
-						xtimer_set(&timer, DUTYCYCLE_SLEEP_INTERVAL);
+						xtimer_set(&timer, get_sleep_interval());
 						dutycycle_state = DUTY_TX_DATA;
 						msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_CHECK_QUEUE;
 					}
@@ -267,6 +291,9 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 					//printf("sent, with pending\n");
 
 					radio_busy = false;
+
+					/* There will be data in this sleep interval. */
+					reset_sleep_interval();
 
 					if (dutycycle_state != DUTY_INIT) {
 						/* Dutycycle_state must be DUTY_TX_BEACON */
@@ -299,10 +326,17 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 						if (dutycycle_state == DUTY_TX_BEACON) { /* Sleep again */
 							//printf("remove timer 3\n");
 							xtimer_remove(&timer);
+
+							/* No data in this interval... */
+							backoff_sleep_interval();
+
 							dutycycle_state = DUTY_SLEEP;
 							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
 							msg_send(&msg, gnrc_dutymac_netdev2->pid);
 						} else if (pending_num > 0) { /* Remove the packet from the queue */
+							/* We just sent a data-containing packet. */
+							reset_sleep_interval();
+
 							if (dutycycle_state != DUTY_TX_DATA) {
 								assert(dutycycle_state != DUTY_SLEEP);
 								//printf("remove timer 4\n");
@@ -467,7 +501,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 							sleepstate = NETOPT_STATE_SLEEP;
 							dev->driver->set(dev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));
 							dev->driver->set(dev, NETOPT_SRC_LEN, &src_len, sizeof(src_len));
-							xtimer_set(&timer,random_uint32_range(0, DUTYCYCLE_SLEEP_INTERVAL));
+							xtimer_set(&timer,random_uint32_range(0, DUTYCYCLE_SLEEP_INTERVAL_MAX));
 							DEBUG("gnrc_netdev2: INIT DUTYCYCLE\n");
 							break;
 						case DUTY_TX_BEACON: /* Tx a beacon after wake-up */
@@ -504,7 +538,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 							//gpio_write(GPIO_PIN(0,19),0);
 							sleepstate = NETOPT_STATE_SLEEP;
 							dev->driver->set(dev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));
-							xtimer_set(&timer, DUTYCYCLE_SLEEP_INTERVAL);
+							xtimer_set(&timer, get_sleep_interval());
 							DEBUG("gnrc_netdev2: RADIO OFF\n\n");
 							break;
 						default:
@@ -598,7 +632,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 						/* Dutycycle start triggered by application layer */
 						dutycycle_state = DUTY_SLEEP;
 						sleepstate = NETOPT_STATE_SLEEP;
-						xtimer_set(&timer, random_uint32_range(0, DUTYCYCLE_SLEEP_INTERVAL));
+						xtimer_set(&timer, random_uint32_range(0, DUTYCYCLE_SLEEP_INTERVAL_MAX));
 						DEBUG("gnrc_netdev2: INIT DUTYCYCLE\n");
 					} else {
 						/* Dutycycle end triggered by application layer */

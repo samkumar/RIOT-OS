@@ -27,12 +27,12 @@
 
 #include "debug.h"
 
-#define RECV_BUF_LEN 2041
+#define RECV_BUF_LEN 2449
 #define REASS_BMP_LEN ((RECV_BUF_LEN + 7) >> 3)
 
 #define SENDMAXCOPY 52
 #define COPYBUFSIZE (SENDMAXCOPY << 1)
-#define SENDBUFSIZE 2040
+#define SENDBUFSIZE 2448
 
 #ifndef SOCK_HAS_IPV6
 #error "TCP FREEBSD requires IPv6"
