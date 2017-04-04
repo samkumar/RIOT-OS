@@ -158,7 +158,7 @@ void msg_queue_send(msg_t* msg_queue, gnrc_netdev2_t* gnrc_dutymac_netdev2) {
  * @param[in] event     type of event
  */
 void dutycycle_cb(void* arg) {
-	printf("timer\n");
+	//printf("timer\n");
 	gnrc_netdev2_t* gnrc_dutymac_netdev2 = (gnrc_netdev2_t*) arg;
     msg_t msg;
 	/* Dutycycling state control for leaf nodes */
@@ -225,22 +225,30 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 					/* Packet decoding */
                     gnrc_pktsnip_t *pkt = gnrc_dutymac_netdev2->recv(gnrc_dutymac_netdev2);
 
+					int state = irq_disable();
+					xtimer_remove(&timer);
+
+					msg_t msg;
+
 					if (additional_wakeup) { /* LISTEN for a while for further packet reception */
-						printf("Listen after reception...\n");
+						//printf("Listen after reception...\n");
 						dutycycle_state = DUTY_LISTEN;
 						additional_wakeup = false;
-					} else if (pending_num == 0) { /* SLEEP now */
-						printf("Sleep after reception...\n");
-						dutycycle_state = DUTY_SLEEP;
-					}
-
-					if (dutycycle_state != DUTY_TX_DATA) {
-						xtimer_remove(&timer);
-
-						msg_t msg;
 						msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
-						msg_send(&msg, gnrc_dutymac_netdev2->pid);
+					} else if (pending_num == 0) { /* SLEEP now */
+						//printf("Sleep after reception...\n");
+						dutycycle_state = DUTY_SLEEP;
+						msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
+					} else {
+						//printf("Send data after reception...\n");
+						xtimer_set(&timer, DUTYCYCLE_SLEEP_INTERVAL);
+						dutycycle_state = DUTY_TX_DATA;
+						msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_CHECK_QUEUE;
 					}
+
+					msg_send(&msg, gnrc_dutymac_netdev2->pid);
+
+					irq_restore(state);
 
 					if (pkt) {
                         _pass_on_packet(pkt);
@@ -255,7 +263,7 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 					csma_send_succeeded();
 					retry_send_succeeded();
 
-					printf("sent, with pending\n");
+					//printf("sent, with pending\n");
 
 					radio_busy = false;
 
@@ -265,8 +273,9 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 							DEBUG("gnrc_netdev2: SOMETHING IS WRONG\n");
 						}
 						/* LISTEN for a while for packet reception */
+						//printf("remove timer 2\n");
 						xtimer_remove(&timer);
-						printf("Listening after beacon...\n");
+						//printf("Listening after beacon...\n");
 						dutycycle_state = DUTY_LISTEN;
 						msg_t msg;
 						msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
@@ -287,6 +296,7 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 					if (dutycycle_state != DUTY_INIT) {
 						msg_t msg;
 						if (dutycycle_state == DUTY_TX_BEACON) { /* Sleep again */
+							//printf("remove timer 3\n");
 							xtimer_remove(&timer);
 							dutycycle_state = DUTY_SLEEP;
 							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
@@ -294,6 +304,7 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 						} else if (pending_num > 0) { /* Remove the packet from the queue */
 							if (dutycycle_state != DUTY_TX_DATA) {
 								assert(dutycycle_state != DUTY_SLEEP);
+								//printf("remove timer 4\n");
 								xtimer_remove(&timer);
 							}
 							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_REMOVE_QUEUE;
@@ -333,6 +344,7 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 					if (dutycycle_state != DUTY_INIT) {
 						msg_t msg;
 						if (dutycycle_state == DUTY_TX_BEACON) { /* Sleep again */
+							//printf("remove timer 5\n");
 							xtimer_remove(&timer);
 							dutycycle_state = DUTY_SLEEP;
 							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
@@ -340,6 +352,7 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 						} else if (pending_num > 0) { /* Remove the packet from the queue */
 							if (dutycycle_state != DUTY_TX_DATA) {
 								assert(dutycycle_state != DUTY_SLEEP);
+								//printf("remove timer 6\n");
 								xtimer_remove(&timer);
 							}
 							msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_REMOVE_QUEUE;
@@ -381,7 +394,7 @@ static void send_beacon_safely(gnrc_netdev2_t* gnrc_dutymac_netdev2) {
 	if (radio_busy || irq_pending || is_receiving(gnrc_dutymac_netdev2->dev)) {
 		beacon_pending = true;
 	} else {
-		printf("sending beacon...\n");
+		//printf("sending beacon...\n");
 		radio_busy = true;
 		sending_beacon = true;
 		send_with_retries(NULL, -1, send_packet_csma, gnrc_dutymac_netdev2, false);
@@ -457,6 +470,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 							DEBUG("gnrc_netdev2: INIT DUTYCYCLE\n");
 							break;
 						case DUTY_TX_BEACON: /* Tx a beacon after wake-up */
+							//printf("remove timer 7\n");
 							xtimer_remove(&timer);
 							send_beacon_safely(gnrc_dutymac_netdev2);
 							DEBUG("gnrc_netdev2: SEND BEACON\n");
@@ -469,6 +483,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 							DEBUG("gnrc_netdev2: RADIO OFF\n\n");
 							break;
 						case DUTY_TX_DATA_BEFORE_BEACON:
+							//printf("remove timer 8\n");
 							xtimer_remove(&timer);
 							if (!radio_busy && !irq_pending && !is_receiving(dev)) {
 								msg_queue_send(pkt_queue, gnrc_dutymac_netdev2);
@@ -480,6 +495,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 							dev->driver->get(dev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));
 							sleepstate = NETOPT_STATE_IDLE;
 							dev->driver->set(dev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));
+							//printf("wakeup timer set\n");
 							xtimer_set(&timer, DUTYCYCLE_WAKEUP_INTERVAL);
 							DEBUG("gnrc_netdev2: RADIO REMAINS ON\n");
 							break;
@@ -516,7 +532,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 						/*msg_t nmsg;
 						nmsg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_EVENT;
 						msg_send_to_self(&nmsg);*/
-						printf("Emptied send queue, going to sleep...\n");
+						//printf("Emptied send queue, going to sleep...\n");
 						dutycycle_state = DUTY_SLEEP;
 						sleepstate = NETOPT_STATE_SLEEP;
 						dev->driver->set(dev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));
@@ -525,7 +541,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 				}
 				break;
 			case GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_CHECK_QUEUE:
-				if (pending_num != 0 && !radio_busy && !irq_pending && !is_receiving(dev)) {
+				if (dutycycle_state != DUTY_LISTEN && pending_num != 0 && !radio_busy && !irq_pending && !is_receiving(dev)) {
 					if (dutycycle_state == DUTY_SLEEP) {
 						dutycycle_state = DUTY_TX_DATA;
 					}
@@ -537,7 +553,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
 				irq_pending = false;
                 dev->driver->isr(dev);
 				if (beacon_pending && !radio_busy) {
-					printf("sending pending beacon\n");
+					//printf("sending pending beacon\n");
 					beacon_pending = false;
 					radio_busy = true;
 					sending_beacon = true;
@@ -575,6 +591,7 @@ static void *_gnrc_netdev2_duty_thread(void *args)
                         netopt2str(opt->opt));
 				if (opt->opt == NETOPT_DUTYCYCLE) {
 					dutycycling = *(netopt_enable_t*) opt->data;
+					//printf("remove timer 9\n");
 					xtimer_remove(&timer);
 					if (dutycycling == NETOPT_ENABLE) {
 						/* Dutycycle start triggered by application layer */
