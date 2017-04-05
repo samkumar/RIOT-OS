@@ -91,6 +91,10 @@ extern "C" {
 #define DUTYCYCLE_WAKEUP_INTERVAL  20000UL    /* Don't change it w/o particular reasons */
 #endif
 
+#ifndef DUTYCYCLE_SLEEP_INTERVAL
+#define DUTYCYCLE_SLEEP_INTERVAL 2000000UL
+#endif
+
 #ifndef DUTYCYCLE_SLEEP_INTERVAL_MIN
 #define DUTYCYCLE_SLEEP_INTERVAL_MIN   20000UL
 #endif
