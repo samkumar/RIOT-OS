@@ -91,6 +91,11 @@ bool rx_data_request = false;
 
 kernel_pid_t dutymac_netdev2_pid;
 
+#ifdef COLLECT_TCP_STATS
+#include "../../../../../../app/tcp_benchmark/common.h"
+extern struct benchmark_stats stats;
+#endif
+
 /* TODO this should take a MAC address and return whether that is a duty-cycled
  * node sending beacons to this router. For now, just hardcode to true or false.
  */
@@ -172,7 +177,7 @@ int msg_queue_add(msg_t* msg_queue, msg_t* msg, gnrc_netdev2_t* gnrc_dutymac_net
 		pending_num++; /* Number of packets in the queue */
 		return 1;
 	} else {
-		DEBUG("Queue loss at netdev2\n");
+		printf("Queue loss at netdev2\n");
 		return 0;
 	}
 }
@@ -425,6 +430,9 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 
 static void _pass_on_packet(gnrc_pktsnip_t *pkt)
 {
+#ifdef COLLECT_TCP_STATS
+	stats.hamilton_ll_frames_received++;
+#endif
     /* throw away packet if no one is interested */
     if (!gnrc_netapi_dispatch_receive(pkt->type, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
         DEBUG("gnrc_netdev2: unable to forward packet of type %i\n", pkt->type);

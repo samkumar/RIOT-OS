@@ -32,7 +32,7 @@
 
 #define SENDMAXCOPY 52
 #define COPYBUFSIZE (SENDMAXCOPY << 1)
-#define SENDBUFSIZE 2448
+#define SENDBUFSIZE 1224
 
 #ifndef SOCK_HAS_IPV6
 #error "TCP FREEBSD requires IPv6"

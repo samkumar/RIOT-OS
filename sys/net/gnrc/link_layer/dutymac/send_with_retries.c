@@ -15,6 +15,11 @@ static bool send_in_progress = false;
 static void (*send_packet)(gnrc_pktsnip_t*, gnrc_netdev2_t*, bool);
 static gnrc_netdev2_t* dev;
 
+#ifdef COLLECT_TCP_STATS
+#include "../../../../../../app/tcp_benchmark/common.h"
+extern struct benchmark_stats stats;
+#endif
+
 static void try_send_packet(void* pkt) {
     send_packet(pkt, dev, true);
 }
@@ -43,6 +48,9 @@ int send_with_retries(gnrc_pktsnip_t* pkt, int num_retries, void (*send_packet_f
 /* Informs this module that the packet was sent successfully on this try. */
 void retry_send_succeeded(void) {
     assert(send_in_progress);
+#ifdef COLLECT_TCP_STATS
+    stats.hamilton_ll_retries_required[NUM_RETRIES - tries_left]++;
+#endif
     DEBUG("[send_with_retries] Send successful!\n");
     send_in_progress = false;
 }
@@ -53,6 +61,9 @@ bool retry_send_failed(void) {
     DEBUG("[send_with_retries] Send failed. %d attempts left...\n", tries_left);
     if (tries_left == 0) {
         send_in_progress = false;
+#ifdef COLLECT_TCP_STATS
+		stats.hamilton_ll_frames_send_fail++;
+#endif
         return false;
     }
     tries_left--;

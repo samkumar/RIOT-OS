@@ -65,7 +65,7 @@ extern "C" {
  * @brief   Default message queue size to use for the IPv6 thread.
  */
 #ifndef GNRC_IPV6_MSG_QUEUE_SIZE
-#define GNRC_IPV6_MSG_QUEUE_SIZE    (8U)
+#define GNRC_IPV6_MSG_QUEUE_SIZE    (16U)
 #endif
 
 /**

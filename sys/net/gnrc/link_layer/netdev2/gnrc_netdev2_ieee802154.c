@@ -209,7 +209,7 @@ static int _send_impl(gnrc_netdev2_t *gnrc_netdev2, gnrc_pktsnip_t *pkt, bool re
     if (src_len > 0) {
         src = gnrc_netif_hdr_get_src_addr(netif_hdr);
     }
-    else if (state->flags & NETDEV2_IEEE802154_SRC_MODE_LONG) {
+    else if (state->flags & NETDEV2_IEEE802154_SRC_MODE_LONG || true) {
         src_len = IEEE802154_LONG_ADDRESS_LEN;
         src = state->long_addr;
     }

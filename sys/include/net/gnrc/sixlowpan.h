@@ -130,7 +130,7 @@ extern "C" {
  * @brief   Default message queue size to use for the 6LoWPAN thread.
  */
 #ifndef GNRC_SIXLOWPAN_MSG_QUEUE_SIZE
-#define GNRC_SIXLOWPAN_MSG_QUEUE_SIZE   (8U)
+#define GNRC_SIXLOWPAN_MSG_QUEUE_SIZE   (64U)
 #endif
 
 /**

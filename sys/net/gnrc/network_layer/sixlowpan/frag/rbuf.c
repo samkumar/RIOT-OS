@@ -26,6 +26,11 @@
 #include "xtimer.h"
 #include "utlist.h"
 
+#ifdef COLLECT_TCP_STATS
+#include "../../../../../../../app/tcp_benchmark/common.h"
+extern struct benchmark_stats stats;
+#endif
+
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
 
@@ -179,6 +184,9 @@ void rbuf_add(gnrc_netif_hdr_t *netif_hdr, gnrc_pktsnip_t *pkt,
         new_netif_hdr->rssi = netif_hdr->rssi;
         LL_APPEND(entry->pkt, netif);
 
+#ifdef COLLECT_TCP_STATS
+        stats.hamilton_slp_packets_reassembled++;
+#endif
         if (!gnrc_netapi_dispatch_receive(GNRC_NETTYPE_IPV6, GNRC_NETREG_DEMUX_CTX_ALL,
                                           entry->pkt)) {
             DEBUG("6lo rbuf: No receivers for this packet found\n");

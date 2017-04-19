@@ -77,6 +77,11 @@ static char _packet_stack[GNRC_TCP_FREEBSD_STACK_SIZE];
 static char _timer_stack[GNRC_TCP_FREEBSD_STACK_SIZE];
 #endif
 
+#ifdef COLLECT_TCP_STATS
+#include "../../../../../../app/tcp_benchmark/common.h"
+extern struct benchmark_stats stats;
+#endif
+
 static void _handle_timer(int timer_id)
 {
     struct tcpcb* tp;
@@ -303,6 +308,10 @@ static void _receive(gnrc_pktsnip_t* pkt)
         DEBUG("Dropping packet: bad checksum (%" PRIu16 ")\n", csum);
         goto done;
     }
+
+#ifdef COLLECT_TCP_STATS
+    stats.hamilton_tcp_segs_received++;
+#endif
 
     sport = th->th_sport; // network byte order
     dport = th->th_dport; // network byte order
@@ -606,6 +615,9 @@ error_t asock_abort_impl(int asockid)
 
 void send_message(gnrc_pktsnip_t* pkt)
 {
+#ifdef COLLECT_TCP_STATS
+    stats.hamilton_tcp_segs_sent++;
+#endif
     DEBUG("Sending TCP message: %d, payload_size = %d\n", pkt->type, pkt->next->next == NULL ? 0 : pkt->next->next->size);
     if (!gnrc_netapi_dispatch_send(pkt->type, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
         DEBUG("tcp: cannot send packet: network layer not found\n");
