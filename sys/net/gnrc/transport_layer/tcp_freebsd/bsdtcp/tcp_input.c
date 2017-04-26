@@ -2654,8 +2654,13 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th,
 				if (!tcp_timer_active(tp, TT_REXMT) ||
 				    th->th_ack != tp->snd_una)
 					tp->t_dupacks = 0;
+#ifdef COLLECT_TCP_STATS
 				else if ((++tp->t_total_dupacks > 0)  && (++tp->t_dupacks > tcprexmtthresh ||
 				     IN_FASTRECOVERY(tp->t_flags))) {
+#else
+                else if (++tp->t_dupacks > tcprexmtthresh ||
+                    IN_FASTRECOVERY(tp->t_flags)) {
+#endif
 					cc_ack_received(tp, th, CC_DUPACK);
 					if ((tp->t_flags & TF_SACK_PERMIT) &&
 					    IN_FASTRECOVERY(tp->t_flags)) {
