@@ -27,6 +27,11 @@
 
 #include "rbuf.h"
 
+#ifdef COLLECT_TCP_STATS
+#include "../../../../../../../app/tcp_benchmark/common.h"
+extern struct benchmark_stats stats;
+#endif
+
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
 
@@ -127,6 +132,10 @@ static uint16_t _send_1st_fragment(gnrc_sixlowpan_netif_t *iface, gnrc_pktsnip_t
         pkt = pkt->next;
     }
 
+#ifdef COLLECT_TCP_STATS
+stats.hamilton_slp_frags_sent++;
+#endif
+
     DEBUG("6lo frag: send first fragment (datagram size: %u, "
           "datagram tag: %" PRIu16 ", fragment size: %" PRIu16 ")\n",
           (unsigned int)datagram_size, _tag, local_offset);
@@ -202,6 +211,10 @@ static uint16_t _send_nth_fragment(gnrc_sixlowpan_netif_t *iface, gnrc_pktsnip_t
             pkt = pkt->next;
         }
     }
+
+#ifdef COLLECT_TCP_STATS
+    stats.hamilton_slp_frags_sent++;
+#endif
 
     DEBUG("6lo frag: send subsequent fragment (datagram size: %u, "
           "datagram tag: %" PRIu16 ", offset: %" PRIu8 " (%u bytes), "

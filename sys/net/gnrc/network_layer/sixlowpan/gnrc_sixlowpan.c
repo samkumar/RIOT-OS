@@ -52,6 +52,11 @@ static void _send(gnrc_pktsnip_t *pkt);
 /* Main event loop for 6LoWPAN */
 static void *_event_loop(void *args);
 
+#ifdef COLLECT_TCP_STATS
+#include "../../../../../../app/tcp_benchmark/common.h"
+extern struct benchmark_stats stats;
+#endif
+
 kernel_pid_t gnrc_sixlowpan_init(void)
 {
     if (_pid > KERNEL_PID_UNDEF) {
@@ -163,6 +168,10 @@ static void _receive(gnrc_pktsnip_t *pkt)
         gnrc_pktbuf_release(pkt);
         return;
     }
+
+#ifdef COLLECT_TCP_STATS
+    stats.hamilton_slp_rcv_packets_singlefrag++;
+#endif
     if (!gnrc_netapi_dispatch_receive(GNRC_NETTYPE_IPV6, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
         DEBUG("6lo: No receivers for this packet found\n");
         gnrc_pktbuf_release(pkt);
@@ -264,6 +273,9 @@ static void _send(gnrc_pktsnip_t *pkt)
     if (gnrc_pkt_len(pkt2->next) <= iface->max_frag_size) {
         DEBUG("6lo: Send SND command for %p to %" PRIu16 "\n",
               (void *)pkt2, hdr->if_pid);
+#ifdef COLLECT_TCP_STATS
+    stats.hamilton_slp_snd_packets_singlefrag++;
+#endif
         if (gnrc_netapi_send(hdr->if_pid, pkt2) < 1) {
             DEBUG("6lo: unable to send %p over %" PRIu16 "\n", (void *)pkt, hdr->if_pid);
             gnrc_pktbuf_release(pkt2);
@@ -330,11 +342,17 @@ static void *_event_loop(void *args)
         switch (msg.type) {
             case GNRC_NETAPI_MSG_TYPE_RCV:
                 DEBUG("6lo: GNRC_NETDEV_MSG_TYPE_RCV received\n");
+#ifdef COLLECT_TCP_STATS
+                stats.hamilton_slp_frags_received++;
+#endif
                 _receive(msg.content.ptr);
                 break;
 
             case GNRC_NETAPI_MSG_TYPE_SND:
                 DEBUG("6lo: GNRC_NETDEV_MSG_TYPE_SND received\n");
+#ifdef COLLECT_TCP_STATS
+                stats.hamilton_slp_packets_sent++;
+#endif
                 _send(msg.content.ptr);
                 break;
 

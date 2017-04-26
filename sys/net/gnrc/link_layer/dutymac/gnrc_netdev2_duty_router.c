@@ -49,7 +49,7 @@
 #define ENABLE_BROADCAST_QUEUEING 0
 
 #define NETDEV2_NETAPI_MSG_QUEUE_SIZE 8
-#define NETDEV2_PKT_QUEUE_SIZE 16
+#define NETDEV2_PKT_QUEUE_SIZE 128
 
 #define NEIGHBOR_TABLE_SIZE 10
 typedef struct {
@@ -90,6 +90,11 @@ bool radio_busy = false;
 bool rx_data_request = false;
 
 kernel_pid_t dutymac_netdev2_pid;
+
+#ifdef COLLECT_TCP_STATS
+#include "../../../../../../app/tcp_benchmark/common.h"
+extern struct benchmark_stats stats;
+#endif
 
 /* TODO this should take a MAC address and return whether that is a duty-cycled
  * node sending beacons to this router. For now, just hardcode to true or false.
@@ -359,12 +364,12 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 
 					/* Send packets when receiving a data req from a leaf node */
 					if (rx_data_request && pending_num) {
-						rx_data_request = false;
 						msg_t msg;
 						msg.type = GNRC_NETDEV2_DUTYCYCLE_MSG_TYPE_SND;
 						msg.content.ptr = &global_src_l2addr;
 						msg_send(&msg, gnrc_dutymac_netdev2->pid);
 					}
+					rx_data_request = false;
 
 				    if (pkt) {
                         _pass_on_packet(pkt);
@@ -425,6 +430,9 @@ static void _event_cb(netdev2_t *dev, netdev2_event_t event)
 
 static void _pass_on_packet(gnrc_pktsnip_t *pkt)
 {
+#ifdef COLLECT_TCP_STATS
+	stats.hamilton_ll_frames_received++;
+#endif
     /* throw away packet if no one is interested */
     if (!gnrc_netapi_dispatch_receive(pkt->type, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
         DEBUG("gnrc_netdev2: unable to forward packet of type %i\n", pkt->type);
@@ -487,6 +495,11 @@ static void *_gnrc_netdev2_duty_thread(void *args)
     dev->driver->init(dev);
 	netopt_state_t sleepstate = NETOPT_STATE_IDLE;
     dev->driver->set(dev, NETOPT_STATE, &sleepstate, sizeof(netopt_state_t));
+
+	{
+		bool pending = false;
+		dev->driver->set(dev, NETOPT_ACK_PENDING, &pending, sizeof(bool));
+	}
 
     /* start the event loop */
     while (1) {

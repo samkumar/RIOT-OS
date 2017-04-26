@@ -38,7 +38,7 @@ extern "C" {
  * @brief   Default message queue size for the TCP thread
  */
 #ifndef GNRC_TCP_FREEBSD_MSG_QUEUE_SIZE
-#define GNRC_TCP_FREEBSD_MSG_QUEUE_SIZE (8U)
+#define GNRC_TCP_FREEBSD_MSG_QUEUE_SIZE (16U)
 #endif
 
 /**
