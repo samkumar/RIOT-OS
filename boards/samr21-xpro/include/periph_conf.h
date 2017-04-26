@@ -85,7 +85,7 @@ extern "C" {
  * @{
  */
 #ifndef DUTYCYCLE_EN
-#define DUTYCYCLE_EN               (1)
+#define DUTYCYCLE_EN               (0)
 #endif
 
 #ifndef DUTYCYCLE_WAKEUP_INTERVAL
