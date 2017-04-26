@@ -35,6 +35,9 @@
 #include "at86rf2xx_internal.h"
 #include "at86rf2xx_registers.h"
 
+#define TX_TOGGLE (PORT->Group[0].OUTTGL.reg = (1<<27))
+#define RX_TOGGLE (PORT->Group[1].OUTTGL.reg = (1<<23))
+
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
@@ -122,6 +125,8 @@ static int _send(netdev2_t *netdev, const struct iovec *vector, unsigned count)
     if (!(dev->netdev.flags & AT86RF2XX_OPT_PRELOADING)) {
         at86rf2xx_tx_exec(dev);
     }
+
+    TX_TOGGLE;
     /* return the number of bytes that were actually send out */
     return (int)len;
 }
@@ -147,6 +152,9 @@ static int _recv(netdev2_t *netdev, void *buf, size_t len, void *info)
         at86rf2xx_fb_stop(dev);
         return pkt_len;
     }
+
+    RX_TOGGLE;
+
     /* not enough space in buf */
     if (pkt_len > len) {
         at86rf2xx_fb_stop(dev);
