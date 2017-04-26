@@ -157,7 +157,9 @@ struct tcpcb {
 	int	t_segqlen;		/* segment reassembly queue length */
 #endif
 	int	t_dupacks;		/* consecutive dup acks recd */
+#ifdef COLLECT_TCP_STATS
 	int t_total_dupacks; // Added by Sam for the purpose of measurement
+#endif
 #if 0
 	struct tcp_timer *t_timers;	/* All the TCP timers in one struct */
 
