@@ -950,7 +950,8 @@ int main(int argc, char *argv[])
                         rethos_send_ack_frame(&serial, serial.in_seqno);
 
                         /* If it's a duplicate, just drop the frame. */
-                        if (received_data_frame && (serial.in_seqno == serial.last_rcvd_seqno)) {
+                        if (serial.received_data_frame && (serial.in_seqno == serial.last_rcvd_seqno)) {
+                            printf("Got a duplicate frame on channel %d\n", serial.channel);
                             continue;
                         }
 
