@@ -951,6 +951,7 @@ int main(int argc, char *argv[])
 
                         /* If it's a duplicate, just drop the frame. */
                         if (serial.received_data_frame && (serial.in_seqno == serial.last_rcvd_seqno)) {
+                            printf("Got a duplicate frame on channel %d\n", serial.channel);
                             continue;
                         }
 
