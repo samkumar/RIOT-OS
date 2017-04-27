@@ -946,15 +946,15 @@ int main(int argc, char *argv[])
                             }
                         }
 
-                        serial.received_data_frame = true;
-
                         /* ACK the frame we just received. */
                         rethos_send_ack_frame(&serial, serial.in_seqno);
 
                         /* If it's a duplicate, just drop the frame. */
-                        if (serial.in_seqno == serial.last_rcvd_seqno) {
+                        if (received_data_frame && (serial.in_seqno == serial.last_rcvd_seqno)) {
                             continue;
                         }
+
+                        serial.received_data_frame = true;
 
                         /* Record the number of lost frames. */
                         stats.global.lost_frames += (serial.in_seqno - serial.last_rcvd_seqno - 1);
@@ -1052,7 +1052,7 @@ int main(int argc, char *argv[])
                     stats.global.domain_received++;
                     rethos_send_data_frame(&serial, inbuf, res, i);
                     stats.channel[i].serial_forwarded++;
-                    stats.global.domain_forwarded++;
+                    stats.global.serial_forwarded++;
                 }
             }
         }
