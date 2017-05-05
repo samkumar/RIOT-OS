@@ -962,7 +962,12 @@ int main(int argc, char *argv[])
                         stats.global.lost_frames += (serial.in_seqno - serial.last_rcvd_seqno - 1);
                         serial.last_rcvd_seqno = serial.in_seqno;
 
-                        printf("Got a frame on channel %d\n", serial.channel);
+                        if (serial.numbytes == 0) {
+                            printf("Got an empty frame on channel %d: dropping frame\n", serial.channel)
+                            goto serial_done;
+                        } else {
+                            printf("Got a frame on channel %d\n", serial.channel);
+                        }
 
                         if (serial.channel == STDIN_CHANNEL) {
                             checked_write(STDOUT_FILENO, serial.frame, serial.numbytes);
