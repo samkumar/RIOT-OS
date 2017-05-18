@@ -136,11 +136,91 @@ static void usage(void)
     fprintf(stderr, "       rethos <tap> tcp:<host> [port]\n");
 }
 
-static void checked_write(int handle, const void *buffer, int nbyte)
+static void checked_write(int fd, const void* buffer, size_t size)
 {
-    if (write(handle, buffer, nbyte) != nbyte) {
-        fprintf(stderr, "write to fd %i failed: %s\n", handle, strerror(errno));
+    const char* buf = buffer;
+    size_t written = 0;
+    while (written < size) {
+        ssize_t rv = write(fd, &buf[written], size - written);
+        if (rv == -1) {
+            char errbuf[50];
+            snprintf(errbuf, sizeof(errbuf), "write to fd %d failed", fd);
+            check_fatal_error(errbuf);
+        }
+        written += rv;
     }
+}
+
+static void write_message(int handle, const void *buffer, int nbyte)
+{
+    /* Write 4-byte size in network byte order. */
+    uint32_t size = (uint32_t) nbyte;
+    size = htonl(size);
+    checked_write(handle, &size, sizeof(size));
+
+    /* Write the actual data. */
+    checked_write(handle, buffer, (size_t) nbyte);
+}
+
+size_t checked_read(int fd, void* buffer, size_t toread)
+{
+    char* buf = buffer;
+    size_t consumed = 0;
+    while (consumed < toread) {
+        ssize_t rv = read(fd, &buf[consumed], toread - consumed);
+        if (rv == -1) {
+            char errbuf[50];
+            snprintf(errbuf, sizeof(errbuf), "read from fd %d failed", fd);
+            check_fatal_error(errbuf);
+        } else if (rv == 0) {
+            break;
+        }
+        consumed += rv;
+    }
+    return consumed;
+}
+
+#define READ_SUCCESS 0
+#define READ_EOF 1
+#define READ_PARTIAL 2
+#define READ_OVERFLOW 3
+static uint32_t read_message(int* status, int handle, void* buffer, int buffer_size)
+{
+    uint32_t message_size;
+    uint32_t bytes_read = checked_read(handle, &message_size, sizeof(message_size));
+    if (bytes_read != sizeof(message_size)) {
+        if (bytes_read == 0) {
+            *status = READ_EOF;
+        } else {
+            *status = READ_PARTIAL;
+        }
+        return 0;
+    }
+    message_size = ntohl(message_size);
+
+    uint32_t bytes_to_read = message_size;
+    if (bytes_to_read > (uint32_t) buffer_size) {
+        bytes_to_read = (uint32_t) buffer_size;
+    }
+
+    bytes_read = checked_read(handle, buffer, bytes_to_read);
+    if (bytes_read != bytes_to_read) {
+        *status = READ_PARTIAL;
+    }
+
+    if (message_size > (uint32_t) buffer_size) {
+        *status = READ_OVERFLOW;
+        size_t remaining = message_size - (uint32_t) buffer_size;
+        char sbuf;
+        while (remaining != 0) {
+            checked_read(handle, &sbuf, 1);
+            remaining--;
+        }
+    } else {
+        *status = READ_SUCCESS;
+    }
+
+    return message_size;
 }
 
 int set_serial_attribs (int fd, int speed, int parity)
@@ -445,9 +525,9 @@ static void _write_escaped(int fd, const uint8_t* buf, ssize_t n)
     for (ssize_t i = 0; i < n; i++) {
         char c = (char) buf[i];
         if (c == RETHOS_ESC_CHAR) {
-            checked_write(fd, _esc_esc, sizeof(_esc_esc));
+            write_message(fd, _esc_esc, sizeof(_esc_esc));
         } else {
-            checked_write(fd, &buf[i], 1);
+            write_message(fd, &buf[i], 1);
         }
     }
 }
@@ -466,7 +546,7 @@ void _send_frame(serial_t* serial, const uint8_t *data, size_t thislen, uint8_t 
     preamble_buffer[2] = seqno >> 8;
     preamble_buffer[3] = channel;
 
-    checked_write(serial->fd, _start_frame, sizeof(_start_frame));
+    write_message(serial->fd, _start_frame, sizeof(_start_frame));
 
     fletcher16_add(preamble_buffer, sizeof(preamble_buffer), &flsum1, &flsum2);
     _write_escaped(serial->fd, preamble_buffer, sizeof(preamble_buffer));
@@ -474,7 +554,7 @@ void _send_frame(serial_t* serial, const uint8_t *data, size_t thislen, uint8_t 
     fletcher16_add(data, thislen, &flsum1, &flsum2);
     _write_escaped(serial->fd, data, thislen);
 
-    checked_write(serial->fd, _end_frame, sizeof(_end_frame));
+    write_message(serial->fd, _end_frame, sizeof(_end_frame));
 
     uint16_t cksum = fletcher16_fin(flsum1, flsum2);
     postamble_buffer[0] = (uint8_t) cksum;
@@ -733,7 +813,7 @@ void channel_listen(channel_t* chan, int channel_number) {
     bound_name.sun_family = AF_UNIX;
     snprintf(&bound_name.sun_path[1], sizeof(bound_name.sun_path) - 1, "rethos/%d", channel_number);
     total_size = sizeof(bound_name.sun_family) + 1 + strlen(&bound_name.sun_path[1]);
-    dsock = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+    dsock = socket(AF_UNIX, SOCK_STREAM, 0);
     if (dsock == -1) {
         check_fatal_error("Could not create domain socket");
     }
@@ -876,7 +956,7 @@ int main(int argc, char *argv[])
             printf("An additional %" PRIu64 " frames were dropped, due to lack of a listening process\n", stats.global.drop_notconnected);
 
             if (domain_sockets[RESERVED_CHANNEL].client_socket != -1) {
-                checked_write(domain_sockets[RESERVED_CHANNEL].client_socket, &stats, sizeof(stats));
+                write_message(domain_sockets[RESERVED_CHANNEL].client_socket, &stats, sizeof(stats));
             }
         }
 
@@ -963,20 +1043,20 @@ int main(int argc, char *argv[])
                         serial.last_rcvd_seqno = serial.in_seqno;
 
                         if (serial.numbytes == 0) {
-                            printf("Got an empty frame on channel %d: dropping frame\n", serial.channel)
+                            printf("Got an empty frame on channel %d: dropping frame\n", serial.channel);
                             goto serial_done;
                         } else {
                             printf("Got a frame on channel %d\n", serial.channel);
                         }
 
                         if (serial.channel == STDIN_CHANNEL) {
-                            checked_write(STDOUT_FILENO, serial.frame, serial.numbytes);
+                            write_message(STDOUT_FILENO, serial.frame, serial.numbytes);
                         } else if (serial.channel == TUNTAP_CHANNEL) {
-                            checked_write(tap_fd, serial.frame, serial.numbytes);
+                            write_message(tap_fd, serial.frame, serial.numbytes);
                         }
 
                         if (domain_sockets[serial.channel].client_socket != -1) {
-                            checked_write(domain_sockets[serial.channel].client_socket, serial.frame, serial.numbytes);
+                            write_message(domain_sockets[serial.channel].client_socket, serial.frame, serial.numbytes);
                             stats.channel[serial.channel].domain_forwarded++;
                             stats.global.domain_forwarded++;
                         } else {
@@ -1042,25 +1122,28 @@ int main(int argc, char *argv[])
             } else {
                 dsock = domain_sockets[i].client_socket;
                 if (FD_ISSET(dsock, &readfds)) {
-                    ssize_t res = read(dsock, inbuf, sizeof(inbuf));
-                    if (res <= 0) {
-                        assert(errno != EWOULDBLOCK);
-                        if (errno == EINTR) {
-                            continue;
-                        }
-                        perror("read from domain socket");
+                    int status;
+                    uint32_t message_size = read_message(&status, dsock, inbuf, sizeof(inbuf));
+                    if (status == READ_SUCCESS) {
+                        stats.channel[i].domain_received++;
+                        stats.global.domain_received++;
+                        rethos_send_data_frame(&serial, inbuf, message_size, i);
+                        stats.channel[i].serial_forwarded++;
+                        stats.global.serial_forwarded++;
+                    } else if (status == READ_OVERFLOW) {
+                        fprintf(stderr, "frame too big; skipping\n");
+                    } else if (status == READ_EOF) {
                         close(dsock);
                         domain_sockets[i].client_socket = -1;
                         channel_listen(&domain_sockets[i], i);
                         printf("Client process on channel %d disconnected\n", i);
-                        continue;
+                    } else {
+                        fprintf(stderr, "read from domain socket (fd %d) failed: closing\n", domain_sockets[i].client_socket);
+                        close(dsock);
+                        domain_sockets[i].client_socket = -1;
+                        channel_listen(&domain_sockets[i], i);
+                        printf("Client process on channel %d disconnected\n", i);
                     }
-
-                    stats.channel[i].domain_received++;
-                    stats.global.domain_received++;
-                    rethos_send_data_frame(&serial, inbuf, res, i);
-                    stats.channel[i].serial_forwarded++;
-                    stats.global.serial_forwarded++;
                 }
             }
         }
