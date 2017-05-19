@@ -525,9 +525,9 @@ static void _write_escaped(int fd, const uint8_t* buf, ssize_t n)
     for (ssize_t i = 0; i < n; i++) {
         char c = (char) buf[i];
         if (c == RETHOS_ESC_CHAR) {
-            write_message(fd, _esc_esc, sizeof(_esc_esc));
+            checked_write(fd, _esc_esc, sizeof(_esc_esc));
         } else {
-            write_message(fd, &buf[i], 1);
+            checked_write(fd, &buf[i], 1);
         }
     }
 }
@@ -546,7 +546,7 @@ void _send_frame(serial_t* serial, const uint8_t *data, size_t thislen, uint8_t 
     preamble_buffer[2] = seqno >> 8;
     preamble_buffer[3] = channel;
 
-    write_message(serial->fd, _start_frame, sizeof(_start_frame));
+    checked_write(serial->fd, _start_frame, sizeof(_start_frame));
 
     fletcher16_add(preamble_buffer, sizeof(preamble_buffer), &flsum1, &flsum2);
     _write_escaped(serial->fd, preamble_buffer, sizeof(preamble_buffer));
@@ -554,7 +554,7 @@ void _send_frame(serial_t* serial, const uint8_t *data, size_t thislen, uint8_t 
     fletcher16_add(data, thislen, &flsum1, &flsum2);
     _write_escaped(serial->fd, data, thislen);
 
-    write_message(serial->fd, _end_frame, sizeof(_end_frame));
+    checked_write(serial->fd, _end_frame, sizeof(_end_frame));
 
     uint16_t cksum = fletcher16_fin(flsum1, flsum2);
     postamble_buffer[0] = (uint8_t) cksum;
@@ -1050,7 +1050,7 @@ int main(int argc, char *argv[])
                         }
 
                         if (serial.channel == STDIN_CHANNEL) {
-                            write_message(STDOUT_FILENO, serial.frame, serial.numbytes);
+                            checked_write(STDOUT_FILENO, serial.frame, serial.numbytes);
                         } else if (serial.channel == TUNTAP_CHANNEL) {
                             write_message(tap_fd, serial.frame, serial.numbytes);
                         }
@@ -1124,25 +1124,27 @@ int main(int argc, char *argv[])
                 if (FD_ISSET(dsock, &readfds)) {
                     int status;
                     uint32_t message_size = read_message(&status, dsock, inbuf, sizeof(inbuf));
-                    if (status == READ_SUCCESS) {
+
+                    switch (status) {
+                    case READ_SUCCESS:
                         stats.channel[i].domain_received++;
                         stats.global.domain_received++;
                         rethos_send_data_frame(&serial, inbuf, message_size, i);
                         stats.channel[i].serial_forwarded++;
                         stats.global.serial_forwarded++;
-                    } else if (status == READ_OVERFLOW) {
+                        break;
+                    case READ_OVERFLOW:
                         fprintf(stderr, "frame too big; skipping\n");
-                    } else if (status == READ_EOF) {
-                        close(dsock);
-                        domain_sockets[i].client_socket = -1;
-                        channel_listen(&domain_sockets[i], i);
-                        printf("Client process on channel %d disconnected\n", i);
-                    } else {
+                        break;
+                    case READ_PARTIAL:
                         fprintf(stderr, "read from domain socket (fd %d) failed: closing\n", domain_sockets[i].client_socket);
+                        /* fallthrough intentional */
+                    case READ_EOF:
                         close(dsock);
                         domain_sockets[i].client_socket = -1;
                         channel_listen(&domain_sockets[i], i);
                         printf("Client process on channel %d disconnected\n", i);
+                        break;
                     }
                 }
             }
