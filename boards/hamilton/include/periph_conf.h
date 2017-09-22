@@ -234,6 +234,19 @@ static const spi_conf_t spi_config[] = {
 
 
 /**
+ * @name DMAC configuration
+ * @{
+ */
+#define DMAC_NUMOF         (1U)
+
+#define DMAC_DEV          DMAC
+#define DMAC_IRQ          DMAC_IRQn
+#define DMAC_ISR          isr_dmac
+/* Number of enabled channels: up to 12 */
+#define DMAC_EN_CHANNELS    1
+/** @} */
+
+/**
  * @name Sensor configuration
  * @{
  */
@@ -248,7 +261,7 @@ static const spi_conf_t spi_config[] = {
 #define TMP006_PARAMS_BOARD     { .i2c  = I2C_0, \
                                   .addr = 0x44, \
                                   .rate  = TMP006_CONFIG_CR_AS2 }
-#define TMP006_CONVERSION_TIME  550000UL  
+#define TMP006_CONVERSION_TIME  550000UL
 
 #define APDS9007_PARAMS_BOARD    { .gpio = GPIO_PIN(PA,28), \
 								   .adc  = ADC_PIN_PA08, \
@@ -270,7 +283,7 @@ static const spi_conf_t spi_config[] = {
  * @name Power management configuration for PM_Layered
  * @{
  */
-#define PM_BLOCKER_INITIAL  { .val_u32 = 0x00000000 }
+#define PM_BLOCKER_INITIAL  { .val_u32 = 0x00000100 }
 /** @} */
 
 #ifdef __cplusplus

@@ -26,6 +26,7 @@
 #include "cpu.h"
 
 #include "periph/adc.h"
+#include "periph/dmac.h"
 #include "periph_conf.h"
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
@@ -114,9 +115,18 @@ int adc_init(adc_t channel) {
 }
 
 
-int adc_sample(adc_t channel, adc_res_t res){
-    int output;
+int adc_sample(adc_t channel, adc_res_t res) {
+    int error = adc_sample_start(channel, res);
+    if (error != 0) {
+        return error;
+    }
+    adc_sample_wait();
+    int output = adc_sample_read();
+    adc_sample_end();
+    return output;
+}
 
+int adc_sample_start(adc_t channel, adc_res_t res) {
     /* Set input channel for ADC */
     int chan = ADC_GET_CHANNEL(channel);
     ADC_DEV->INPUTCTRL.bit.MUXPOS = chan;
@@ -153,21 +163,27 @@ int adc_sample(adc_t channel, adc_res_t res){
     /* Start the conversion. */
     ADC_DEV->SWTRIG.reg = ADC_SWTRIG_START;
 
+    return 0;
+}
+
+void adc_sample_wait(void) {
     /* Wait for the result. */
     while (!(ADC_DEV->INTFLAG.reg & ADC_INTFLAG_RESRDY));
+}
 
+int adc_sample_read(void) {
     /* Read result */
-    output = (int)ADC_DEV->RESULT.reg;
+    int output = (int) ADC_DEV->RESULT.reg;
     while(ADC_DEV->STATUS.reg & ADC_STATUS_SYNCBUSY);
+    return output;
+}
 
+void adc_sample_end(void) {
     ADC_DEV->CTRLA.bit.ENABLE = 0;
     while(ADC_DEV->STATUS.reg & ADC_STATUS_SYNCBUSY);
 
     /*  Disable bandgap */
     SYSCTRL->VREF.reg &= ~SYSCTRL_VREF_BGOUTEN;
-
-    /* Return result. */
-    return output;
 }
 
 

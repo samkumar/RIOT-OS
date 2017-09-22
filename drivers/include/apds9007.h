@@ -27,6 +27,7 @@
 #include <stdint.h>
 #include "periph/gpio.h"
 #include "periph/adc.h"
+#include "periph/dmac.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -76,6 +77,9 @@ int apds9007_set_active(apds9007_t* dev);
 int apds9007_set_idle(apds9007_t* dev);
 
 int apds9007_read(apds9007_t* dev, int16_t *light);
+
+int apds9007_read_dma(apds9007_t* dev, int16_t* light, dma_channel_t channel);
+
 #ifdef __cplusplus
 }
 #endif

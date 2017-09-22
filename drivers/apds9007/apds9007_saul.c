@@ -25,7 +25,8 @@
 
 static int read(const void *dev, phydat_t *res) {
     apds9007_t *d = (apds9007_t *)dev;
-    if (apds9007_read(d, &(res->val[0]))) {
+
+    if (apds9007_read_dma(d, &(res->val[0]), 0)) {
         /* Read failure */
         return -ECANCELED;
     }

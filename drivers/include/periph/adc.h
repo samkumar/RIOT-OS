@@ -123,6 +123,14 @@ int adc_init(adc_t line);
  */
 int adc_sample(adc_t line, adc_res_t res);
 
+void adc_configure_current_dma_channel(void);
+
+/* Staged API, in case someone is using interrupts or DMA. */
+int adc_sample_start(adc_t line, adc_res_t res);
+void adc_sample_wait(void);
+int adc_sample_read(void);
+void adc_sample_end(void);
+
 #ifdef __cplusplus
 }
 #endif
