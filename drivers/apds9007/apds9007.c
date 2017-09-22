@@ -67,16 +67,9 @@ void unblock_dma_thread(int error) {
 int apds9007_read_dma(apds9007_t* dev, int16_t* light, dma_channel_t channel) {
     mutex_lock(&block_dma_thread);
 
-    dmac_disable();
-    dmac_reset();
-    dmac_configure();
-    dmac_enable();
-
     dma_channel_register_callback(channel, unblock_dma_thread);
 
     dma_channel_set_current(channel);
-
-    dma_channel_disable_current();
     dma_channel_reset_current();
 
     dma_channel_periph_config_t periph_config;
@@ -91,14 +84,14 @@ int apds9007_read_dma(apds9007_t* dev, int16_t* light, dma_channel_t channel) {
     memory_config.num_beats = 1;
     dma_channel_configure_memory(channel, &memory_config);
 
-    dma_channel_enable_current();
-
     apds9007_set_active(dev);
     xtimer_usleep(APDS9007_STABILIZATION_TIME);
+    dma_channel_enable_current();
     adc_sample_start(dev->p.adc, dev->p.res);
 
     mutex_lock(&block_dma_thread);
     // Thread blocks here until DMA is completed
+    dma_channel_disable_current();
 
     adc_sample_end();
     apds9007_set_idle(dev);

@@ -72,6 +72,7 @@ typedef struct {
     uint8_t periph_src;
 } dma_channel_periph_config_t;
 
+void dmac_init(void);
 
 void dmac_enable(void);
 void dmac_disable(void);

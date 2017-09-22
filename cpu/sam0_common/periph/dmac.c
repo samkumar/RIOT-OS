@@ -12,6 +12,7 @@
 
 #include "periph/dmac.h"
 #include "periph_conf.h"
+#include "pm_layered.h"
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
 
@@ -27,7 +28,18 @@ dma_callback_t channel_callbacks[DMAC_EN_CHANNELS];
 
 /* DMA Controller Configuration */
 
+void dmac_init(void) {
+    dmac_disable();
+    dmac_reset();
+    dmac_configure();
+    dmac_enable();
+}
+
 void dmac_enable(void) {
+    /* Turn on power manager for DMAC */
+    PM->APBBMASK.reg |= PM_APBBMASK_DMAC;
+    PM->AHBMASK.reg |= PM_AHBMASK_DMAC;
+
     NVIC_EnableIRQ(DMAC_IRQ);
     DMAC_DEV->CTRL.reg = 0x0F02;
 }
@@ -35,6 +47,10 @@ void dmac_enable(void) {
 void dmac_disable(void) {
     DMAC_DEV->CTRL.reg = 0x0000;
     NVIC_DisableIRQ(DMAC_IRQ);
+
+    /* Turn off power management for DMA. */
+    //PM->APBBMASK.reg &= ~PM_APBBMASK_DMAC;
+    //PM->AHBMASK.reg &= ~PM_AHBMASK_DMAC;
 }
 
 void dmac_reset(void) {
@@ -58,6 +74,7 @@ void dma_channel_set_current(dma_channel_t channel) {
 }
 
 void dma_channel_enable_current(void) {
+    //pm_block(0);
     DMAC_DEV->CHINTENSET.reg = 0x07;
     DMAC_DEV->CHCTRLA.reg = 0x02;
 }
@@ -65,6 +82,7 @@ void dma_channel_enable_current(void) {
 void dma_channel_disable_current(void) {
     DMAC_DEV->CHCTRLA.reg = 0x00;
     DMAC_DEV->CHINTENCLR.reg = 0x07;
+    //pm_unblock(0);
 }
 
 void dma_channel_reset_current(void) {

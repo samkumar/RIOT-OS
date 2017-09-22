@@ -57,7 +57,7 @@ int adc_init(adc_t channel) {
     ADC_DEV->CALIB.reg = ADC_CALIB_BIAS_CAL(bias) | ADC_CALIB_LINEARITY_CAL(linearity);
 
     /* Set RUN_IN_STANDBY */
-    ADC_DEV->CTRLA.bit.RUNSTDBY = 0;
+    ADC_DEV->CTRLA.bit.RUNSTDBY = 1;
 
     /* Set Voltage Reference */
     ADC_DEV->REFCTRL.bit.REFSEL  = ADC_REFCTRL_REFSEL_INT1V_Val;
