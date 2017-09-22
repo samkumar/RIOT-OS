@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "apds9007.h"
+#include "mutex.h"
 #include "xtimer.h"
 
 #define ENABLE_DEBUG    (0)
@@ -31,7 +32,7 @@
 int apds9007_set_active(apds9007_t *dev) {
     gpio_write(dev->p.gpio, 0);
     return 0;
-} 
+}
 
 int apds9007_set_idle(apds9007_t *dev) {
     gpio_write(dev->p.gpio, 1);
@@ -55,4 +56,3 @@ int apds9007_read(apds9007_t *dev, int16_t *light) {
     apds9007_set_idle(dev);
     return 0;
 }
-
