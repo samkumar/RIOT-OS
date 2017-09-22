@@ -32,8 +32,8 @@ typedef unsigned int dma_channel_t;
  * @brief   Default DMA channel; undefined value
  * @{
  */
-#ifndef DMAC_UNDEF
-#define DMAC_UNDEF          (UINT_MAX)
+#ifndef DMA_CHANNEL_UNDEF
+#define DMA_CHANNEL_UNDEF   (UINT_MAX)
 #endif
 /** @} */
 
@@ -46,7 +46,7 @@ typedef unsigned int dma_channel_t;
 #endif
 /** @} */
 
-typedef void (*dma_callback_t)(int);
+typedef void (*dma_callback_t)(void*, int);
 
 typedef enum {
     DMAC_BEATSIZE_BYTE = 0,
@@ -79,7 +79,7 @@ void dmac_disable(void);
 void dmac_reset(void);
 void dmac_configure(void);
 
-void dma_channel_register_callback(dma_channel_t channel, dma_callback_t callback);
+void dma_channel_register_callback(dma_channel_t channel, dma_callback_t callback, void* arg);
 void dma_channel_set_current(dma_channel_t channel);
 void dma_channel_enable_current(void);
 void dma_channel_disable_current(void);

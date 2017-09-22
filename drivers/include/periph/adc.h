@@ -47,6 +47,7 @@
 
 #include "periph_cpu.h"
 #include "periph_conf.h"
+#include "periph/dmac.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -123,13 +124,16 @@ int adc_init(adc_t line);
  */
 int adc_sample(adc_t line, adc_res_t res);
 
-void adc_configure_current_dma_channel(void);
-
-/* Staged API, in case someone is using interrupts or DMA. */
-int adc_sample_start(adc_t line, adc_res_t res);
-void adc_sample_wait(void);
-int adc_sample_read(void);
-void adc_sample_end(void);
+/**
+ * @brief   Set the DMA channel to use for ADC sampling.
+ *
+ * This function sets the DMA channel to use for ADC sampling. If the provided
+ * channel is DMA_CHANNEL_UNDEF, then the ADC driver will use spin loops to wait
+ * for the result, instead of putting the thread to sleep while waiting.
+ *
+ * @param[in] channel       the DMA channel to use, or DMA_CHANNEL_UNDEF
+ */
+void adc_set_dma_channel(dma_channel_t channel);
 
 #ifdef __cplusplus
 }

@@ -24,7 +24,12 @@ volatile DmacDescriptor descriptor_section[DMAC_EN_CHANNELS] __attribute__((alig
 volatile DmacDescriptor writeback_section[DMAC_EN_CHANNELS] __attribute__((aligned(16)));
 
 /* DMA channel callbacks. */
-dma_callback_t channel_callbacks[DMAC_EN_CHANNELS];
+typedef struct {
+    dma_callback_t callback;
+    void* arg;
+} dma_callback_entry_t;
+
+dma_callback_entry_t channel_callbacks[DMAC_EN_CHANNELS];
 
 /* DMA Controller Configuration */
 
@@ -65,8 +70,10 @@ void dmac_configure(void) {
 
 /* DMA Channel Configuration */
 
-void dma_channel_register_callback(dma_channel_t channel, dma_callback_t callback) {
-    channel_callbacks[channel] = callback;
+void dma_channel_register_callback(dma_channel_t channel, dma_callback_t callback, void* arg) {
+    dma_callback_entry_t* entry = &channel_callbacks[channel];
+    entry->callback = callback;
+    entry->arg = arg;
 }
 
 void dma_channel_set_current(dma_channel_t channel) {
@@ -149,7 +156,8 @@ void DMAC_ISR(void) {
             // Clear the interrupt
             DMAC_DEV->CHINTFLAG.reg = 0x07;
 
-            channel_callbacks[channel](error);
+            dma_callback_entry_t* entry = &channel_callbacks[channel];
+            entry->callback(entry->arg, error);
         }
 
         intstatus >>= 1;

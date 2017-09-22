@@ -15,6 +15,7 @@
  *
  * @author      Michael Andersen <m.andersen@berkeley.edu>
  * @author      Hyung-Sin Kim <hs.kim@berkeley.edu>
+ * @author      Sam Kumar <samkumar@berkeley.edu>
  * @author      Rane Balslev (SAMR21) <ranebalslev@gmail.com>
  * @author      Hauke Petersen <hauke.petersen@fu-berlin.de>
  * @author      Mark Solters <msolters@driblet.io>
@@ -25,6 +26,7 @@
 #include <stdint.h>
 #include "cpu.h"
 
+#include "mutex.h"
 #include "periph/adc.h"
 #include "periph/dmac.h"
 #include "periph_conf.h"
@@ -57,7 +59,7 @@ int adc_init(adc_t channel) {
     ADC_DEV->CALIB.reg = ADC_CALIB_BIAS_CAL(bias) | ADC_CALIB_LINEARITY_CAL(linearity);
 
     /* Set RUN_IN_STANDBY */
-    ADC_DEV->CTRLA.bit.RUNSTDBY = 1;
+    ADC_DEV->CTRLA.bit.RUNSTDBY = 0;
 
     /* Set Voltage Reference */
     ADC_DEV->REFCTRL.bit.REFSEL  = ADC_REFCTRL_REFSEL_INT1V_Val;
@@ -112,18 +114,6 @@ int adc_init(adc_t channel) {
     while(ADC_DEV->STATUS.reg & ADC_STATUS_SYNCBUSY);
 
     return 0;
-}
-
-
-int adc_sample(adc_t channel, adc_res_t res) {
-    int error = adc_sample_start(channel, res);
-    if (error != 0) {
-        return error;
-    }
-    adc_sample_wait();
-    int output = adc_sample_read();
-    adc_sample_end();
-    return output;
 }
 
 int adc_sample_start(adc_t channel, adc_res_t res) {
@@ -186,5 +176,102 @@ void adc_sample_end(void) {
     SYSCTRL->VREF.reg &= ~SYSCTRL_VREF_BGOUTEN;
 }
 
+
+int adc_sample_without_dma(adc_t channel, adc_res_t res) {
+    int error = adc_sample_start(channel, res);
+    if (error != 0) {
+        return error;
+    }
+    adc_sample_wait();
+    int output = adc_sample_read();
+    adc_sample_end();
+    return output;
+}
+
+struct adc_dma_waiter {
+    mutex_t waiter;
+    volatile int error;
+};
+
+void adc_dma_unblock(void* arg, int error) {
+    struct adc_dma_waiter* waiter = arg;
+    waiter->error = error;
+    mutex_unlock(&waiter->waiter);
+}
+
+void adc_configure_dma_channel(dma_channel_t channel) {
+    dma_channel_set_current(channel);
+    dma_channel_reset_current();
+
+    dma_channel_periph_config_t periph_config;
+    periph_config.on_trigger = DMAC_ACTION_TRANSACTION;
+    periph_config.periph_src = 0x27; // this is the ADC
+    dma_channel_configure_periph_current(&periph_config);
+}
+
+int adc_sample_with_dma(adc_t adc_channel, adc_res_t res, dma_channel_t dma_channel) {
+    volatile uint16_t result;
+
+    dma_channel_memory_config_t memory_config;
+    memory_config.source = (volatile void*) &ADC_DEV->RESULT.reg;
+    memory_config.destination = &result;
+    memory_config.beatsize = DMAC_BEATSIZE_HALFWORD;
+    memory_config.num_beats = 1;
+    dma_channel_configure_memory(dma_channel, &memory_config);
+
+    struct adc_dma_waiter waiter;
+    mutex_init(&waiter.waiter);
+    waiter.error = 0;
+    dma_channel_register_callback(dma_channel, adc_dma_unblock, &waiter);
+
+    dma_channel_set_current(dma_channel);
+    dma_channel_enable_current();
+
+    int start_error = adc_sample_start(adc_channel, res);
+    if (start_error != 0) {
+        dma_channel_disable_current();
+        return start_error;
+    }
+
+    mutex_lock(&waiter.waiter);
+    mutex_lock(&waiter.waiter);
+
+    // Thread blocks here until result is ready
+
+    mutex_unlock(&waiter.waiter);
+    dma_channel_disable_current();
+    adc_sample_end();
+
+    if (waiter.error != 0) {
+        return waiter.error;
+    }
+
+    return (int) result;
+}
+
+dma_channel_t default_dma_channel = DMA_CHANNEL_UNDEF;
+
+int adc_sample(adc_t channel, adc_res_t res) {
+    if (default_dma_channel == DMA_CHANNEL_UNDEF) {
+        return adc_sample_without_dma(channel, res);
+    }
+
+    return adc_sample_with_dma(channel, res, default_dma_channel);
+}
+
+void adc_set_dma_channel(dma_channel_t channel) {
+    if (channel == DMA_CHANNEL_UNDEF) {
+        /* Turn off RUN_IN_STANDBY to save power */
+        ADC_DEV->CTRLA.bit.RUNSTDBY = 0;
+    } else {
+        if (default_dma_channel == DMA_CHANNEL_UNDEF) {
+            /* Turn on RUN_IN_STANDBY so CPU can sleep while ADC does work. */
+            ADC_DEV->CTRLA.bit.RUNSTDBY = 1;
+        }
+        adc_configure_dma_channel(channel);
+    }
+
+    default_dma_channel = channel;
+}
 
 #endif /* ADC_NUMOF */
