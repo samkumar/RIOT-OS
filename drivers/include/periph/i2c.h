@@ -72,6 +72,7 @@
  *          updated periph interface
  */
 #include "periph/dev_enums.h"
+#include "periph/dmac.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -287,6 +288,8 @@ void i2c_poweron(i2c_t dev);
  * @param[in] dev           the I2C device to power off
  */
 void i2c_poweroff(i2c_t dev);
+
+void i2c_set_dma_channel(dma_channel_t channel);
 
 #ifdef __cplusplus
 }
