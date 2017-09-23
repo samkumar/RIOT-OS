@@ -217,6 +217,11 @@ int adc_sample_with_dma(adc_t adc_channel, adc_res_t res, dma_channel_t dma_chan
     memory_config.destination = &result;
     memory_config.beatsize = DMAC_BEATSIZE_HALFWORD;
     memory_config.num_beats = 1;
+    memory_config.stepsize = DMAC_STEPSIZE_X1;
+    memory_config.stepsel = DMAC_STEPSEL_SRC;
+    memory_config.increment_source = false;
+    memory_config.increment_destination = false;
+    memory_config.next_block = NULL;
     dma_channel_configure_memory(dma_channel, &memory_config);
 
     struct adc_dma_waiter waiter;
@@ -227,8 +232,8 @@ int adc_sample_with_dma(adc_t adc_channel, adc_res_t res, dma_channel_t dma_chan
     dma_channel_set_current(dma_channel);
     dma_channel_enable_current();
 
-    /* Turn on RUN_IN_STANDBY so CPU can sleep while ADC does work. */
-    ADC_DEV->CTRLA.bit.RUNSTDBY = 1;
+    /* Set RUN_IN_STANDBY */
+    ADC_DEV->CTRLA.bit.RUNSTDBY = 0;
 
     int start_error = adc_sample_start(adc_channel, res);
     if (start_error != 0) {

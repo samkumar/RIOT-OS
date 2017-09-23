@@ -64,7 +64,7 @@ static int fxos8700_reset(fxos8700_t* dev)
     return 0;
 }
 
-int fxos8700_init(fxos8700_t* dev, const fxos8700_params_t *params) 
+int fxos8700_init(fxos8700_t* dev, const fxos8700_params_t *params)
 {
     dev->p.i2c = params->i2c;
     int rv;

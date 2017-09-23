@@ -60,12 +60,43 @@ typedef enum {
     DMAC_ACTION_TRANSACTION
 } dmac_action_t;
 
+typedef enum {
+    DMAC_STEPSIZE_X1 = 0x0,
+    DMAC_STEPSIZE_X2 = 0x1,
+    DMAC_STEPSIZE_X4 = 0x2,
+    DMAC_STEPSIZE_X8 = 0x3,
+    DMAC_STEPSIZE_X16 = 0x4,
+    DMAC_STEPSIZE_X32 = 0x5,
+    DMAC_STEPSIZE_X64 = 0x6,
+    DMAC_STEPSIZE_X128 = 0x7
+} dmac_stepsize_t;
+
+typedef enum {
+    DMAC_STEPSEL_SRC = 0x0,
+    DMAC_STEPSEL_DST = 0x1
+} dmac_stepsel_t;
+
+struct dma_channel_linked_block_;
+typedef struct dma_channel_linked_block_ dma_channel_linked_block_t;
+
 typedef struct {
-    volatile void* source;
+    const volatile void* source;
     volatile void* destination;
     dmac_beatsize_t beatsize;
     uint16_t num_beats;
+
+    dmac_stepsize_t stepsize;
+    dmac_stepsel_t stepsel;
+    bool increment_source;
+    bool increment_destination;
+
+    dma_channel_linked_block_t* next_block;
 } dma_channel_memory_config_t;
+
+typedef struct dma_channel_linked_block_ {
+    volatile uint8_t descriptor_blob[16] __attribute__((aligned(16)));
+    dma_channel_memory_config_t config;
+} dma_channel_linked_block_t;
 
 typedef struct {
     dmac_action_t on_trigger;
@@ -85,7 +116,9 @@ void dma_channel_enable_current(void);
 void dma_channel_disable_current(void);
 void dma_channel_reset_current(void);
 void dma_channel_configure_periph_current(dma_channel_periph_config_t* config);
+void dma_channel_create_descriptor(volatile void* descriptor, dma_channel_memory_config_t* config);
 void dma_channel_configure_memory(dma_channel_t channel, dma_channel_memory_config_t* config);
+volatile void* dma_channel_get_descriptor_address(dma_channel_t channel);
 
 #ifdef __cplusplus
 }

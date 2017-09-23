@@ -112,9 +112,10 @@ void dma_channel_configure_periph_current(dma_channel_periph_config_t* config) {
     DMAC_DEV->CHCTRLB.reg = chctrlb_reg;
 }
 
-void dma_channel_configure_memory(dma_channel_t channel, dma_channel_memory_config_t* config) {
-    volatile DmacDescriptor* desc = &descriptor_section[channel];
-    uint16_t btctrl_reg = 0x0009; // interrupt at end of block, and valid bit
+
+void dma_channel_create_descriptor(volatile void* blob, dma_channel_memory_config_t* config) {
+    volatile DmacDescriptor* desc = blob;
+    uint16_t btctrl_reg = 0x0001; // Valid bit set
     switch (config->beatsize) {
     case DMAC_BEATSIZE_BYTE:
         btctrl_reg |= 0x0000;
@@ -126,11 +127,38 @@ void dma_channel_configure_memory(dma_channel_t channel, dma_channel_memory_conf
         btctrl_reg |= 0x0200;
         break;
     }
+    btctrl_reg |= ((uint16_t) config->stepsize) << 13;
+    btctrl_reg |= ((uint16_t) config->stepsel) << 12;
+    if (config->increment_destination) {
+        btctrl_reg |= 0x0800;
+    }
+    if (config->increment_source) {
+        btctrl_reg |= 0x0400;
+    }
+    if (config->next_block == NULL) {
+        btctrl_reg |= 0x0008; // Configure the last block to give an interrupt
+    }
     desc->BTCTRL.reg = btctrl_reg;
     desc->BTCNT.reg = config->num_beats;
     desc->SRCADDR.reg = (uint32_t) config->source;
     desc->DSTADDR.reg = (uint32_t) config->destination;
-    desc->DESCADDR.reg = 0x00000000; // Don't handle linked descriptors
+    desc->DESCADDR.reg = (uint32_t) &config->next_block->descriptor_blob[0];
+}
+
+void dma_channel_configure_memory(dma_channel_t channel, dma_channel_memory_config_t* config) {
+    volatile DmacDescriptor* desc = dma_channel_get_descriptor_address(channel);
+    for (;;) {
+        dma_channel_create_descriptor(desc, config);
+        if (config->next_block == NULL) {
+            break;
+        }
+        desc = (volatile DmacDescriptor*) &config->next_block->descriptor_blob[0];
+        config = &config->next_block->config;
+    }
+}
+
+volatile void* dma_channel_get_descriptor_address(dma_channel_t channel) {
+    return &descriptor_section[channel];
 }
 
 void DMAC_ISR(void) {
