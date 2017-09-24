@@ -243,8 +243,8 @@ static const spi_conf_t spi_config[] = {
 #define DMAC_DEV          DMAC
 #define DMAC_IRQ          DMAC_IRQn
 #define DMAC_ISR          isr_dmac
-/* Number of enabled channels: up to 12 */
-#define DMAC_EN_CHANNELS    3
+/* Number of enabled channels */
+#define DMAC_EN_CHANNELS    12
 /** @} */
 
 /**

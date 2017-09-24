@@ -142,7 +142,11 @@ void dma_channel_create_descriptor(volatile void* blob, dma_channel_memory_confi
     desc->BTCNT.reg = config->num_beats;
     desc->SRCADDR.reg = (uint32_t) config->source;
     desc->DSTADDR.reg = (uint32_t) config->destination;
-    desc->DESCADDR.reg = (uint32_t) &config->next_block->descriptor_blob[0];
+    if (config->next_block == NULL) {
+        desc->DESCADDR.reg = 0x00000000;
+    } else {
+        desc->DESCADDR.reg = (uint32_t) &config->next_block->descriptor_blob[0];
+    }
 }
 
 void dma_channel_configure_memory(dma_channel_t channel, dma_channel_memory_config_t* config) {
@@ -169,6 +173,8 @@ void DMAC_ISR(void) {
         uint32_t pending = intstatus & 0x00000001;
         if (pending != 0) {
             assert(channel < DMAC_EN_CHANNELS);
+
+            dma_channel_set_current(channel);
 
             int error;
 

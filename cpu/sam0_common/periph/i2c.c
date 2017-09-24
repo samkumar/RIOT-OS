@@ -65,25 +65,27 @@ static void _configure_write_dma(SercomI2cm *dev, const uint8_t *data, int lengt
 static void _configure_read_dma(SercomI2cm *dev, uint8_t *data, int length, dma_channel_t dma_channel);
 static void _stop_dma(SercomI2cm* dev);
 
-
-/* Default DMA channel (or DMA_CHANNEL_UNDEF if DMA is not used) */
-dma_channel_t i2c_dma_channel = DMA_CHANNEL_UNDEF;
+typedef struct {
+    mutex_t lock;
+    dma_channel_t dma_channel;
+} i2c_state_t;
 
 /**
- * @brief Array holding one pre-initialized mutex for each I2C device
+ * @brief Array holding one pre-initialized mutex for each I2C device, and the
+ *        default DMA channel to use
  */
-static mutex_t locks[] = {
+static i2c_state_t i2c_state[] = {
 #if I2C_0_EN
-    [I2C_0] = MUTEX_INIT,
+    [I2C_0] = { MUTEX_INIT, DMA_CHANNEL_UNDEF },
 #endif
 #if I2C_1_EN
-    [I2C_1] = MUTEX_INIT,
+    [I2C_1] = { MUTEX_INIT, DMA_CHANNEL_UNDEF },
 #endif
 #if I2C_2_EN
-    [I2C_2] = MUTEX_INIT
+    [I2C_2] = { MUTEX_INIT, DMA_CHANNEL_UNDEF },
 #endif
 #if I2C_3_EN
-    [I2C_3] = MUTEX_INIT
+    [I2C_3] = { MUTEX_INIT, DMA_CHANNEL_UNDEF }
 #endif
 };
 
@@ -226,7 +228,7 @@ int i2c_acquire(i2c_t dev)
     if (dev >= I2C_NUMOF) {
         return -1;
     }
-    mutex_lock(&locks[dev]);
+    mutex_lock(&i2c_state[dev].lock);
     return 0;
 }
 
@@ -235,7 +237,7 @@ int i2c_release(i2c_t dev)
     if (dev >= I2C_NUMOF) {
         return -1;
     }
-    mutex_unlock(&locks[dev]);
+    mutex_unlock(&i2c_state[dev].lock);
     return 0;
 }
 
@@ -258,7 +260,8 @@ int i2c_read_bytes(i2c_t dev, uint8_t address, void *data, int length)
             return -1;
     }
 
-    if (i2c_dma_channel != DMA_CHANNEL_UNDEF) {
+    dma_channel_t i2c_dma_channel = i2c_state[dev].dma_channel;
+    if (i2c_dma_channel != DMA_CHANNEL_UNDEF && !irq_is_in()) {
         _configure_read_dma(i2c, data, length, i2c_dma_channel);
         _start_dma(i2c, address, I2C_FLAG_READ, (uint8_t) length, i2c_dma_channel);
         _transact_dma(i2c, i2c_dma_channel);
@@ -298,7 +301,8 @@ int i2c_read_regs(i2c_t dev, uint8_t address, uint8_t reg, void *data, int lengt
             return -1;
     }
 
-    if (i2c_dma_channel != DMA_CHANNEL_UNDEF) {
+    dma_channel_t i2c_dma_channel = i2c_state[dev].dma_channel;
+    if (i2c_dma_channel != DMA_CHANNEL_UNDEF && !irq_is_in()) {
         _configure_write_dma(i2c, &reg, 1, i2c_dma_channel);
         _start_dma(i2c, address, I2C_FLAG_WRITE, 1, i2c_dma_channel);
         _transact_dma(i2c, i2c_dma_channel);
@@ -337,7 +341,8 @@ int i2c_write_bytes(i2c_t dev, uint8_t address, const void *data, int length)
             return -1;
     }
 
-    if (i2c_dma_channel != DMA_CHANNEL_UNDEF) {
+    dma_channel_t i2c_dma_channel = i2c_state[dev].dma_channel;
+    if (i2c_dma_channel != DMA_CHANNEL_UNDEF && !irq_is_in()) {
         _configure_write_dma(I2CSercom, data, length, i2c_dma_channel);
         _start_dma(I2CSercom, address, I2C_FLAG_WRITE, length, i2c_dma_channel);
         _transact_dma(I2CSercom, i2c_dma_channel);
@@ -375,7 +380,8 @@ int i2c_write_regs(i2c_t dev, uint8_t address, uint8_t reg, const void *data, in
             return -1;
     }
 
-    if (i2c_dma_channel != DMA_CHANNEL_UNDEF) {
+    dma_channel_t i2c_dma_channel = i2c_state[dev].dma_channel;
+    if (i2c_dma_channel != DMA_CHANNEL_UNDEF && !irq_is_in()) {
 
         /*
          * We could just use the following six lines to do the work:
@@ -623,13 +629,13 @@ static inline int _wait_for_response(SercomI2cm *dev, uint32_t max_timeout_count
 
 /* DMA Functionality */
 
-void i2c_set_dma_channel(dma_channel_t channel)
+void i2c_set_dma_channel(i2c_t dev, dma_channel_t channel)
 {
     if (channel != DMA_CHANNEL_UNDEF) {
         dma_channel_set_current(channel);
         dma_channel_reset_current();
     }
-    i2c_dma_channel = channel;
+    i2c_state[dev].dma_channel = channel;
 }
 
 struct i2c_dma_waiter {
@@ -682,8 +688,9 @@ static int _transact_dma(SercomI2cm* dev, dma_channel_t dma_channel)
 
     // The thread blocks here until the transfer is complete
 
-    mutex_unlock(&waiter.waiter);
+    dma_channel_set_current(dma_channel);
     dma_channel_disable_current();
+    mutex_unlock(&waiter.waiter);
 
     return waiter.error;
 }

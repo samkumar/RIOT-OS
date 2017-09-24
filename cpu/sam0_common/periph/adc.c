@@ -250,9 +250,10 @@ int adc_sample_with_dma(adc_t adc_channel, adc_res_t res, dma_channel_t dma_chan
     /* Turn off RUN_IN_STANDBY to save power */
     ADC_DEV->CTRLA.bit.RUNSTDBY = 0;
 
-    mutex_unlock(&waiter.waiter);
+    dma_channel_set_current(dma_channel);
     dma_channel_disable_current();
     adc_sample_end();
+    mutex_unlock(&waiter.waiter);
 
     if (waiter.error != 0) {
         return waiter.error;
@@ -264,7 +265,7 @@ int adc_sample_with_dma(adc_t adc_channel, adc_res_t res, dma_channel_t dma_chan
 dma_channel_t default_dma_channel = DMA_CHANNEL_UNDEF;
 
 int adc_sample(adc_t channel, adc_res_t res) {
-    if (default_dma_channel == DMA_CHANNEL_UNDEF) {
+    if (default_dma_channel == DMA_CHANNEL_UNDEF || irq_is_in()) {
         return adc_sample_without_dma(channel, res);
     }
 
