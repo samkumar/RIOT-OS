@@ -72,6 +72,7 @@
  *          updated periph interface
  */
 #include "periph/dev_enums.h"
+#include "periph/dmac.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -287,6 +288,22 @@ void i2c_poweron(i2c_t dev);
  * @param[in] dev           the I2C device to power off
  */
 void i2c_poweroff(i2c_t dev);
+
+/**
+ * @brief   Set the DMA channel to use for the specified I2C device.
+ *
+ * If this function is called with channel set to valid DMA channel, then DMA
+ * will be used for the specified SPI device. This means that the thread will
+ * be blocked (i.e., put to sleep) for the transfer, and will be resumed
+ * (i.e., woken up) when the trasfer is complete. If channel is set to
+ * DMA_CHANNEL_UNDEF, then DMA is not used for the specified I2C device;
+ * instead the thread spin-waits (i.e., is not put to sleep) for each byte read
+ * and written.
+ *
+ * @param[in] dev       I2C device to use
+ * @param[in] channel   DMA channel to use for the specified I2C device
+ */
+void i2c_set_dma_channel(i2c_t dev, dma_channel_t channel);
 
 #ifdef __cplusplus
 }

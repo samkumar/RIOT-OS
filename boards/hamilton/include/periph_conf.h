@@ -223,6 +223,7 @@ static const spi_conf_t spi_config[] = {
 #define I2C_0_DEV           SERCOM3->I2CM
 #define I2C_0_IRQ           SERCOM3_IRQn
 #define I2C_0_ISR           isr_sercom3
+#define I2C_0_SERCOM_NUM    3
 /* I2C 0 GCLK */
 #define I2C_0_GCLK_ID       SERCOM3_GCLK_ID_CORE
 #define I2C_0_GCLK_ID_SLOW  SERCOM3_GCLK_ID_SLOW
@@ -232,6 +233,19 @@ static const spi_conf_t spi_config[] = {
 #define I2C_0_MUX           GPIO_MUX_D
 /** @} */
 
+
+/**
+ * @name DMAC configuration
+ * @{
+ */
+#define DMAC_NUMOF         (1U)
+
+#define DMAC_DEV          DMAC
+#define DMAC_IRQ          DMAC_IRQn
+#define DMAC_ISR          isr_dmac
+/* Number of enabled channels */
+#define DMAC_EN_CHANNELS    12
+/** @} */
 
 /**
  * @name Sensor configuration
@@ -248,7 +262,7 @@ static const spi_conf_t spi_config[] = {
 #define TMP006_PARAMS_BOARD     { .i2c  = I2C_0, \
                                   .addr = 0x44, \
                                   .rate  = TMP006_CONFIG_CR_AS2 }
-#define TMP006_CONVERSION_TIME  550000UL  
+#define TMP006_CONVERSION_TIME  550000UL
 
 #define APDS9007_PARAMS_BOARD    { .gpio = GPIO_PIN(PA,28), \
 								   .adc  = ADC_PIN_PA08, \

@@ -60,6 +60,7 @@
 
 #include "periph_cpu.h"
 #include "periph_conf.h"
+#include "periph/dmac.h"
 #include "periph/gpio.h"
 
 #ifdef __cplusplus
@@ -317,6 +318,25 @@ uint8_t spi_transfer_reg(spi_t bus, spi_cs_t cs, uint8_t reg, uint8_t out);
  */
 void spi_transfer_regs(spi_t bus, spi_cs_t cs, uint8_t reg,
                        const void *out, void *in, size_t len);
+
+/**
+ * @brief   Set the DMA channels to use for the specified SPI bus.
+ *
+ * If this function is called with read_channel and write_channel set to valid
+ * DMA channels, DMA will be used for SPI on the specified bus. This means that
+ * the thread will be blocked (i.e., put to sleep) for the transfer, and will
+ * be resumed (i.e., woken up) when the transfer is complete. The same channel
+ * may not be used for both read_channel and write_channel. If read_channel and
+ * write_channel are both set to DMA_CHANNEL_UNDEF, then DMA is not used for
+ * the specified SPI bus; instead, the thread spin-waits (i.e., is not put to
+ * sleep) for each byte read and written.
+ *
+ * @param[in]  bus             SPI device to use
+ * @param[in]  read_channel    DMA channel to use for reading input
+ * @param[in]  write_channel   DMA channel to use for writing output
+ */
+void spi_set_dma_channel(spi_t bus, dma_channel_t read_channel,
+                         dma_channel_t write_channel);
 
 #ifdef __cplusplus
 }
