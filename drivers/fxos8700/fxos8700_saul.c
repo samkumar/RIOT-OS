@@ -27,9 +27,9 @@ static int read_mag(const void *dev, phydat_t *res)
 {
     fxos8700_t *d = (fxos8700_t *)dev;
     if (fxos8700_read_mag(d, (fxos8700_measurement_mag_t *)res)) {
-			/* Read failure */			
-			return -ECANCELED;
-		}
+        /* Read failure */
+        return -ECANCELED;
+    }
 
     res->unit = UNIT_GS;
     res->scale = -3;
@@ -40,9 +40,9 @@ static int read_acc(const void *dev, phydat_t *res)
 {
     fxos8700_t *d = (fxos8700_t *)dev;
     if (fxos8700_read_acc(d, (fxos8700_measurement_acc_t *)res)) {
-			/* Read failure */			
-			return 0;
-		}
+        /* Read failure */
+        return 0;
+    }
 
     res->unit = UNIT_G;
     res->scale = -3;
