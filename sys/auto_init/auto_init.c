@@ -368,6 +368,10 @@ void auto_init(void)
     extern void auto_init_fxos8700(void);
     auto_init_fxos8700();
 #endif
+#ifdef MODULE_EKMB1101111
+    extern void auto_init_ekmb1101111(void);
+    auto_init_ekmb1101111();
+#endif
 
 #endif /* MODULE_AUTO_INIT_SAUL */
 

@@ -154,3 +154,6 @@ endif
 ifneq (,$(filter fxos8700,$(USEMODULE)))
     USEMODULE_INCLUDES += $(RIOTBASE)/drivers/fxos8700/include
 endif
+ifneq (,$(filter ekmb1101111,$(USEMODULE)))
+    USEMODULE_INCLUDES += $(RIOTBASE)/drivers/ekmb1101111/include
+endif
