@@ -364,6 +364,10 @@ void auto_init(void)
     extern void auto_init_push_button(void);
     auto_init_push_button();
 #endif
+#ifdef MODULE_FXOS8700
+    extern void auto_init_fxos8700(void);
+    auto_init_fxos8700();
+#endif
 
 #endif /* MODULE_AUTO_INIT_SAUL */
 

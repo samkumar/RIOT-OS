@@ -151,3 +151,6 @@ endif
 ifneq (,$(filter push_button,$(USEMODULE)))
     USEMODULE_INCLUDES += $(RIOTBASE)/drivers/push_button/include
 endif
+ifneq (,$(filter fxos8700,$(USEMODULE)))
+    USEMODULE_INCLUDES += $(RIOTBASE)/drivers/fxos8700/include
+endif
