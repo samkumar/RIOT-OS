@@ -567,7 +567,7 @@ static void _isr(netdev_t *netdev)
 #if LEAF_NODE
 				/* Wake up for a while when receiving an ACK with pending bit */
 				if (trac_status == AT86RF2XX_TRX_STATE__TRAC_SUCCESS_DATA_PENDING) {
-	                dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;		
+	                dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;
 				}
 #endif
 #endif

@@ -6,6 +6,11 @@ PSEUDOMODULES += cbor_ctime
 PSEUDOMODULES += cbor_float
 PSEUDOMODULES += cbor_semantic_tagging
 PSEUDOMODULES += conn_can_isotp_multi
+PSEUDOMODULES += conn
+PSEUDOMODULES += conn_ip
+PSEUDOMODULES += conn_tcp
+PSEUDOMODULES += conn_tcp_freebsd
+PSEUDOMODULES += conn_udp
 PSEUDOMODULES += core_%
 PSEUDOMODULES += emb6_router
 PSEUDOMODULES += gnrc_ipv6_default
@@ -62,6 +67,7 @@ PSEUDOMODULES += sock
 PSEUDOMODULES += sock_ip
 PSEUDOMODULES += sock_tcp
 PSEUDOMODULES += sock_udp
+PSEUDOMODULES += sock_tcp_freebsd
 
 # include variants of the AT86RF2xx drivers as pseudo modules
 PSEUDOMODULES += at86rf23%
