@@ -267,7 +267,7 @@ typedef union {
  * @return                  -1 on error
  * @return                  -2 on invalid address
  */
-int fxos8700_init(fxos8700_t* dev, const fxos8700_params_t* params); //i2c_t i2c, uint8_t addr);
+int fxos8700_init(fxos8700_t* dev, const fxos8700_params_t* params);
 
 int fxos8700_set_active(fxos8700_t* dev);
 
