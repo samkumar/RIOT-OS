@@ -85,6 +85,9 @@ endif
 ifneq (,$(filter cc2420,$(USEMODULE)))
     USEMODULE_INCLUDES += $(RIOTBASE)/drivers/cc2420/include
 endif
+ifneq (,$(filter fxos8700,$(USEMODULE)))
+    USEMODULE_INCLUDES += $(RIOTBASE)/drivers/fxos8700/include
+endif
 ifneq (,$(filter lpd8808,$(USEMODULE)))
     USEMODULE_INCLUDES += $(RIOTBASE)/drivers/lpd8808/include
 endif
@@ -132,7 +135,4 @@ ifneq (,$(filter adcxx1c,$(USEMODULE)))
 endif
 ifneq (,$(filter sx127%,$(USEMODULE)))
     USEMODULE_INCLUDES += $(RIOTBASE)/drivers/sx127x/include
-endif
-ifneq (,$(filter fxos8700,$(USEMODULE)))
-    USEMODULE_INCLUDES += $(RIOTBASE)/drivers/fxos8700/include
 endif

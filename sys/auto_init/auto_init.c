@@ -299,6 +299,10 @@ void auto_init(void)
     extern void auto_init_bmp180(void);
     auto_init_bmp180();
 #endif
+#ifdef MODULE_FXOS8700
+    extern void auto_init_fxos8700(void);
+    auto_init_fxos8700();
+#endif
 #if defined(MODULE_BME280) || defined(MODULE_BMP280)
     extern void auto_init_bmx280(void);
     auto_init_bmx280();
@@ -346,10 +350,6 @@ void auto_init(void)
 #ifdef MODULE_ADCXX1C
     extern void auto_init_adcxx1c(void);
     auto_init_adcxx1c();
-#endif
-#ifdef MODULE_FXOS8700
-    extern void auto_init_fxos8700(void);
-    auto_init_fxos8700();
 #endif
 
 #endif /* MODULE_AUTO_INIT_SAUL */
