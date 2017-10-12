@@ -77,8 +77,8 @@ static int _init(netdev_t *netdev)
     gpio_set(dev->params.reset_pin);
     gpio_init_int(dev->params.int_pin, GPIO_IN, GPIO_RISING, _irq_handler, dev);
 
-    /* make sure device is not sleeping, so we can query part number */
-    at86rf2xx_assert_awake(dev);
+    /* reset device to default values and put it into RX state */
+    at86rf2xx_reset(dev);
 
     /* test if the SPI is set up correctly and the device is responding */
     if (at86rf2xx_reg_read(dev, AT86RF2XX_REG__PART_NUM) !=
@@ -90,8 +90,6 @@ static int _init(netdev_t *netdev)
 #ifdef MODULE_NETSTATS_L2
     memset(&netdev->stats, 0, sizeof(netstats_t));
 #endif
-    /* reset device to default values and put it into RX state */
-    at86rf2xx_reset(dev);
 
     return 0;
 }
@@ -434,6 +432,11 @@ static int _set(netdev_t *netdev, netopt_t opt, void *val, size_t len)
             /* don't set res to set netdev_ieee802154_t::flags */
             break;
 
+		case NETOPT_ACK_PENDING:
+			at86rf2xx_set_option(dev, AT86RF2XX_OPT_ACK_PENDING,
+						         ((bool *)val)[0]);
+            break;
+
         case NETOPT_RETRANS:
             assert(len <= sizeof(uint8_t));
             at86rf2xx_set_max_retries(dev, *((uint8_t *)val));
@@ -560,6 +563,14 @@ static void _isr(netdev_t *netdev)
              * there are none */
             assert(dev->pending_tx != 0);
             if ((--dev->pending_tx) == 0) {
+#if MODULE_GNRC_LASMAC
+#if LEAF_NODE
+				/* Wake up for a while when receiving an ACK with pending bit */
+				if (trac_status == AT86RF2XX_TRX_STATE__TRAC_SUCCESS_DATA_PENDING) {
+	                dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;		
+				}
+#endif
+#endif
                 at86rf2xx_set_state(dev, dev->idle_state);
                 DEBUG("[at86rf2xx] return to state 0x%x\n", dev->idle_state);
             }
