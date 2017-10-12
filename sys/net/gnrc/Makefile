@@ -19,6 +19,9 @@ endif
 ifneq (,$(filter gnrc_ipv6_nc,$(USEMODULE)))
   DIRS += network_layer/ipv6/nc
 endif
+ifneq (,$(filter gnrc_ipv6_autoconf_onehop,$(USEMODULE)))
+	DIRS += network_layer/ipv6/autoconf_onehop
+endif
 ifneq (,$(filter gnrc_ipv6_netif,$(USEMODULE)))
   DIRS += network_layer/ipv6/netif
 endif
@@ -130,11 +133,21 @@ endif
 ifneq (,$(filter gnrc_sock_udp,$(USEMODULE)))
   DIRS += sock/udp
 endif
+ifneq (,$(filter gnrc_sock_tcp_freebsd,$(USEMODULE)))
+    DIRS += sock/tcp_freebsd
+    DIRS += sock/tcp_freebsd/zone
+endif
 ifneq (,$(filter gnrc_udp,$(USEMODULE)))
   DIRS += transport_layer/udp
 endif
 ifneq (,$(filter gnrc_tcp,$(USEMODULE)))
   DIRS += transport_layer/tcp
+endif
+ifneq (,$(filter gnrc_tcp_freebsd,$(USEMODULE)))
+    DIRS += transport_layer/tcp_freebsd
+endif
+ifneq (,$(filter gnrc_zep,$(USEMODULE)))
+    DIRS += application_layer/zep
 endif
 ifneq (,$(filter gnrc_tftp,$(USEMODULE)))
   DIRS += application_layer/tftp

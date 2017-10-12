@@ -451,6 +451,11 @@ typedef enum {
      */
     NETOPT_TX_RETRIES_NEEDED,
 
+    /*
+     * @brief   en/disable radio duty-cycling
+     */
+   NETOPT_DUTYCYCLE,
+
     /* add more options if needed */
 
     /**
