@@ -52,6 +52,9 @@ endif
 ifneq (,$(filter mpu9150,$(USEMODULE)))
     USEMODULE_INCLUDES += $(RIOTBASE)/drivers/mpu9150/include
 endif
+ifneq (,$(filter push_button,$(USEMODULE)))
+    USEMODULE_INCLUDES += $(RIOTBASE)/drivers/push_button/include
+endif
 ifneq (,$(filter ina220,$(USEMODULE)))
     USEMODULE_INCLUDES += $(RIOTBASE)/drivers/ina220/include
 endif
@@ -135,7 +138,4 @@ ifneq (,$(filter adcxx1c,$(USEMODULE)))
 endif
 ifneq (,$(filter sx127%,$(USEMODULE)))
     USEMODULE_INCLUDES += $(RIOTBASE)/drivers/sx127x/include
-endif
-ifneq (,$(filter push_button,$(USEMODULE)))
-    USEMODULE_INCLUDES += $(RIOTBASE)/drivers/push_button/include
 endif
