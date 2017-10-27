@@ -36,6 +36,7 @@
 
 #include "assert.h"
 #include "periph_cpu.h"
+#include "periph_conf.h" /* We want to make PM configuration board-specific */
 
 #ifdef __cplusplus
 extern "C" {
