@@ -49,6 +49,7 @@ const char *saul_class_to_str(const uint8_t class_id)
         case SAUL_SENSE_ANALOG: return "SENSE_ANALOG";
         case SAUL_SENSE_COUNT:  return "SENSE_PULSE_COUNT";
         case SAUL_SENSE_OCCUP:  return "SENSE_OCCUP";
+        case SAUL_SENSE_RADTEMP:return "SENSE_RADTEMP";
         case SAUL_CLASS_ANY:    return "CLASS_ANY";
         default:                return "CLASS_UNKNOWN";
     }

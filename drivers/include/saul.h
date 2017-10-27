@@ -93,6 +93,7 @@ enum {
     SAUL_SENSE_UV       = 0x8b,     /**< sensor: UV index */
     SAUL_SENSE_COUNT    = 0x8e,     /**< sensor: pulse counter */
     SAUL_SENSE_OCCUP    = 0x8c,     /**< sensor: occupancy */
+    SAUL_SENSE_RADTEMP  = 0x8d,     /**< sensor: radiant temperature */
     SAUL_CLASS_ANY      = 0xff      /**< any device - wildcard */
     /* extend this list as needed... */
 };
