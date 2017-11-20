@@ -39,7 +39,6 @@ volatile uint32_t _xtimer_high_cnt = 0;
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
 volatile uint32_t prev_s = 0xffffffff;
 volatile uint32_t prev_x = 0xffffffff;
-bool init = false;
 #endif
 
 static inline void xtimer_spin_until(uint32_t value);
@@ -72,8 +71,8 @@ static inline void xtimer_spin_until(uint32_t target) {
     while (_xtimer_lltimer_now() > target);
     while (_xtimer_lltimer_now() < target);
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
-    prev_x = _xtimer_lltimer_now();
     prev_s = _stimer_lltimer_now();
+    prev_x = _xtimer_lltimer_now();
 #endif
 }
 
@@ -87,8 +86,8 @@ void xtimer_init(void)
      * STIMER must be faster than XTIMER (e.g., 8 MHz or 48 MHz).
      */
     timer_init(STIMER_DEV, STIMER_HZ, _periph_timer_callback, NULL);
-    prev_x = _xtimer_lltimer_now();
     prev_s = _stimer_lltimer_now();
+    prev_x = _xtimer_lltimer_now();
 #endif
     /* register initial overflow tick */
     _lltimer_set(0xFFFFFFFF);
@@ -172,20 +171,9 @@ void _xtimer_set(xtimer_t *timer, uint32_t offset)
         _shoot(timer);
     }
     else {
-#if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
-        if (!init) {
-            prev_x = _xtimer_lltimer_now();
-            prev_s = _stimer_lltimer_now();
-            init = true;
-        }
-        prev_x = _xtimer_now();
-        uint32_t target = prev_x + offset;
-        _xtimer_set_absolute(timer, target, prev_x);
-#else
         uint32_t now = _xtimer_now();
         uint32_t target = now + offset;
         _xtimer_set_absolute(timer, target, now);
-#endif
     }
 }
 
@@ -241,11 +229,17 @@ int _xtimer_set_absolute(xtimer_t *timer, uint32_t target, uint32_t now)
     if ( (timer->long_target > _long_cnt) || !_this_high_period(target) ) {
         DEBUG("xtimer_set_absolute(): the timer doesn't fit into the low-level timer's mask.\n");
         _add_timer_to_long_list(&long_list_head, timer);
+        if (!timer_list_head) {
+            _lltimer_set(0xFFFFFFFF);
+        }
     }
     else {
         if (_xtimer_lltimer_mask(now) >= target) {
             DEBUG("xtimer_set_absolute(): the timer will expire in the next timer period\n");
             _add_timer_to_list(&overflow_list_head, timer);
+            if (!timer_list_head) {
+                _lltimer_set(0xFFFFFFFF);
+            }
         }
         else {
             DEBUG("timer_set_absolute(): timer will expire in this timer period.\n");
@@ -499,24 +493,27 @@ static void _timer_callback(void)
 
         /* make sure the timer counter also arrived
          * in the next timer period */
-        while (_xtimer_lltimer_now() == _xtimer_lltimer_mask(0xFFFFFFFF)) {}
+        while ((reference = _xtimer_lltimer_now()) == _xtimer_lltimer_mask(0xFFFFFFFF)) {}
+#if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
+        prev_s = _stimer_lltimer_now();
+#endif
     }
     else {
         /* we ended up in _timer_callback and there is
          * a timer waiting.
          */
         /* set our period reference to the current time. */
+#if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
+        prev_s = _stimer_lltimer_now();
+#endif
         reference = _xtimer_lltimer_now();
     }
     now = reference;
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
     prev_x = now;
 #endif
-overflow:
-#if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
-    prev_s = _stimer_lltimer_now();
-#endif
 
+overflow:
     /* check if next timers are close to expiring */
     while (timer_list_head && (_time_left(_xtimer_lltimer_mask(timer_list_head->target), reference, now) < XTIMER_ISR_BACKOFF)) {
         /* make sure we don't fire too early */
@@ -527,9 +524,7 @@ overflow:
                 now_s = _stimer_lltimer_now();
                 diff_s = _stimer_diff(prev_s, now_s);
             } while (diff_s < STIMER_HZ/XTIMER_HZ);
-            now = now + diff_s*XTIMER_HZ/STIMER_HZ;
-            prev_x = now;
-            prev_s = now_s;
+            now = now + (uint32_t)((uint64_t)diff_s*XTIMER_HZ/STIMER_HZ);
 #else
             now = _xtimer_lltimer_now();
 #endif
@@ -553,9 +548,7 @@ overflow:
         now_s = _stimer_lltimer_now();
         diff_s = _stimer_diff(prev_s, now_s);
         if (diff_s >= STIMER_HZ/XTIMER_HZ) {
-            now = now + diff_s*XTIMER_HZ/STIMER_HZ;
-            prev_x = now;
-            prev_s = now_s;
+            now = now + (uint32_t)((uint64_t)diff_s*XTIMER_HZ/STIMER_HZ);
         }
 #else
         now = _xtimer_lltimer_now();
@@ -571,6 +564,9 @@ overflow:
               timer_list_head != NULL);
         _next_period();
         reference = 0;
+#if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
+        prev_s = _stimer_lltimer_now();
+#endif
         now = _xtimer_lltimer_now();
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
         prev_x = now;
@@ -584,6 +580,9 @@ overflow:
 
         /* make sure we're not setting a time in the past */
         if (next_target < (now + XTIMER_ISR_BACKOFF)) {
+#if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
+            prev_s = _stimer_lltimer_now();
+#endif
             now = _xtimer_lltimer_now();
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
             prev_x = now;
@@ -595,16 +594,13 @@ overflow:
         /* set low level timer */
         _lltimer_set(next_target);
     }
-    else if (overflow_list_head != NULL) {
+    else {
         /* there's no timer planned for this timer period */
-        /* schedule callback on next overflow */  
-        next_target = _xtimer_lltimer_mask(0xFFFFFFFF);
-      
         /* update current time */
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
         now_s = _stimer_lltimer_now();
         diff_s = _stimer_diff(prev_s, now_s);
-        now = now + diff_s*XTIMER_HZ/STIMER_HZ;
+        now = now + (uint32_t)((uint64_t)diff_s*XTIMER_HZ/STIMER_HZ);
 #else
         now = _xtimer_lltimer_now();
 #endif
@@ -612,6 +608,9 @@ overflow:
         if (now < reference) {
             _next_period();
             reference = 0;
+#if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
+            prev_s = _stimer_lltimer_now();
+#endif
             now = _xtimer_lltimer_now();
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
             prev_x = now;
@@ -625,6 +624,9 @@ overflow:
                 while (_xtimer_lltimer_now() >= now) {}
                 _next_period();
                 reference = 0;
+#if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
+                prev_s = _stimer_lltimer_now();
+#endif        
                 now = _xtimer_lltimer_now();
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
                 prev_x = now;
@@ -634,11 +636,9 @@ overflow:
         }
         _in_handler = 0;
 
-        /* set low level timer */
-        _lltimer_set(next_target);
-    } else {
-        /* No need to set any timer */
-        _in_handler = 0;
+        if (overflow_list_head || long_list_head) {
+            /* schedule callback on next overflow */  
+            _lltimer_set(0xFFFFFFFF);
+        }
     }
-
 }
