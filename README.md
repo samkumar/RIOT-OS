@@ -1,4 +1,8 @@
-# Hamilton-combined v11.0 - 10/27/2017
+# Hamilton-combined v11.1 - 11/21/2017
+
+11.1 adds a small xtimer fix.
+
+Readme for 11.0:
 
 Board support for the Hamilton mote is maintained as a set of rebasing branches
 that will at some stage be pushed upstream. At intervals, a "combined" branch
