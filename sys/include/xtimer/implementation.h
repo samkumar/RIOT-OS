@@ -123,7 +123,7 @@ static inline uint32_t _xtimer_now(void)
     return latched_high_cnt | now;
 #else
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
-    uint32_t diff_s;
+    uint64_t diff_s;
     uint32_t now_s;
     
     do {
@@ -135,9 +135,7 @@ static inline uint32_t _xtimer_now(void)
         }
     } while (diff_s < STIMER_HZ/XTIMER_HZ); 
 
-    prev_x += diff_s*XTIMER_HZ/STIMER_HZ;
-    prev_s = now_s;
-    return prev_x;
+    return _xtimer_lltimer_mask(prev_x + (uint32_t)(diff_s*XTIMER_HZ/STIMER_HZ));
 #else
     return _xtimer_lltimer_now();
 #endif
