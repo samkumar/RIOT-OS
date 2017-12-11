@@ -54,5 +54,8 @@ Makefile.local
 # Ignore download cache
 .dlcache
 
+# OpenThread pkg
+/pkg/openthread/source*
+
 # scan-build artifacts
 scan-build/
