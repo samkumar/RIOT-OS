@@ -85,6 +85,26 @@ ifneq (,$(filter gnrc_sock,$(USEMODULE)))
   USEMODULE += sock
 endif
 
+ifneq (,$(filter gnrc_sock_tcp_freebsd,$(USEMODULE)))
+  USEMODULE += gnrc_tcp_freebsd
+  USEMODULE += gnrc_sock_tcp_freebsd_zalloc
+  USEMODULE += sock_tcp_freebsd
+endif
+
+ifneq (,$(filter gnrc_tcp_freebsd,$(USEMODULE)))
+  USEMODULE += gnrc_tcp_freebsd_internal
+  USEMODULE += gnrc_tcp_freebsd_blip
+  USEMODULE += task_sched
+endif
+
+ifneq (,$(filter gnrc_tcp_freebsd_internal,$(USEMODULE)))
+  USEMODULE += gnrc_tcp_freebsd_internal_cc
+endif
+
+ifneq (,$(filter task_sched,$(USEMODULE)))
+    USEMODULE += xtimer
+endif
+
 ifneq (,$(filter gnrc_netapi_mbox,$(USEMODULE)))
   USEMODULE += core_mbox
 endif
