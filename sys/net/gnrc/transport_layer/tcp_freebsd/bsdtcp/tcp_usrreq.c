@@ -45,7 +45,6 @@
 #include "tcp_timer.h"
 #include <sys/socket.h>
 #include "ip6.h"
-#include "../lib/lbuf.h"
 
 #include "tcp_const.h"
 
@@ -291,10 +290,10 @@ out:
 tcp_usr_send(struct socket *so, int flags, struct mbuf *m,
     struct sockaddr *nam, struct mbuf *control, struct thread *td)*/
 /* Returns error condition, and stores bytes sent into SENT. */
-int tcp_usr_send(struct tcpcb* tp, int moretocome, struct lbufent* data, int* status)
+int tcp_usr_send(struct tcpcb* tp, int moretocome, const uint8_t* data, size_t datalen, size_t* bytessent)
 {
 	int error = 0;
-	*status = 0;
+	*bytessent = 0;
 //	struct inpcb *inp;
 //	struct tcpcb *tp = NULL;
 #if 0
@@ -364,7 +363,10 @@ int tcp_usr_send(struct tcpcb* tp, int moretocome, struct lbufent* data, int* st
 	if (!(flags & PRUS_OOB)) {
 #endif // DON'T SUPPORT URGENT DATA
 		/*sbappendstream(&so->so_snd, m, flags);*/
-		*status = lbuf_append(&tp->sendbuf, data);
+        *bytessent = cbuf_write(&tp->sendbuf, data, datalen);
+        if (*bytessent == 0) {
+             goto out;
+        }
 #if 0 // DON'T SUPPORT IMPLIED CONNECTION
 		if (nam && tp->t_state < TCPS_SYN_SENT) {
 			/*

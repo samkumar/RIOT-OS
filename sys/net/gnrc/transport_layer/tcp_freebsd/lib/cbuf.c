@@ -31,7 +31,7 @@ size_t cbuf_size(struct cbufhead* chdr) {
     return chdr->size - 1;
 }
 
-size_t cbuf_write(struct cbufhead* chdr, uint8_t* data, size_t data_len) {
+size_t cbuf_write(struct cbufhead* chdr, const uint8_t* data, size_t data_len) {
     size_t free_space = cbuf_free_space(chdr);
     uint8_t* buf_data;
     size_t fw_index;
@@ -106,7 +106,7 @@ size_t cbuf_pop(struct cbufhead* chdr, size_t numbytes) {
    bytes now contain data.
    The index of the first byte written is stored into FIRSTINDEX, if it is not
    NULL. */
-size_t cbuf_reass_write(struct cbufhead* chdr, size_t offset, uint8_t* data, size_t numbytes, uint8_t* bitmap, size_t* firstindex) {
+size_t cbuf_reass_write(struct cbufhead* chdr, size_t offset, const uint8_t* data, size_t numbytes, uint8_t* bitmap, size_t* firstindex) {
     uint8_t* buf_data = chdr->buf;
     size_t free_space = cbuf_free_space(chdr);
     size_t start_index;

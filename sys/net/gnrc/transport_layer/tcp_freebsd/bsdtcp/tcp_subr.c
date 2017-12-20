@@ -42,7 +42,6 @@
 #include "../lib/bitmap.h"
 #include "../lib/cbuf.h"
 #include "cc.h"
-#include "../lib/lbuf.h"
 
 #include "tcp_const.h"
 
@@ -228,7 +227,7 @@ tcp_state_change(struct tcpcb *tp, int newstate)
 
  /* This is based on tcp_newtcb in tcp_subr.c, and tcp_usr_attach in tcp_usrreq.c.
     The length of the reassembly bitmap is fixed at ceil(0.125 * recvbuflen). */
-__attribute__((used)) void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
+__attribute__((used)) void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
 	uint32_t ticks = get_ticks();
 	int initindex = tp->index;
 
@@ -271,7 +270,7 @@ __attribute__((used)) void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint
 	/* From tcp_usr_attach in tcp_usrreq.c. */
 	tp->t_state = TCP6S_CLOSED;
 
-	lbuf_init(&tp->sendbuf);
+	cbuf_init(&tp->sendbuf, sendbuf, sendbuflen);
 	if (recvbuf) {
 	    cbuf_init(&tp->recvbuf, recvbuf, recvbuflen);
 	    tp->reassbmp = reassbmp;

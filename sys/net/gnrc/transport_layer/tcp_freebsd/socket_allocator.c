@@ -33,7 +33,7 @@
 
 typedef struct asock {
     connectDone_t connectDone;
-    sendDone_t sendDone;
+    sendReady_t sendReady;
     receiveReady_t receiveReady;
     connectionLost_t connectionLost;
     void* context;
@@ -166,13 +166,13 @@ int decode_fd(int rawfd, bool* passive) {
 
 /* External API */
 
-int bsdtcp_active_socket(connectDone_t cd, sendDone_t sd, receiveReady_t rr, connectionLost_t cl, void* ctx)
+int bsdtcp_active_socket(connectDone_t cd, sendReady_t sr, receiveReady_t rr, connectionLost_t cl, void* ctx)
 {
     int fd = alloc_afd();
     if (fd != -1) {
         active_socket_t* asock = &activesockets[fd];
         asock->connectDone = cd;
-        asock->sendDone = sd;
+        asock->sendReady = sr;
         asock->receiveReady = rr;
         asock->connectionLost = cl;
         asock->context = ctx;
@@ -229,14 +229,14 @@ int bsdtcp_bind(int fd, uint16_t port)
     return rv;
 }
 
-int bsdtcp_connect(int fd, struct sockaddr_in6* faddrport, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
+int bsdtcp_connect(int fd, struct sockaddr_in6* faddrport, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
 {
     bool passive;
     fd = decode_fd(fd, &passive);
     if (fd == -1 || passive) {
         return EBADF;
     }
-    return asock_connect_impl(fd, faddrport, recvbuf, recvbuflen, reassbmp);
+    return asock_connect_impl(fd, faddrport, sendbuf, sendbuflen, recvbuf, recvbuflen, reassbmp);
 }
 
 int bsdtcp_listen(int fd)
@@ -249,14 +249,14 @@ int bsdtcp_listen(int fd)
     return psock_listen_impl(fd);
 }
 
-int bsdtcp_send(int fd, struct lbufent* data, int* status)
+int bsdtcp_send(int fd, const void* data, size_t len, size_t* bytessent)
 {
     bool passive;
     fd = decode_fd(fd, &passive);
     if (fd == -1 || passive) {
         return EBADF;
     }
-    return asock_send_impl(fd, data, 0, status);
+    return asock_send_impl(fd, data, len, 0, bytessent);
 }
 
 int bsdtcp_receive(int fd, uint8_t* buffer, size_t length, size_t* numbytes)
@@ -399,15 +399,15 @@ void event_receiveReady(uint8_t ai, int gotfin)
     }
 }
 
-void event_sendDone(uint8_t ai, uint32_t numentries)
+void event_sendReady(uint8_t ai)
 {
     assert(ai >= 0 && ai < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
     // Doesn't need to be allocated
 
     active_socket_t* asock = &activesockets[ai];
 
-    if (asock->sendDone != NULL) {
-        asock->sendDone(ai, numentries, asock->context);
+    if (asock->sendReady != NULL) {
+        asock->sendReady(ai, asock->context);
     }
 }
 

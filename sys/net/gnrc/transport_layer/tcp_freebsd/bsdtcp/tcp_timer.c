@@ -34,7 +34,7 @@
 #include <stdio.h>
 
 #include "../gnrc_tcp_freebsd_internal.h"
-#include "../lib/lbuf.h"
+#include "../lib/cbuf.h"
 #include "tcp_fsm.h"
 #include "tcp_timer.h"
 #include "tcp_var.h"
@@ -275,7 +275,7 @@ tcp_timer_persist(struct tcpcb* tp)
 
 	tcp_setpersist(tp);
 	tp->t_flags |= TF_FORCEDATA;
-	printf("Persist output: %lu bytes in sendbuf\n", lbuf_used_space(&tp->sendbuf));
+	printf("Persist output: %zu bytes in sendbuf\n", cbuf_used_space(&tp->sendbuf));
 	(void) tcp_output(tp);
 	tp->t_flags &= ~TF_FORCEDATA;
 

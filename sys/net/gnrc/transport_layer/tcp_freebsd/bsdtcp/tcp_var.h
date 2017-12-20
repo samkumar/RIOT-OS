@@ -37,7 +37,6 @@
 #include "../lib/bitmap.h"
 #include "../lib/cbuf.h"
 #include "cc.h"
-#include "../lib/lbuf.h"
 #include "tcp.h"
 #include "types.h"
 #include "netinet/in.h"
@@ -141,7 +140,7 @@ struct tcpcb {
 
 	struct tcpcb_listen* accepted_from;
 
-	struct lbufhead sendbuf;
+	struct cbufhead sendbuf;
 	struct cbufhead recvbuf;
 	uint8_t* reassbmp;
 	int16_t reass_fin_index;
@@ -297,7 +296,7 @@ struct tcpcb {
 };
 
 /* Defined in tcp_subr.c. */
-void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
+void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
 
 /* Copied from the "dead" portions below. */
 
@@ -314,7 +313,7 @@ void	cc_cong_signal(struct tcpcb *tp, struct tcphdr *th, uint32_t type);
 
 /* Added, since there is no header file for tcp_usrreq.c. */
 int tcp6_usr_connect(struct tcpcb* tp, struct sockaddr_in6* sinp6);
-int tcp_usr_send(struct tcpcb* tp, int moretocome, struct lbufent* data, int* status);
+int tcp_usr_send(struct tcpcb* tp, int moretocome, const uint8_t* data, size_t datalen, size_t* bytessent);
 int tcp_usr_rcvd(struct tcpcb* tp);
 int tcp_usr_shutdown(struct tcpcb* tp);
 void tcp_usr_abort(struct tcpcb* tp);
@@ -656,7 +655,7 @@ int	 tcp_twcheck(struct tcpcb*,/*struct inpcb *, struct tcpopt *,*/ struct tcphd
 void tcp_dropwithreset(struct ip6_hdr* ip6, struct tcphdr *th, struct tcpcb *tp,
     int tlen, int rstreason);
 int tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, struct tcpcb* tp, struct tcpcb_listen* tpl,
-          uint8_t* signals, uint32_t* freedentries);
+          uint8_t* signals);
 int	 tcp_output(struct tcpcb *);
 void tcpip_maketemplate(struct /*inp*/tcpcb *, struct tcptemp*);
 void	 tcpip_fillheaders(struct /*inp*/tcpcb *, void *, void *);

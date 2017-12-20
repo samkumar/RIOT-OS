@@ -289,7 +289,7 @@ after_sack_rexmit:
 			 * itself.
 			 */
 //			if (off < sbused(&so->so_snd))
-			if (off < lbuf_used_space(&tp->sendbuf))
+			if (off < cbuf_used_space(&tp->sendbuf))
 				flags &= ~TH_FIN;
 			sendwin = 1;
 		} else {
@@ -316,7 +316,7 @@ after_sack_rexmit:
 	if (sack_rxmit == 0) {
 		if (sack_bytes_rxmt == 0)
 //			len = ((long)ulmin(sbavail(&so->so_snd), sendwin) -
-			len = ((long) ulmin(lbuf_used_space(&tp->sendbuf), sendwin) -
+			len = ((long) ulmin(cbuf_used_space(&tp->sendbuf), sendwin) -
 			    off);
 		else {
 			long cwin;
@@ -326,7 +326,7 @@ after_sack_rexmit:
 			 * sending new data, having retransmitted all the
 			 * data possible in the scoreboard.
 			 */
-			len = ((long)ulmin(/*sbavail(&so->so_snd)*/lbuf_used_space(&tp->sendbuf), tp->snd_wnd) -
+			len = ((long)ulmin(/*sbavail(&so->so_snd)*/cbuf_used_space(&tp->sendbuf), tp->snd_wnd) -
 			    off);
 			/*
 			 * Don't remove this (len > 0) check !
@@ -387,7 +387,7 @@ after_sack_rexmit:
 		 */
 		len = 0;
 		if ((sendwin == 0) && (TCPS_HAVEESTABLISHED(tp->t_state)) &&
-			(off < (int) /*sbavail(&so->so_snd)*/lbuf_used_space(&tp->sendbuf))) {
+			(off < (int) /*sbavail(&so->so_snd)*/cbuf_used_space(&tp->sendbuf))) {
 			tcp_timer_activate(tp, TT_REXMT, 0);
 			tp->t_rxtshift = 0;
 			tp->snd_nxt = tp->snd_una;
@@ -485,12 +485,12 @@ after_sack_rexmit:
 
 	if (sack_rxmit) {
 //		if (SEQ_LT(p->rxmit + len, tp->snd_una + sbused(&so->so_snd)))
-		if (SEQ_LT(p->rxmit + len, tp->snd_una + lbuf_used_space(&tp->sendbuf)))
+		if (SEQ_LT(p->rxmit + len, tp->snd_una + cbuf_used_space(&tp->sendbuf)))
 			flags &= ~TH_FIN;
 	} else {
 		if (SEQ_LT(tp->snd_nxt + len, tp->snd_una +
 //		    sbused(&so->so_snd)))
-			lbuf_used_space(&tp->sendbuf)))
+			cbuf_used_space(&tp->sendbuf)))
 			flags &= ~TH_FIN;
 	}
 
@@ -522,7 +522,7 @@ after_sack_rexmit:
 		if (!(tp->t_flags & TF_MORETOCOME) &&	/* normal case */
 		    (idle || (tp->t_flags & TF_NODELAY)) &&
 //		    len + off >= sbavail(&so->so_snd) &&
-			len + off >= lbuf_used_space(&tp->sendbuf) &&
+			len + off >= cbuf_used_space(&tp->sendbuf) &&
 		    (tp->t_flags & TF_NOPUSH) == 0) {
 			goto send;
 		}
@@ -656,7 +656,7 @@ dontupdate:
 	 * if window is nonzero, transmit what we can,
 	 * otherwise force out a byte.
 	 */
-	if (/*sbavail(&so->so_snd)*/lbuf_used_space(&tp->sendbuf) && !tcp_timer_active(tp, TT_REXMT) &&
+	if (/*sbavail(&so->so_snd)*/cbuf_used_space(&tp->sendbuf) && !tcp_timer_active(tp, TT_REXMT) &&
 	    !tcp_timer_active(tp, TT_PERSIST)) {
 		tp->t_rxtshift = 0;
 		tcp_setpersist(tp);
@@ -1062,7 +1062,7 @@ memsendfail:
 		goto out;
 	}
 	if (len) {
-	    uint32_t used_space = lbuf_used_space(&tp->sendbuf);
+	    uint32_t used_space = cbuf_used_space(&tp->sendbuf);
 
 		/*
 		 * The TinyOS version has a way to avoid the copying we have to do here.
@@ -1073,9 +1073,11 @@ memsendfail:
 		 * once "send" returns.
 		 *
 		 * In RIOT, pktsnips have additional behavior regarding memory management
-		 * that precludes this optimization.
+		 * that precludes this optimization. But, now that we have moved to
+		 * cbufs, this is not relevant anymore.
 		 */
-		int written = iov_read(lbuf_to_iovec(&tp->sendbuf), off, len, payload->data);
+		int written = (int) cbuf_read_offset(&tp->sendbuf, payload->data, len, off);
+		//int written = iov_read(lbuf_to_iovec(&tp->sendbuf), off, len, payload->data);
  		KASSERT(written == len, ("Reading send buffer out of range!\n"));
 
 		/*
@@ -1563,7 +1565,7 @@ timer:
 				tp->t_rxtshift = 0;
 			}
 			tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
-		} else if (len == 0 && /*sbavail(&so->so_snd)*/lbuf_used_space(&tp->sendbuf) &&
+		} else if (len == 0 && /*sbavail(&so->so_snd)*/cbuf_used_space(&tp->sendbuf) &&
 		    !tcp_timer_active(tp, TT_REXMT) &&
 		    !tcp_timer_active(tp, TT_PERSIST)) {
 			/*

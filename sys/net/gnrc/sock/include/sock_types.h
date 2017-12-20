@@ -95,6 +95,7 @@ struct sock_tcp_freebsd_send_state {
  */
 struct sock_tcp_freebsd_accept_queue_entry {
     int asockid;
+    void* sendbuf;
     void* recvbuf;
 };
 
@@ -111,18 +112,17 @@ struct sock_tcp_freebsd {
     uint16_t local_port;
 
     mutex_t lock;
+    int pending_ops;
+    condition_t pending_cond;
     union {
         struct {
             int asock;
+            void* sendbuf;
             void* recvbuf;
-            mutex_t connect_lock;
+            bool is_connecting;
             condition_t connect_cond;
             condition_t receive_cond;
             condition_t send_cond;
-
-            struct sock_tcp_freebsd_send_state* send_head;
-            struct sock_tcp_freebsd_send_state* send_tail;
-            size_t in_send_buffer;
         } active;
         struct {
             int psock;

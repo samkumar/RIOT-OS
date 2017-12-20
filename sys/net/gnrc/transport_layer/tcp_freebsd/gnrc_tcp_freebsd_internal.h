@@ -60,6 +60,7 @@
 #define SIG_CONN_ESTABLISHED 0x01
 #define SIG_RECVBUF_NOTEMPTY 0x02
 #define SIG_RCVD_FIN         0x04
+#define SIG_SENDBUF_NOTFULL  0x08
 
 #define GNRC_TCP_FREEBSD_NUM_TIMERS (GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS * TIMERS_PER_ACTIVE_SOCKET)
 
@@ -96,9 +97,9 @@ void asock_getPeerInfo_impl(int asockid, struct in6_addr** addr, uint16_t** port
 error_t asock_bind_impl(int asockid, uint16_t port);
 error_t psock_bind_impl(int psockid, uint16_t port);
 error_t psock_listen_impl(int psockid);
-error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
-error_t asock_send_impl(int asockid, struct lbufent* data, int moretocome, int* status);
-error_t asock_receive_impl(int asockid, uint8_t* buffer, uint32_t len, size_t* bytessent);
+error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
+error_t asock_send_impl(int asockid, const uint8_t* data, size_t len, int moretocome, size_t* status);
+error_t asock_receive_impl(int asockid, uint8_t* buffer, uint32_t len, size_t* bytesrcvd);
 error_t asock_shutdown_impl(int asockid, bool shut_rd, bool shut_wr);
 error_t psock_close_impl(int psockid);
 error_t asock_abort_impl(int asockid);
@@ -112,7 +113,7 @@ acceptArgs_t event_acceptReady(uint8_t pi);
 bool event_acceptDone(uint8_t pi, struct sockaddr_in6* addr, acceptArgs_t* accepted);
 void event_connectDone(uint8_t ai, struct sockaddr_in6* addr);
 void event_receiveReady(uint8_t ai, int gotfin);
-void event_sendDone(uint8_t ai, uint32_t numentries);
+void event_sendReady(uint8_t ai);
 void event_connectionLost(acceptArgs_t* lost, uint8_t how);
 
 #endif // GNRC_TCP_FREEBSD_INTERNAL_H_

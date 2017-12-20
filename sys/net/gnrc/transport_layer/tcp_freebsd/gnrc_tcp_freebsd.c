@@ -118,7 +118,7 @@ static void _handle_timer(int timer_id)
 /**
  *  @brief   Passes signals to the user of this module.
  */
-void handle_signals(struct tcpcb* tp, uint8_t signals, uint32_t freedentries)
+void handle_signals(struct tcpcb* tp, uint8_t signals)
 {
     struct sockaddr_in6 addrport;
 
@@ -137,8 +137,8 @@ void handle_signals(struct tcpcb* tp, uint8_t signals, uint32_t freedentries)
         event_receiveReady((uint8_t) tp->index, 1);
     }
 
-    if (freedentries > 0) {
-        event_sendDone((uint8_t) tp->index, freedentries);
+    if (signals & SIG_SENDBUF_NOTFULL) {
+        event_sendReady((uint8_t) tp->index);
     }
 }
 
@@ -176,7 +176,7 @@ struct tcpcb* accept_ready(struct tcpcb_listen* tpl)
     }
     assert(args.asockid >= 0 && args.asockid < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
     struct tcpcb* asock = &tcbs[args.asockid];
-    initialize_tcb(asock, asock->lport, args.recvbuf, args.recvbuflen, args.reassbmp);
+    initialize_tcb(asock, asock->lport, args.sendbuf, args.sendbuflen, args.recvbuf, args.recvbuflen, args.reassbmp);
     return asock;
 }
 
@@ -223,7 +223,7 @@ static void _receive(gnrc_pktsnip_t* pkt)
     uint8_t signals = 0;
 
     /* Number of lbuf entries that the user of this module can free. */
-    uint32_t freedentries = 0;
+    //uint32_t freedentries = 0;
 
     tcp = gnrc_pktbuf_start_write(pkt);
     if (tcp == NULL) {
@@ -317,12 +317,12 @@ static void _receive(gnrc_pktsnip_t* pkt)
             int rv;
             DEBUG("Matches active socket %d\n", i);
             mutex_lock(&tcp_lock);
-            rv = tcp_input(iph, th, &tcbs[i], NULL, &signals, &freedentries);
+            rv = tcp_input(iph, th, &tcbs[i], NULL, &signals);
             mutex_unlock(&tcp_lock);
             if (RELOOKUP_REQUIRED == rv) {
                 break;
             } else {
-                handle_signals(&tcbs[i], signals, freedentries);
+                handle_signals(&tcbs[i], signals);
             }
             goto done;
         }
@@ -333,7 +333,7 @@ static void _receive(gnrc_pktsnip_t* pkt)
         if (tcbl->t_state == TCP6S_LISTEN && dport == tcbl->lport) {
             DEBUG("Matches passive socket %d\n", i);
             mutex_lock(&tcp_lock);
-            tcp_input(iph, th, NULL, &tcbls[i], NULL, NULL);
+            tcp_input(iph, th, NULL, &tcbls[i], NULL);
             mutex_unlock(&tcp_lock);
             goto done;
         }
@@ -430,7 +430,7 @@ int gnrc_tcp_freebsd_init(void)
         tcp_init();
         for (i = 0; i < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
             tcbs[i].index = i;
-            initialize_tcb(&tcbs[i], 0, NULL, 0, NULL);
+            initialize_tcb(&tcbs[i], 0, NULL, 0, NULL, 0, NULL);
         }
         for (i = 0; i < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS; i++) {
             tcbls[i].t_state = TCPS_CLOSED;
@@ -531,7 +531,7 @@ error_t psock_listen_impl(int psockid)
     return SUCCESS;
 }
 
-error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
+error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp)
 {
     error_t rv;
     struct tcpcb* tp = &tcbs[asockid];
@@ -540,7 +540,7 @@ error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* recv
         rv = EISCONN;
         goto done;
     }
-    initialize_tcb(tp, tp->lport, recvbuf, recvbuflen, reassbmp);
+    initialize_tcb(tp, tp->lport, sendbuf, sendbuflen, recvbuf, recvbuflen, reassbmp);
     rv = (error_t) tcp6_usr_connect(tp, addr);
 
 done:
@@ -548,22 +548,22 @@ done:
     return rv;
 }
 
-error_t asock_send_impl(int asockid, struct lbufent* data, int moretocome, int* status)
+error_t asock_send_impl(int asockid, const uint8_t* data, size_t len, int moretocome, size_t* bytessent)
 {
     error_t rv;
     struct tcpcb* tp = &tcbs[asockid];
     mutex_lock(&tcp_lock);
-    rv = (error_t) tcp_usr_send(tp, moretocome, data, status);
+    rv = (error_t) tcp_usr_send(tp, moretocome, data, len, bytessent);
     mutex_unlock(&tcp_lock);
     return rv;
 }
 
-error_t asock_receive_impl(int asockid, uint8_t* buffer, uint32_t len, size_t* bytessent)
+error_t asock_receive_impl(int asockid, uint8_t* buffer, uint32_t len, size_t* bytesrcvd)
 {
     error_t rv;
     struct tcpcb* tp = &tcbs[asockid];
     mutex_lock(&tcp_lock);
-    *bytessent = cbuf_read(&tp->recvbuf, buffer, len, 1);
+    *bytesrcvd = cbuf_read(&tp->recvbuf, buffer, len, 1);
     rv = (error_t) tcp_usr_rcvd(tp);
     mutex_unlock(&tcp_lock);
     return rv;

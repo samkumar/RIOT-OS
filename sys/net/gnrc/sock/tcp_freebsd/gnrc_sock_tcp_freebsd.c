@@ -27,17 +27,18 @@
 
 #include "debug.h"
 
-#define RECV_BUF_LEN 2449
+#define RECV_BUF_LEN 1596
 #define REASS_BMP_LEN ((RECV_BUF_LEN + 7) >> 3)
 
 #define SENDMAXCOPY 52
 #define COPYBUFSIZE (SENDMAXCOPY << 1)
-#define SENDBUFSIZE 1024
+#define SENDBUFSIZE 2048
 
 #ifndef SOCK_HAS_IPV6
 #error "TCP FREEBSD requires IPv6"
 #endif
 
+#if 0
 /* Cached copy buffer, which may help us avoid a dynamic memory allocation. */
 struct sock_tcp_freebsd_send_state* extracopybuf = NULL;
 
@@ -66,6 +67,7 @@ static uint32_t _free_sendstates(sock_tcp_freebsd_t* conn, uint32_t howmany) {
     conn->sfields.active.in_send_buffer -= totalbytesremoved;
     return totalbytesremoved;
 }
+#endif
 
 static void sock_tcp_freebsd_connectDone(uint8_t ai, struct sockaddr_in6* faddr, void* ctx)
 {
@@ -80,20 +82,15 @@ static void sock_tcp_freebsd_connectDone(uint8_t ai, struct sockaddr_in6* faddr,
     mutex_unlock(&conn->lock);
 }
 
-static void sock_tcp_freebsd_sendDone(uint8_t ai, uint32_t tofree, void* ctx)
+static void sock_tcp_freebsd_sendReady(uint8_t ai, void* ctx)
 {
-    (void) ai;
-    uint32_t freed;
-
     sock_tcp_freebsd_t* conn = ctx;
     assert(conn != NULL);
 
     mutex_lock(&conn->lock);
     assert(conn->hasactive && !conn->haspassive);
-    freed = _free_sendstates(conn, tofree);
-    if (freed > 0) {
-        cond_broadcast(&conn->sfields.active.send_cond);
-    }
+    assert(conn->sfields.active.asock == ai);
+    cond_broadcast(&conn->sfields.active.send_cond);
     mutex_unlock(&conn->lock);
 }
 
@@ -124,6 +121,7 @@ static void sock_tcp_freebsd_connectionLost(acceptArgs_t* lost, uint8_t how, voi
          * In that case, we need to free the receive buffer, which we allocated.
          */
         sock_tcp_freebsd_zfree(lost->recvbuf);
+        sock_tcp_freebsd_zfree(lost->sendbuf);
         return;
     }
     sock_tcp_freebsd_t* conn = ctx;
@@ -153,8 +151,15 @@ static acceptArgs_t sock_tcp_freebsd_acceptReady(uint8_t pi, void* ctx)
         goto fail;
     }
 
+    void* sendbuf = sock_tcp_freebsd_zalloc(SENDBUFSIZE);
+    if (sendbuf == NULL) {
+        sock_tcp_freebsd_zfree(recvbuf);
+        DEBUG("Out of memory in acceptReady\n");
+        goto fail;
+    }
+
     int asockid = bsdtcp_active_socket(sock_tcp_freebsd_connectDone,
-        sock_tcp_freebsd_sendDone, sock_tcp_freebsd_receiveReady,
+        sock_tcp_freebsd_sendReady, sock_tcp_freebsd_receiveReady,
         sock_tcp_freebsd_connectionLost, NULL);
 
     if (asockid == -1) {
@@ -163,6 +168,8 @@ static acceptArgs_t sock_tcp_freebsd_acceptReady(uint8_t pi, void* ctx)
     }
 
     args.asockid = asockid;
+    args.sendbuf = sendbuf;
+    args.sendbuflen = SENDBUFSIZE;
     args.recvbuf = recvbuf;
     args.recvbuflen = RECV_BUF_LEN;
     args.reassbmp = ((uint8_t*) args.recvbuf) + RECV_BUF_LEN;
@@ -173,6 +180,8 @@ done:
 
 fail:
     args.asockid = -1;
+    args.sendbuf = NULL;
+    args.sendbuflen = 0;
     args.recvbuf = NULL;
     args.recvbuflen = 0;
     args.reassbmp = NULL;
@@ -202,6 +211,7 @@ static bool sock_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, 
     }
     struct sock_tcp_freebsd_accept_queue_entry* queue_slot = &conn->sfields.passive.accept_queue[putidx];
     queue_slot->asockid = accepted->asockid;
+    queue_slot->sendbuf = accepted->sendbuf;
     queue_slot->recvbuf = accepted->recvbuf;
 
     cond_signal(&conn->sfields.passive.accept_cond);
@@ -220,10 +230,18 @@ static void sock_tcp_freebsd_general_init(sock_tcp_freebsd_t* conn, uint16_t por
     conn->local_port = port;
 
     mutex_init(&conn->lock);
+    conn->pending_ops = 0;
+    cond_init(&conn->pending_cond);
+
     conn->errstat = 0;
     conn->hasactive = false;
     conn->haspassive = false;
 }
+
+/*
+ * Note: conn->lock MUST be held when any of the four Functions
+ * sock_tcp_freebsd_{active, passive}_{set, clear} are called.
+ */
 
 static void sock_tcp_freebsd_passive_clear(sock_tcp_freebsd_t* conn)
 {
@@ -231,16 +249,28 @@ static void sock_tcp_freebsd_passive_clear(sock_tcp_freebsd_t* conn)
         int asockidx;
 
         conn->haspassive = false;
-        bsdtcp_close(conn->sfields.passive.psock);
+
+        // All pending calls should exit with this error
+        conn->errstat = EPIPE;
+
         cond_broadcast(&conn->sfields.passive.accept_cond);
+        // Let any pending "accept" calls respond to the broadcast and exit.
+        while (conn->pending_ops != 0) {
+            cond_wait(&conn->pending_cond, &conn->lock);
+        }
+
+        bsdtcp_close(conn->sfields.passive.psock);
 
         struct sock_tcp_freebsd_accept_queue_entry* queue_slot;
         while ((asockidx = cib_get(&conn->sfields.passive.accept_cib)) != -1) {
             queue_slot = &conn->sfields.passive.accept_queue[asockidx];
+            sock_tcp_freebsd_zfree(queue_slot->sendbuf);
             sock_tcp_freebsd_zfree(queue_slot->recvbuf);
             bsdtcp_close(queue_slot->asockid);
         }
         sock_tcp_freebsd_zfree(conn->sfields.passive.accept_queue);
+
+        conn->errstat = 0;
     }
 }
 
@@ -248,14 +278,27 @@ static void sock_tcp_freebsd_active_clear(sock_tcp_freebsd_t* conn)
 {
     if (conn->hasactive) {
         conn->hasactive = false;
-        mutex_lock(&conn->sfields.active.connect_lock);
-        bsdtcp_close(conn->sfields.active.asock);
-        sock_tcp_freebsd_zfree(conn->sfields.active.recvbuf);
+
+        // All pending calls should exit with this error
+        conn->errstat = EPIPE;
+
         cond_broadcast(&conn->sfields.active.connect_cond);
         cond_broadcast(&conn->sfields.active.receive_cond);
         cond_broadcast(&conn->sfields.active.send_cond);
-        _free_sendstates(conn, (uint32_t) 0xFFFFFFFFu);
-        assert(conn->sfields.active.in_send_buffer == 0);
+
+        /*
+         * Let any pending "send", "receive", or "connect" calls respond to
+         * the broadcast and exit.
+         */
+        while (conn->pending_ops != 0) {
+            cond_wait(&conn->pending_cond, &conn->lock);
+        }
+
+        bsdtcp_close(conn->sfields.active.asock);
+        sock_tcp_freebsd_zfree(conn->sfields.active.recvbuf);
+        sock_tcp_freebsd_zfree(conn->sfields.active.sendbuf);
+
+        conn->errstat = 0;
     }
 }
 
@@ -266,7 +309,7 @@ static bool sock_tcp_freebsd_active_set(sock_tcp_freebsd_t* conn, int asock)
         conn->hasactive = true;
         if (asock == -1) {
             conn->sfields.active.asock = bsdtcp_active_socket(sock_tcp_freebsd_connectDone,
-                sock_tcp_freebsd_sendDone, sock_tcp_freebsd_receiveReady,
+                sock_tcp_freebsd_sendReady, sock_tcp_freebsd_receiveReady,
                 sock_tcp_freebsd_connectionLost, conn);
             if (conn->sfields.active.asock == -1) {
                 conn->hasactive = false;
@@ -281,20 +324,26 @@ static bool sock_tcp_freebsd_active_set(sock_tcp_freebsd_t* conn, int asock)
                 return false;
             }
 
+            conn->sfields.active.sendbuf = sock_tcp_freebsd_zalloc(SENDBUFSIZE);
+            if (conn->sfields.active.sendbuf == NULL) {
+                sock_tcp_freebsd_zfree(conn->sfields.active.recvbuf);
+                conn->sfields.active.recvbuf = NULL;
+                conn->hasactive = false;
+                bsdtcp_close(conn->sfields.active.asock);
+                conn->sfields.active.asock = -1;
+                return false;
+            }
+
         } else {
             conn->sfields.active.asock = asock;
             /* How to get the recvbuf? */
         }
         bsdtcp_bind(conn->sfields.active.asock, conn->local_port);
 
-        mutex_init(&conn->sfields.active.connect_lock);
+        conn->sfields.active.is_connecting = false;
         cond_init(&conn->sfields.active.connect_cond);
         cond_init(&conn->sfields.active.receive_cond);
         cond_init(&conn->sfields.active.send_cond);
-
-        conn->sfields.active.send_head = NULL;
-        conn->sfields.active.send_tail = NULL;
-        conn->sfields.active.in_send_buffer = 0;
     }
     return true;
 }
@@ -454,6 +503,14 @@ int sock_tcp_freebsd_connect(sock_tcp_freebsd_t *conn, const void *addr, size_t 
     struct sockaddr_in6 faddrport;
 
     mutex_lock(&conn->lock);
+    if (conn->sfields.active.is_connecting) {
+        mutex_unlock(&conn->lock);
+        return -EALREADY;
+    }
+    conn->sfields.active.is_connecting = true;
+
+    conn->pending_ops += 1;
+
     if (addr_len != sizeof(struct in6_addr)) {
         rv = -EAFNOSUPPORT;
         goto unlockreturn;
@@ -466,18 +523,18 @@ int sock_tcp_freebsd_connect(sock_tcp_freebsd_t *conn, const void *addr, size_t 
         goto unlockreturn;
     }
 
-    mutex_lock(&conn->sfields.active.connect_lock);
     if (bsdtcp_isestablished(conn->sfields.active.asock)) {
         rv = -EISCONN;
-        goto unlockboth;
+        goto unlockreturn;
     }
     conn->errstat = 0;
     int error = bsdtcp_connect(conn->sfields.active.asock, &faddrport,
+        conn->sfields.active.sendbuf, SENDBUFSIZE,
         conn->sfields.active.recvbuf, RECV_BUF_LEN,
         ((uint8_t*) conn->sfields.active.recvbuf) + RECV_BUF_LEN);
     if (error != 0) {
         rv = -error;
-        goto unlockboth;
+        goto unlockreturn;
     }
 
     /* Wait until either connection done OR connection lost */
@@ -485,9 +542,12 @@ int sock_tcp_freebsd_connect(sock_tcp_freebsd_t *conn, const void *addr, size_t 
 
     rv = conn->errstat;
 
-unlockboth:
-    mutex_unlock(&conn->sfields.active.connect_lock);
 unlockreturn:
+    conn->sfields.active.is_connecting = false;
+    conn->pending_ops -= 1;
+    if (conn->pending_ops == 0) {
+        cond_signal(&conn->pending_cond);
+    }
     mutex_unlock(&conn->lock);
     return rv;
 }
@@ -519,6 +579,8 @@ int sock_tcp_freebsd_accept(sock_tcp_freebsd_t* conn, sock_tcp_freebsd_t* out_co
 
     assert(!conn->hasactive);
 
+    conn->pending_ops += 1;
+
     int asockidx;
     while ((asockidx = cib_get(&conn->sfields.passive.accept_cib)) == -1) {
         cond_wait(&conn->sfields.passive.accept_cond, &conn->lock);
@@ -531,12 +593,18 @@ int sock_tcp_freebsd_accept(sock_tcp_freebsd_t* conn, sock_tcp_freebsd_t* out_co
     sock_tcp_freebsd_general_init(out_conn, conn->local_port);
 
     mutex_lock(&out_conn->lock);
+    out_conn->sfields.active.sendbuf = queue_slot->sendbuf;
     out_conn->sfields.active.recvbuf = queue_slot->recvbuf;
     sock_tcp_freebsd_active_set(out_conn, asock);
     int rv = bsdtcp_set_ctx(asock, out_conn);
     assert(rv == 0);
     (void) rv;
     mutex_unlock(&out_conn->lock);
+
+    conn->pending_ops -= 1;
+    if (conn->pending_ops == 0) {
+        cond_signal(&conn->pending_cond);
+    }
 
     mutex_unlock(&conn->lock);
     return 0;
@@ -549,12 +617,18 @@ int sock_tcp_freebsd_recv(sock_tcp_freebsd_t *conn, void *data, size_t max_len)
 
     assert(conn->hasactive && !conn->haspassive);
     mutex_lock(&conn->lock);
+    conn->pending_ops += 1;
 
     conn->errstat = 0;
     error = bsdtcp_receive(conn->sfields.active.asock, data, max_len, &bytes_read);
     while (bytes_read == 0 && error == 0 && conn->errstat == 0 && !bsdtcp_hasrcvdfin(conn->sfields.active.asock)) {
         cond_wait(&conn->sfields.active.receive_cond, &conn->lock);
         error = bsdtcp_receive(conn->sfields.active.asock, data, max_len, &bytes_read);
+    }
+
+    conn->pending_ops -= 1;
+    if (conn->pending_ops == 0) {
+        cond_signal(&conn->pending_cond);
     }
 
     mutex_unlock(&conn->lock);
@@ -578,14 +652,46 @@ int sock_tcp_freebsd_recv(sock_tcp_freebsd_t *conn, void *data, size_t max_len)
 int sock_tcp_freebsd_send(sock_tcp_freebsd_t *conn, const void* data, size_t len)
 {
     int error = 0;
-    struct lbufent* bufent;
-    struct sock_tcp_freebsd_send_state* sstate;
+    //struct lbufent* bufent;
+    //struct sock_tcp_freebsd_send_state* sstate;
 
     mutex_lock(&conn->lock);
+    conn->pending_ops += 1;
+
     assert(conn->hasactive && !conn->haspassive);
 
-    const char* buffer = data;
+    const uint8_t* buffer = data;
 
+    while (len > 0) {
+        /*
+         * Try sending the data, and see if we can send all of it.
+         */
+        size_t bytessent;
+        error = bsdtcp_send(conn->sfields.active.asock, buffer, len, &bytessent);
+        if (error != 0) {
+            goto unlockreturn;
+        }
+
+        buffer += bytessent;
+        len -= bytessent;
+
+        if (len != 0) {
+            /* Send buffer is full; wait for space to become available. */
+            cond_wait(&conn->sfields.active.send_cond, &conn->lock);
+
+            /*
+             * Now, the thread has been awakened. We need to check whether it
+             * was due to an error, or because there is free space in the send
+             * buffer.
+             */
+            if (conn->errstat != 0) {
+                error = conn->errstat;
+                goto unlockreturn;
+            }
+        }
+    }
+
+#if 0
     while (len > 0 && error == 0) {
         /*
          * Look at the remaining space in the send buffer to figure out how much
@@ -664,8 +770,13 @@ int sock_tcp_freebsd_send(sock_tcp_freebsd_t *conn, const void* data, size_t len
         buffer += buflen;
         len -= buflen;
     }
+#endif
 
 unlockreturn:
+    conn->pending_ops -= 1;
+    if (conn->pending_ops == 0) {
+        cond_signal(&conn->pending_cond);
+    }
     mutex_unlock(&conn->lock);
     return -error;
 }
