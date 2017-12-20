@@ -33,8 +33,10 @@
 #include "net/sock/udp.h"
 
 /* These two are needed for FreeBSD TCP. */
+#ifdef MODULE_GNRC_TCP_FREEBSD
 #include "condition.h"
 #include "net/tcp_freebsd.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -79,6 +81,7 @@ struct sock_udp {
     uint16_t flags;                     /**< option flags */
 };
 
+#ifdef MODULE_GNRC_TCP_FREEBSD
 /*
  * @brief    Used in TCP FREEBSD sock type
  * @internal
@@ -137,6 +140,7 @@ struct sock_tcp_freebsd {
     bool hasactive;
     bool haspassive;
 };
+#endif
 
 
 #ifdef __cplusplus
