@@ -96,6 +96,10 @@
 #include "net/gnrc/ipv6/nib.h"
 #endif
 
+#ifdef MODULE_VFS
+#include "vfs.h"
+#endif
+
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -112,6 +116,10 @@ void auto_init(void)
 #ifdef MODULE_RTC
     DEBUG("Auto init rtc module.\n");
     rtc_init();
+#endif
+#ifdef MODULE_VFS
+    DEBUG("Auto init VFS module.\n")
+    vfs_init();
 #endif
 #ifdef MODULE_SHT11
     DEBUG("Auto init SHT11 module.\n");
