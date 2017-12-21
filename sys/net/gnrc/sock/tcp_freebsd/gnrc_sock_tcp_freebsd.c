@@ -21,22 +21,65 @@
 #include "net/gnrc/tcp_freebsd.h"
 #include "net/sock/tcp_freebsd.h"
 #include "net/tcp_freebsd.h"
-#include "zone/gnrc_sock_tcp_freebsd_zalloc.h"
 
 #define ENABLE_DEBUG (0)
 
 #include "debug.h"
 
-#define RECV_BUF_LEN 1596
+#define NACTIVESOCKS 1
+#define SEND_BUF_LEN 1024
+#define RECV_BUF_LEN 1024
 #define REASS_BMP_LEN ((RECV_BUF_LEN + 7) >> 3)
 
-#define SENDMAXCOPY 52
-#define COPYBUFSIZE (SENDMAXCOPY << 1)
-#define SENDBUFSIZE 2048
+struct buffers {
+    uint8_t send_buffer[SEND_BUF_LEN];
+    uint8_t recv_buffer[RECV_BUF_LEN];
+    uint8_t reass_buffer[REASS_BMP_LEN];
+    bool allocated;
+};
+static struct buffers buffer_pool[NACTIVESOCKS];
+
+#define NPASSIVESOCKS 1
+#define ACCEPT_QUEUE_LEN 16
+#define ACCEPT_QUEUE_SHIFT 4
+
+struct queues {
+    uint8_t accept_queue[ACCEPT_QUEUE_LEN];
+    bool allocated;
+};
+static struct queues queue_pool[NPASSIVESOCKS];
 
 #ifndef SOCK_HAS_IPV6
 #error "TCP FREEBSD requires IPv6"
 #endif
+
+static void allocate_buffers(int asockid) {
+    assert(asockid >= 0);
+    assert(asockid < NACTIVESOCKS);
+    assert(!buffer_pool[asockid].allocated);
+    buffer_pool[asockid].allocated = true;
+}
+
+static void deallocate_buffers(int asockid) {
+    assert(asockid >= 0);
+    assert(asockid < NACTIVESOCKS);
+    assert(buffer_pool[asockid].allocated);
+    buffer_pool[asockid].allocated = false;
+}
+
+static void allocate_queues(int psockid) {
+    assert(psockid - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS >= 0);
+    assert(psockid - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS < NACTIVESOCKS);
+    assert(!queue_pool[psockid - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS].allocated);
+    queue_pool[psockid - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS].allocated = true;
+}
+
+static void deallocate_queues(int psockid) {
+    assert(psockid - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS >= 0);
+    assert(psockid - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS < NACTIVESOCKS);
+    assert(queue_pool[psockid - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS].allocated);
+    queue_pool[psockid - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS].allocated = false;
+}
 
 #if 0
 /* Cached copy buffer, which may help us avoid a dynamic memory allocation. */
@@ -115,13 +158,13 @@ static void sock_tcp_freebsd_connectionLost(acceptArgs_t* lost, uint8_t how, voi
 {
     (void) how;
     if (ctx == NULL) {
-        /* This could happen if we get a SYN, so that acceptReady is called, but the
+        /*
+         * This could happen if we get a SYN, so that acceptReady is called, but the
          * connection dies before a SYN-ACK is received, so the socket never hits
          * the accept queue.
          * In that case, we need to free the receive buffer, which we allocated.
          */
-        sock_tcp_freebsd_zfree(lost->recvbuf);
-        sock_tcp_freebsd_zfree(lost->sendbuf);
+        deallocate_buffers(lost->asockid);
         return;
     }
     sock_tcp_freebsd_t* conn = ctx;
@@ -145,34 +188,22 @@ static acceptArgs_t sock_tcp_freebsd_acceptReady(uint8_t pi, void* ctx)
     mutex_lock(&conn->lock);
     assert(conn->haspassive && !conn->hasactive);
 
-    void* recvbuf = sock_tcp_freebsd_zalloc(RECV_BUF_LEN + REASS_BMP_LEN);
-    if (recvbuf == NULL) {
-        DEBUG("Out of memory in acceptReady\n");
-        goto fail;
-    }
-
-    void* sendbuf = sock_tcp_freebsd_zalloc(SENDBUFSIZE);
-    if (sendbuf == NULL) {
-        sock_tcp_freebsd_zfree(recvbuf);
-        DEBUG("Out of memory in acceptReady\n");
-        goto fail;
-    }
-
     int asockid = bsdtcp_active_socket(sock_tcp_freebsd_connectDone,
         sock_tcp_freebsd_sendReady, sock_tcp_freebsd_receiveReady,
         sock_tcp_freebsd_connectionLost, NULL);
 
     if (asockid == -1) {
-        sock_tcp_freebsd_zfree(recvbuf);
         goto fail;
     }
 
+    allocate_buffers(asockid);
+
     args.asockid = asockid;
-    args.sendbuf = sendbuf;
-    args.sendbuflen = SENDBUFSIZE;
-    args.recvbuf = recvbuf;
+    args.sendbuf = buffer_pool[asockid].send_buffer;
+    args.sendbuflen = SEND_BUF_LEN;
+    args.recvbuf = buffer_pool[asockid].recv_buffer;
     args.recvbuflen = RECV_BUF_LEN;
-    args.reassbmp = ((uint8_t*) args.recvbuf) + RECV_BUF_LEN;
+    args.reassbmp = buffer_pool[asockid].reass_buffer;
 
 done:
     mutex_unlock(&conn->lock);
@@ -209,10 +240,8 @@ static bool sock_tcp_freebsd_acceptDone(uint8_t pi, struct sockaddr_in6* faddr, 
         mutex_unlock(&conn->lock);
         return false;
     }
-    struct sock_tcp_freebsd_accept_queue_entry* queue_slot = &conn->sfields.passive.accept_queue[putidx];
-    queue_slot->asockid = accepted->asockid;
-    queue_slot->sendbuf = accepted->sendbuf;
-    queue_slot->recvbuf = accepted->recvbuf;
+
+    queue_pool[conn->sfields.passive.psock - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS].accept_queue[putidx] = (uint8_t) accepted->asockid;
 
     cond_signal(&conn->sfields.passive.accept_cond);
 
@@ -261,14 +290,12 @@ static void sock_tcp_freebsd_passive_clear(sock_tcp_freebsd_t* conn)
 
         bsdtcp_close(conn->sfields.passive.psock);
 
-        struct sock_tcp_freebsd_accept_queue_entry* queue_slot;
         while ((asockidx = cib_get(&conn->sfields.passive.accept_cib)) != -1) {
-            queue_slot = &conn->sfields.passive.accept_queue[asockidx];
-            sock_tcp_freebsd_zfree(queue_slot->sendbuf);
-            sock_tcp_freebsd_zfree(queue_slot->recvbuf);
-            bsdtcp_close(queue_slot->asockid);
+            int asock = (int) queue_pool[conn->sfields.passive.psock - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS].accept_queue[asockidx];
+            bsdtcp_close(asock);
+            deallocate_buffers(asock);
         }
-        sock_tcp_freebsd_zfree(conn->sfields.passive.accept_queue);
+        deallocate_queues(conn->sfields.passive.psock);
 
         conn->errstat = 0;
     }
@@ -295,8 +322,7 @@ static void sock_tcp_freebsd_active_clear(sock_tcp_freebsd_t* conn)
         }
 
         bsdtcp_close(conn->sfields.active.asock);
-        sock_tcp_freebsd_zfree(conn->sfields.active.recvbuf);
-        sock_tcp_freebsd_zfree(conn->sfields.active.sendbuf);
+        deallocate_buffers(conn->sfields.active.asock);
 
         conn->errstat = 0;
     }
@@ -316,23 +342,7 @@ static bool sock_tcp_freebsd_active_set(sock_tcp_freebsd_t* conn, int asock)
                 return false;
             }
 
-            conn->sfields.active.recvbuf = sock_tcp_freebsd_zalloc(RECV_BUF_LEN + REASS_BMP_LEN);
-            if (conn->sfields.active.recvbuf == NULL) {
-                conn->hasactive = false;
-                bsdtcp_close(conn->sfields.active.asock);
-                conn->sfields.active.asock = -1;
-                return false;
-            }
-
-            conn->sfields.active.sendbuf = sock_tcp_freebsd_zalloc(SENDBUFSIZE);
-            if (conn->sfields.active.sendbuf == NULL) {
-                sock_tcp_freebsd_zfree(conn->sfields.active.recvbuf);
-                conn->sfields.active.recvbuf = NULL;
-                conn->hasactive = false;
-                bsdtcp_close(conn->sfields.active.asock);
-                conn->sfields.active.asock = -1;
-                return false;
-            }
+            allocate_buffers(conn->sfields.active.asock);
 
         } else {
             conn->sfields.active.asock = asock;
@@ -351,6 +361,10 @@ static bool sock_tcp_freebsd_active_set(sock_tcp_freebsd_t* conn, int asock)
 static bool sock_tcp_freebsd_passive_set(sock_tcp_freebsd_t* conn, int queue_len)
 {
     assert(queue_len >= 0 && queue_len < (1 << (8 * sizeof(int) - 2)));
+    if (queue_len > ACCEPT_QUEUE_LEN) {
+        queue_len = ACCEPT_QUEUE_LEN;
+    }
+
     sock_tcp_freebsd_active_clear(conn);
     if (!conn->haspassive) {
         conn->haspassive = true;
@@ -372,19 +386,13 @@ static bool sock_tcp_freebsd_passive_set(sock_tcp_freebsd_t* conn, int queue_len
         adj_queue_len >>= 1;
 
         cib_init(&conn->sfields.passive.accept_cib, adj_queue_len);
-
-        conn->sfields.passive.accept_queue = sock_tcp_freebsd_zalloc(adj_queue_len * sizeof(struct sock_tcp_freebsd_accept_queue_entry));
-        if (conn->sfields.passive.accept_queue == NULL && adj_queue_len != 0) {
-            conn->haspassive = false;
-            bsdtcp_close(conn->sfields.passive.psock);
-            conn->sfields.passive.psock = -1;
-            return false;
-        }
+        allocate_queues(conn->sfields.passive.psock);
     }
     return true;
 }
 
-/* This used to be in sys/net/gnrc/conn/gnrc_conn.c, as the function
+/*
+ * This used to be in sys/net/gnrc/conn/gnrc_conn.c, as the function
  * gnrc_conn6_set_local_addr. I'm duplicating the code here, as conn is
  * deprecated and so I don't want to pull it in as a dependency.
  */
@@ -529,9 +537,9 @@ int sock_tcp_freebsd_connect(sock_tcp_freebsd_t *conn, const void *addr, size_t 
     }
     conn->errstat = 0;
     int error = bsdtcp_connect(conn->sfields.active.asock, &faddrport,
-        conn->sfields.active.sendbuf, SENDBUFSIZE,
-        conn->sfields.active.recvbuf, RECV_BUF_LEN,
-        ((uint8_t*) conn->sfields.active.recvbuf) + RECV_BUF_LEN);
+        buffer_pool[conn->sfields.active.asock].send_buffer, SEND_BUF_LEN,
+        buffer_pool[conn->sfields.active.asock].recv_buffer, RECV_BUF_LEN,
+        buffer_pool[conn->sfields.active.asock].reass_buffer);
     if (error != 0) {
         rv = -error;
         goto unlockreturn;
@@ -586,15 +594,12 @@ int sock_tcp_freebsd_accept(sock_tcp_freebsd_t* conn, sock_tcp_freebsd_t* out_co
         cond_wait(&conn->sfields.passive.accept_cond, &conn->lock);
     }
 
-    struct sock_tcp_freebsd_accept_queue_entry* queue_slot = &conn->sfields.passive.accept_queue[asockidx];
-    int asock = queue_slot->asockid;
+    int asock = (int) queue_pool[conn->sfields.passive.psock - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS].accept_queue[asockidx];
 
     memcpy(&out_conn->local_addr, &conn->local_addr, sizeof(ipv6_addr_t));
     sock_tcp_freebsd_general_init(out_conn, conn->local_port);
 
     mutex_lock(&out_conn->lock);
-    out_conn->sfields.active.sendbuf = queue_slot->sendbuf;
-    out_conn->sfields.active.recvbuf = queue_slot->recvbuf;
     sock_tcp_freebsd_active_set(out_conn, asock);
     int rv = bsdtcp_set_ctx(asock, out_conn);
     assert(rv == 0);

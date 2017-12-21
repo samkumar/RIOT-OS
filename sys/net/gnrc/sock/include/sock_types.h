@@ -98,8 +98,6 @@ struct sock_tcp_freebsd_send_state {
  */
 struct sock_tcp_freebsd_accept_queue_entry {
     int asockid;
-    void* sendbuf;
-    void* recvbuf;
 };
 
 /*
@@ -120,8 +118,6 @@ struct sock_tcp_freebsd {
     union {
         struct {
             int asock;
-            void* sendbuf;
-            void* recvbuf;
             bool is_connecting;
             condition_t connect_cond;
             condition_t receive_cond;

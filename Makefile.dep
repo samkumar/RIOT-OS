@@ -87,7 +87,6 @@ endif
 
 ifneq (,$(filter gnrc_sock_tcp_freebsd,$(USEMODULE)))
   USEMODULE += gnrc_tcp_freebsd
-  USEMODULE += gnrc_sock_tcp_freebsd_zalloc
   USEMODULE += sock_tcp_freebsd
 endif
 

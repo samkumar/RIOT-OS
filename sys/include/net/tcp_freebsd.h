@@ -31,6 +31,9 @@ extern "C" {
 #include <netinet/in.h>
 #include "../net/gnrc/transport_layer/tcp_freebsd/lib/lbuf.h"
 
+#define GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS 1
+#define GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS 1
+
 typedef struct {
     int asockid;
     uint8_t* sendbuf;

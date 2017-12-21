@@ -35,9 +35,6 @@
 #include "net/gnrc/pkt.h"
 #include "net/tcp_freebsd.h"
 
-#define GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS 1
-#define GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS 1
-
 #define TIMERS_PER_ACTIVE_SOCKET 4
 
 /* Possible return value from tcp_input. */
