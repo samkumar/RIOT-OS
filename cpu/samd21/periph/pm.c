@@ -55,6 +55,7 @@ enum system_sleepmode {
 void pm_set(unsigned mode)
 {
     int deep = 0;
+    xtimer_sync = false;
 
     switch (mode) {
         case 0:
@@ -62,7 +63,6 @@ void pm_set(unsigned mode)
              * Potential Wake Up sources: asynchronous
              */
             deep = 1;
-            xtimer_sync = false;
             break;
         case 1:
             /* Sleep mode Idle 2

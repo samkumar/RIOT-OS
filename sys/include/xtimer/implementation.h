@@ -134,12 +134,8 @@ static inline uint32_t _xtimer_now(void)
         uint32_t now_s;
     
         do {
-            now_s = _stimer_lltimer_now();
-            if (now_s >= prev_s) {
-                diff_s = now_s - prev_s;
-            } else {
-                diff_s = (0xFFFFFFFF-prev_s) + now_s;
-            }
+            now_s  = _stimer_lltimer_now();
+            diff_s = now_s - prev_s;
         } while (diff_s < STIMER_HZ/XTIMER_HZ); 
 
         return _xtimer_lltimer_mask(prev_x + (uint32_t)(diff_s*XTIMER_HZ/STIMER_HZ));
