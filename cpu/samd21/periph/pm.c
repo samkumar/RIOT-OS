@@ -24,6 +24,7 @@
  */
 
 #include "periph/pm.h"
+#include "xtimer.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -61,6 +62,7 @@ void pm_set(unsigned mode)
              * Potential Wake Up sources: asynchronous
              */
             deep = 1;
+            xtimer_sync = false;
             break;
         case 1:
             /* Sleep mode Idle 2
