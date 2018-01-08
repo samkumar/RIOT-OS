@@ -10,6 +10,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -19,23 +20,23 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <linux/if.h>
 #include <linux/if_tun.h>
-#include <sys/types.h>
+#include <linux/ipv6.h>
 #include <sys/ioctl.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <arpa/inet.h>
 #include <sys/select.h>
+#include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <sys/un.h>
 
 #include <netdb.h>
 
 #include <termios.h>
 
-#define MTU 9000
+#define MTU 16384
 
 #define TRACE(x)
 #define TTY_TIMEOUT_MS (500)
@@ -49,11 +50,12 @@
 
 #define RESERVED_CHANNEL 0
 #define STDIN_CHANNEL 1
-#define TUNTAP_CHANNEL 2
+#define CMD_CHANNEL 2
+#define TUNTAP_CHANNEL 3
 #define NUM_CHANNELS 256
 
-#define TCP_DEV "tcp:"
-#define IOTLAB_TCP_PORT "20000"
+/* Commands for REthos (only one for now) */
+#define CMD_GET_MCU_IP_ADDR 0x01
 
 bool have_stdin = true;
 
@@ -128,12 +130,6 @@ void check_fatal_error(const char* msg)
     assert(errno);
     perror(msg);
     exit(1);
-}
-
-static void usage(void)
-{
-    fprintf(stderr, "Usage: rethos <tap> <serial> [baudrate]\n");
-    fprintf(stderr, "       rethos <tap> tcp:<host> [port]\n");
 }
 
 static void checked_write(int fd, const void* buffer, size_t size)
@@ -487,39 +483,6 @@ done_char:
     return event;
 }
 
-/**************************************************************************
- * tun_alloc: allocates or reconnects to a tun/tap device. The caller     *
- *            needs to reserve enough space in *dev.                      *
- **************************************************************************/
-int tun_alloc(char *dev, int flags) {
-
-  struct ifreq ifr;
-  int fd, err;
-
-  if( (fd = open("/dev/net/tun", O_RDWR)) < 0 ) {
-    perror("Opening /dev/net/tun");
-    return fd;
-  }
-
-  memset(&ifr, 0, sizeof(ifr));
-
-  ifr.ifr_flags = flags;
-
-  if (*dev) {
-    strncpy(ifr.ifr_name, dev, IFNAMSIZ);
-  }
-
-  if( (err = ioctl(fd, TUNSETIFF, (void *)&ifr)) < 0 ) {
-    perror("ioctl(TUNSETIFF)");
-    close(fd);
-    return err;
-  }
-
-  strcpy(dev, ifr.ifr_name);
-
-  return fd;
-}
-
 static void _write_escaped(int fd, const uint8_t* buf, ssize_t n)
 {
     for (ssize_t i = 0; i < n; i++) {
@@ -593,15 +556,6 @@ void rethos_send_nack_frame(serial_t* serial) {
     _send_frame(serial, NULL, 0, RESERVED_CHANNEL, 0, RETHOS_FRAME_TYPE_NACK);
 }
 
-/*static void _clear_neighbor_cache(const char *ifname)
-{
-    char tmp[20 + IFNAMSIZ];
-    snprintf(tmp, sizeof(tmp), "ip neigh flush dev %s", ifname);
-    if (system(tmp) < 0) {
-        fprintf(stderr, "error while flushing device neighbor cache\n");
-    }
-}*/
-
 static int _parse_baudrate(const char *arg, unsigned *baudrate)
 {
     if (arg == NULL) {
@@ -672,103 +626,6 @@ static int _parse_baudrate(const char *arg, unsigned *baudrate)
     return 0;
 }
 
-int _parse_tcp_arg(char *name, char *port_arg, char **host, char **port)
-{
-    /* Remove 'tcp:' */
-    name = &name[sizeof(TCP_DEV) - 1];
-
-    /* Set default if NULL */
-    if (!port_arg) {
-        port_arg = IOTLAB_TCP_PORT;
-    }
-
-    *host = name;
-    *port = port_arg;
-
-    return 0;
-}
-
-/* Adapted from 'getaddrinfo' manpage example */
-int _tcp_connect(char *host, char *port)
-{
-    int sfd = -1;
-    struct addrinfo hints, *result, *rp;
-
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-
-    int s = getaddrinfo(host, port, &hints, &result);
-    if (s) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(s));
-        return -1;
-    }
-
-    /* getaddrinfo() returns a list of address structures.
-       Try each address until we successfully connect(2).
-       If socket(2) (or connect(2)) fails, we (close the socket
-       and) try the next address. */
-    for (rp = result; rp != NULL; rp = rp->ai_next) {
-        sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (sfd == -1)
-            continue;
-
-        if (connect(sfd, rp->ai_addr, rp->ai_addrlen) != -1)
-            break;
-
-        close(sfd);
-    }
-
-    freeaddrinfo(result);
-
-    if (rp == NULL) {
-        fprintf(stderr, "Could not connect to '%s:%s'\n", host, port);
-        return -1;
-    }
-
-    return sfd;
-}
-
-int _set_socket_timeout(int sfd)
-{
-    struct timeval timeout = {
-        .tv_sec = 0,
-        .tv_usec = TTY_TIMEOUT_MS * 1000,
-    };
-
-    if (setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO,
-                   (char *)&timeout, sizeof(timeout)) == -1) {
-        perror("setsockopt failed\n");
-        return 1;
-    }
-
-    if (setsockopt(sfd, SOL_SOCKET, SO_SNDTIMEO,
-                   (char *)&timeout, sizeof(timeout)) == -1) {
-        perror("setsockopt failed\n");
-        return 1;
-    }
-    return 0;
-}
-
-int _open_tcp_connection(char *name, char *port_arg)
-{
-    char *host;
-    char *port;
-
-    int ret = _parse_tcp_arg(name, port_arg, &host, &port);
-    if (ret) {
-        fprintf(stderr, "Error while parsing tcp arguments\n");
-        return -1;
-    }
-
-    int sfd = _tcp_connect(host, port);
-    if (_set_socket_timeout(sfd)) {
-        fprintf(stderr, "Error while setting socket options\n");
-        return -1;
-    }
-    return sfd;
-}
-
 int _open_serial_connection(char *name, char *baudrate_arg)
 {
     unsigned baudrate = 0;
@@ -788,15 +645,6 @@ int _open_serial_connection(char *name, char *baudrate_arg)
     set_blocking(serial_fd, 1);
 
     return serial_fd;
-}
-
-int _open_connection(char *name, char* option)
-{
-    if (strncmp(name, TCP_DEV, strlen(TCP_DEV)) == 0) {
-        return _open_tcp_connection(name, option);
-    } else {
-        return _open_serial_connection(name, option);
-    }
 }
 
 typedef struct {
@@ -839,7 +687,18 @@ void channel_listen(channel_t* chan, int channel_number) {
 int main(int argc, char *argv[])
 {
     uint8_t inbuf[MTU];
-    char *serial_option = NULL;
+    struct in6_addr mcu_addr;
+
+    /* Parse command line arguments */
+    if (argc != 3 && argc != 4) {
+        printf("Usage: %s <serial> <baudrate> <ipv6_address>\n", argv[0]);
+        printf("The provided ipv6_address is interpreted as a /64 prefix for\n"
+               "the subnet. PREFIX::1 is the IP address of this device on\n"
+               "the link, and PREFIX::2 is the IP address of the MCU. If\n"
+               "no ipv6_address is provided, rethos will not act as a\n"
+               "router; it will only forward messages to other processes.\n");
+        return 1;
+    }
 
     /* Block the SIGUSR1 signal. */
     sigset_t oldmask;
@@ -865,27 +724,104 @@ int main(int argc, char *argv[])
     serial_t serial = {0};
     serial.rexmit_acked = true; // The retransmit buffer contains garbage, so don't transmit that
 
-    if (argc < 3) {
-        usage();
-        return 1;
+    /* Open TUN channel to forward packets. */
+    int tun_fd;
+    if (argc == 4) {
+        tun_fd = open("/dev/net/tun", O_RDWR);
+        if (tun_fd == -1) {
+            perror("open(\"/dev/net/tun\")");
+            return 1;
+        }
+
+        struct ifreq ifr;
+        memset(&ifr, 0x00, sizeof(ifr));
+        ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
+
+        /*
+         * We leave ifr.ifr_name full of 0x00, so the kernel will automatically
+         * assign a name.
+         */
+        if (ioctl(tun_fd, TUNSETIFF, &ifr) == -1) {
+            perror("ioctl(TUNSETIFF)");
+            return 1;
+        }
+        printf("Created TUN interface: %s\n", ifr.ifr_name);
+
+        int sockfd = socket(AF_INET6, SOCK_DGRAM, 0);
+        if (ioctl(sockfd, SIOGIFINDEX, &ifr) == -1) {
+            perror("ioctl(SIOGIFINDEX)");
+            return 1;
+        }
+
+        struct in6_ifreq ifr6;
+        ifr6.ifr6_ifindex = ifr.ifr_ifindex;
+        ifr6.ifr6_prefixlen = 64;
+
+        /*
+         * mcu_addr, for now, is just a placeholder so we can print important
+         * IPv6 addresses to keep the user in the loop.
+         */
+        if (inet_pton(AF_INET6, argv[3], &mcu_addr) != 1) {
+            printf("Invalid IPv6 address provided: %s\n", argv[3]);
+            return 1;
+        }
+
+        /* Set last 64 bits of IPv6 address to 0. */
+        memset(&mcu_addr.s6_addr[8], 0x00, 8);
+
+        char ipstrbuf[64];
+        const char* ipstr = inet_ntop(AF_INET6, &mcu_addr, ipstrbuf, sizeof(ipstrbuf));
+        if (ipstr == NULL) {
+            perror("inet_ntop");
+            return 1;
+        }
+        printf("IPv6 subnet is %s/64\n", ipstr);
+
+        mcu_addr.s6_addr[15] = 0x01;
+        ipstr = inet_ntop(AF_INET6, &mcu_addr, ipstrbuf, sizeof(ipstrbuf));
+        if (ipstr == NULL) {
+            perror("inet_ntop");
+            return 1;
+        }
+        printf("IPv6 address of this device is %s\n", ipstr);
+
+        /* This is the address that we want to set the TUN interface. */
+        memcpy(&ifr6.ifr6_addr, &mcu_addr, sizeof(struct in6_addr));
+
+        /* Finally, we set mcu_addr to the IPv6 address of the MCU. */
+        mcu_addr.s6_addr[15] = 0x02;
+        ipstr = inet_ntop(AF_INET6, &mcu_addr, ipstrbuf, sizeof(ipstrbuf));
+        if (ipstr == NULL) {
+            perror("inet_ntop");
+            return 1;
+        }
+        printf("IPv6 address of the MCU is %s\n", ipstr);
+
+        /* Actually set the IP address of the tun interface. */
+        if (ioctl(sockfd, SIOCSIFADDR, &ifr6) == -1) {
+            perror("ioctl(SIOCSIFADDR)");
+            return 1;
+        }
+
+        /* Bring up the TUN interface. */
+        ifr.ifr_flags = IFF_UP | IFF_RUNNING;
+        if (ioctl(sockfd, SIOCSIFFLAGS, &ifr) == -1) {
+            perror("ioctl(SIOCSIFFLAGS)");
+            return 1;
+        }
+
+        if (close(sockfd) == -1) {
+            perror("close");
+        }
+    } else {
+        tun_fd = -1;
+        printf("No IPv6 address provided; will not forward packets\n");
     }
 
-    if (argc >= 4) {
-        serial_option = argv[3];
-    }
-
-    char ifname[IFNAMSIZ];
-    strncpy(ifname, argv[1], IFNAMSIZ);
-    int tap_fd = tun_alloc(ifname, IFF_TAP | IFF_NO_PI);
-
-    if (tap_fd < 0) {
-        return 1;
-    }
-
-
-    int serial_fd = _open_connection(argv[2], serial_option);
+    /* Open serial channel to the MCU. */
+    int serial_fd = _open_serial_connection(argv[1], argv[2]);
     if (serial_fd < 0) {
-        fprintf(stderr, "Error opening serial device %s\n", argv[2]);
+        fprintf(stderr, "Error opening serial device %s\n", argv[1]);
         return 1;
     }
 
@@ -926,8 +862,10 @@ int main(int argc, char *argv[])
             FD_SET(STDIN_FILENO, &readfds);
             UPDATE_MAX_FD(STDIN_FILENO);
         }
-        FD_SET(tap_fd, &readfds);
-        UPDATE_MAX_FD(tap_fd);
+        if (tun_fd != -1) {
+            FD_SET(tun_fd, &readfds);
+            UPDATE_MAX_FD(tun_fd);
+        }
         FD_SET(serial_fd, &readfds);
         UPDATE_MAX_FD(serial_fd);
         for (i = 0; i < NUM_CHANNELS; i++) {
@@ -1052,7 +990,30 @@ int main(int argc, char *argv[])
                         if (serial.channel == STDIN_CHANNEL) {
                             checked_write(STDOUT_FILENO, serial.frame, serial.numbytes);
                         } else if (serial.channel == TUNTAP_CHANNEL) {
-                            write_message(tap_fd, serial.frame, serial.numbytes);
+                            if (tun_fd == -1) {
+                                printf("Got a packet to forward: dropping it\n");
+                            } else {
+                                ssize_t written = write(tun_fd, serial.frame, serial.numbytes);
+                                if (written == -1) {
+                                    perror("write(tun_fd)");
+                                }
+                                if (written != serial.numbytes) {
+                                    fprintf(stderr, "Sent partial packet: packet size is %zu bytes, but write(tun_fd) returned %zd\n", serial.numbytes, written);
+                                }
+                            }
+                        } else if (serial.channel == CMD_CHANNEL) {
+                            /* This is a request to REthos itself. */
+                            if (serial.numbytes == 0) {
+                                printf("Got empty command\n");
+                            } else {
+                                uint8_t opcode = serial.frame[0];
+                                switch (opcode) {
+                                case CMD_GET_MCU_IP_ADDR:
+                                    printf("Got command: Get MCU IP Address\n");
+                                    rethos_send_data_frame(&serial, (uint8_t*) &mcu_addr, sizeof(mcu_addr), CMD_CHANNEL);
+                                    break;
+                                }
+                            }
                         }
 
                         if (domain_sockets[serial.channel].client_socket != -1) {
@@ -1080,17 +1041,8 @@ int main(int argc, char *argv[])
                 exit(1);
             }
         }
+
     serial_done:
-
-        if (FD_ISSET(tap_fd, &readfds)) {
-            ssize_t res = read(tap_fd, inbuf, sizeof(inbuf));
-            if (res <= 0) {
-                fprintf(stderr, "error reading from tap device. res=%zi\n", res);
-                continue;
-            }
-            rethos_send_data_frame(&serial, inbuf, res, TUNTAP_CHANNEL);
-        }
-
         if (FD_ISSET(STDIN_FILENO, &readfds)) {
             ssize_t res = read(STDIN_FILENO, inbuf, sizeof(inbuf));
             if (res <= 0) {
@@ -1099,6 +1051,15 @@ int main(int argc, char *argv[])
                 continue;
             }
             rethos_send_data_frame(&serial, inbuf, res, STDIN_CHANNEL);
+        }
+
+        if (tun_fd != -1 && FD_ISSET(tun_fd, &readfds)) {
+            ssize_t res = read(tun_fd, inbuf, sizeof(inbuf));
+            if (res <= 0) {
+                perror("read(tun_fd)");
+                continue;
+            }
+            rethos_send_data_frame(&serial, inbuf, res, TUNTAP_CHANNEL);
         }
 
         for (i = 0; i < NUM_CHANNELS; i++) {
