@@ -57,6 +57,9 @@
 /* Commands for REthos (only one for now) */
 #define CMD_GET_MCU_IP_ADDR 0x01
 
+/* Return codes for commands for REthos. */
+#define RSP_GET_MCU_IP_ADDR 0x11
+
 bool have_stdin = true;
 
 typedef struct {
@@ -87,27 +90,35 @@ struct {
 } __attribute__((packed)) stats = {0};
 
 
-/* Code to handle timers.
- * There are two timers, a periodic stats timer, and a retransmission timer.
+/*
+ * Code to handle timers.
+ * There are three timers: stats, retransmission, "send IP address"
  */
 #define STATS_TIMER_TYPE 0
 #define REXMIT_TIMER_TYPE 1
+#define IPADDR_TIMER_TYPE 2
 
 /* Stats timeout is 15 seconds. Type is struct timespec. */
-#define STATS_TIMEOUT {(time_t) 5, 0L}
+#define STATS_TIMEOUT {(time_t) 15, 0L}
 
 /* Retransmission timeout is 100 ms. Type is struct timespec. */
 #define REXMIT_TIMEOUT {(time_t) 0, 100000000L}
 
+/* IP Address timeout is 20 seconds. Type is struct timespec. */
+#define IPADDR_TIMEOUT {(time_t) 20, 0L}
+
 const struct itimerspec stats_timer_spec = { STATS_TIMEOUT, STATS_TIMEOUT };
 const struct itimerspec rexmit_timer_spec = { REXMIT_TIMEOUT, REXMIT_TIMEOUT };
+const struct itimerspec ipaddr_timer_spec = { IPADDR_TIMEOUT, IPADDR_TIMEOUT };
 const struct itimerspec cancel_timer_spec = { {0, 0L}, {0, 0L} };
 
 timer_t stats_timer;
 timer_t rexmit_timer;
+timer_t ipaddr_timer;
 
 volatile sig_atomic_t stats_fired = 0;
 volatile sig_atomic_t rexmit_fired = 0;
+volatile sig_atomic_t ipaddr_fired = 0;
 
 /* This function executes in the SIGUSR1 signal handler. */
 static void timer_handler(int signum, siginfo_t* info, void* context) {
@@ -121,6 +132,9 @@ static void timer_handler(int signum, siginfo_t* info, void* context) {
         break;
     case REXMIT_TIMER_TYPE:
         rexmit_fired = 1;
+        break;
+    case IPADDR_TIMER_TYPE:
+        ipaddr_fired = 1;
         break;
     }
 }
@@ -687,7 +701,13 @@ void channel_listen(channel_t* chan, int channel_number) {
 int main(int argc, char *argv[])
 {
     uint8_t inbuf[MTU];
-    struct in6_addr mcu_addr;
+
+    /* Response frame containing IP address of MCU. */
+    struct {
+        char opcode;
+        struct in6_addr mcu_addr;
+    } mcu_addr_rsp_frame;
+    mcu_addr_rsp_frame.opcode = RSP_GET_MCU_IP_ADDR;
 
     /* Parse command line arguments */
     if (argc != 3 && argc != 4) {
@@ -761,24 +781,24 @@ int main(int argc, char *argv[])
          * mcu_addr, for now, is just a placeholder so we can print important
          * IPv6 addresses to keep the user in the loop.
          */
-        if (inet_pton(AF_INET6, argv[3], &mcu_addr) != 1) {
+        if (inet_pton(AF_INET6, argv[3], &mcu_addr_rsp_frame.mcu_addr) != 1) {
             printf("Invalid IPv6 address provided: %s\n", argv[3]);
             return 1;
         }
 
         /* Set last 64 bits of IPv6 address to 0. */
-        memset(&mcu_addr.s6_addr[8], 0x00, 8);
+        memset(&mcu_addr_rsp_frame.mcu_addr.s6_addr[8], 0x00, 8);
 
         char ipstrbuf[64];
-        const char* ipstr = inet_ntop(AF_INET6, &mcu_addr, ipstrbuf, sizeof(ipstrbuf));
+        const char* ipstr = inet_ntop(AF_INET6, &mcu_addr_rsp_frame.mcu_addr, ipstrbuf, sizeof(ipstrbuf));
         if (ipstr == NULL) {
             perror("inet_ntop");
             return 1;
         }
         printf("IPv6 subnet is %s/64\n", ipstr);
 
-        mcu_addr.s6_addr[15] = 0x01;
-        ipstr = inet_ntop(AF_INET6, &mcu_addr, ipstrbuf, sizeof(ipstrbuf));
+        mcu_addr_rsp_frame.mcu_addr.s6_addr[15] = 0x01;
+        ipstr = inet_ntop(AF_INET6, &mcu_addr_rsp_frame.mcu_addr, ipstrbuf, sizeof(ipstrbuf));
         if (ipstr == NULL) {
             perror("inet_ntop");
             return 1;
@@ -786,11 +806,11 @@ int main(int argc, char *argv[])
         printf("IPv6 address of this device is %s\n", ipstr);
 
         /* This is the address that we want to set the TUN interface. */
-        memcpy(&ifr6.ifr6_addr, &mcu_addr, sizeof(struct in6_addr));
+        memcpy(&ifr6.ifr6_addr, &mcu_addr_rsp_frame.mcu_addr, sizeof(struct in6_addr));
 
         /* Finally, we set mcu_addr to the IPv6 address of the MCU. */
-        mcu_addr.s6_addr[15] = 0x02;
-        ipstr = inet_ntop(AF_INET6, &mcu_addr, ipstrbuf, sizeof(ipstrbuf));
+        mcu_addr_rsp_frame.mcu_addr.s6_addr[15] = 0x02;
+        ipstr = inet_ntop(AF_INET6, &mcu_addr_rsp_frame.mcu_addr, ipstrbuf, sizeof(ipstrbuf));
         if (ipstr == NULL) {
             perror("inet_ntop");
             return 1;
@@ -849,8 +869,17 @@ int main(int argc, char *argv[])
         check_fatal_error("Could not create rexmit timer");
     }
 
+    sev.sigev_value.sival_int = IPADDR_TIMER_TYPE;
+    if (timer_create(CLOCK_MONOTONIC, &sev, &ipaddr_timer) == -1) {
+        check_fatal_error("Could not create ipaddr timer");
+    }
+
     if (timer_settime(stats_timer, 0, &stats_timer_spec, NULL) == -1) {
         check_fatal_error("Could not set stats timer");
+    }
+
+    if (timer_settime(ipaddr_timer, 0, &ipaddr_timer_spec, NULL) == -1) {
+        check_fatal_error("Could not set ipaddr timer");
     }
 
     while (true) {
@@ -880,7 +909,7 @@ int main(int argc, char *argv[])
 
         activity = pselect(max_fd + 1, &readfds, NULL, NULL, NULL, &oldmask);
 
-        if (activity == -1 && (errno != EINTR || (stats_fired == 0 && rexmit_fired == 0))) {
+        if (activity == -1 && (errno != EINTR || (stats_fired == 0 && rexmit_fired == 0 && ipaddr_fired == 0))) {
             check_fatal_error("Could not wait for event");
         }
 
@@ -906,8 +935,15 @@ int main(int argc, char *argv[])
             }
         }
 
+        if (ipaddr_fired == 1) {
+            ipaddr_fired = 0;
+
+            rethos_send_data_frame(&serial, (uint8_t*) &mcu_addr_rsp_frame, sizeof(mcu_addr_rsp_frame), CMD_CHANNEL);
+        }
+
         if (activity == -1) {
-            /* The file descriptor sets were unmodified. The only reason pselect
+            /*
+             * The file descriptor sets were unmodified. The only reason pselect
              * returned was because of the signal. So readfds just contains
              * what we originally put there, and there are really no file
              * descriptors that are ready.
@@ -1010,7 +1046,7 @@ int main(int argc, char *argv[])
                                 switch (opcode) {
                                 case CMD_GET_MCU_IP_ADDR:
                                     printf("Got command: Get MCU IP Address\n");
-                                    rethos_send_data_frame(&serial, (uint8_t*) &mcu_addr, sizeof(mcu_addr), CMD_CHANNEL);
+                                    rethos_send_data_frame(&serial, (uint8_t*) &mcu_addr_rsp_frame, sizeof(mcu_addr_rsp_frame), CMD_CHANNEL);
                                     break;
                                 }
                             }
