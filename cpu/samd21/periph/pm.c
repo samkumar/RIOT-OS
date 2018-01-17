@@ -24,6 +24,7 @@
  */
 
 #include "periph/pm.h"
+#include "xtimer.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -54,6 +55,7 @@ enum system_sleepmode {
 void pm_set(unsigned mode)
 {
     int deep = 0;
+    xtimer_sync = false;
 
     switch (mode) {
         case 0:
