@@ -56,7 +56,6 @@ extern "C" {
 #define STIMER_DEV                     TIMER_1 /* This timer is to support low-power/slow XTIMER */
 #define STIMER_HZ                      1000000UL
 
-#if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
 #define XTIMER_BACKOFF                 30  /* ticks: Threshold to determine spin or not
                                               It takes 150~200us to get the current time */
 #define XTIMER_OVERHEAD                6   /* ticks: How much earlier does a timer expires? */
