@@ -280,8 +280,7 @@ static const spi_conf_t spi_config[] = {
 #define APDS9007_STABILIZATION_TIME 20000UL
 
 #define EKMB_PARAMS_BOARD    { .gpio = GPIO_PIN(PA,6 ) }
-#define PULSE_COUNTER_PARAMS_BOARD    { .gpio = GPIO_PIN(PA,18), \
-                                        .gpio_flank = GPIO_FALLING }
+#define PULSE_COUNTER_PARAMS_BOARD    { .gpio = GPIO_PIN(PA,18) }
 /** @} */
 
 /**
