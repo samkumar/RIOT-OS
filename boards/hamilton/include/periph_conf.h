@@ -53,7 +53,7 @@ extern "C" {
  *       frequency is 96MHz. So PLL_MULL must be between 31 and 95!
  *
  * The DFLL option (default option) can lead to a fast and accurate clocking
- * and a low-power sleep mode (ULP 32 kHz clock). Use this option when you use 
+ * and a low-power sleep mode (ULP 32 kHz clock). Use this option when you use
  * a battery-powered node. The actual core frequency is adjusted as follows:
  *
  * CORECLOCK = 48MHz / DIV
@@ -294,11 +294,8 @@ static const spi_conf_t spi_config[] = {
  * @name PM configuration
  * @{
  */
-#if CLOCK_USE_PLL /* PLL is used for wall-powered nodes */
+/* Anemometer does not go to sleep. */
 #define PM_BLOCKER_INITIAL { .val_u32 = 0x01010101 }
-#else
-#define PM_BLOCKER_INITIAL { .val_u32 = 0x00000000 }
-#endif
 /** @} */
 
 #ifdef __cplusplus
