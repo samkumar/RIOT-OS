@@ -30,7 +30,11 @@
 #include "cli/cli-uart.h"
 #endif
 
-#define ENABLE_DEBUG (0)
+#ifdef MODULE_OPENTHREAD_NCP_FTD
+#define ENABLE_DEBUG (1)
+#else
+#define ENABLE_DEBUG (1)
+#endif
 #include <debug.h>
 
 void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion, const char *aFormat, ...)

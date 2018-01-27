@@ -3,11 +3,11 @@ PKG_BUILDDIR ?= $(RIOTBASE)/pkg/openthread/source
 
 ifneq (,$(filter openthread-cli-ftd,$(USEMODULE)))
     $(info Compile OpenThread for FTD device)
-    OPENTHREAD_ARGS += --enable-cli-app=ftd
+    OPENTHREAD_ARGS += --enable-cli-app=ftd --enable-joiner
 endif
 ifneq (,$(filter openthread-cli-mtd,$(USEMODULE)))
     $(info Compile OpenThread for MTD device)
-    OPENTHREAD_ARGS += --enable-cli-app=mtd --enable-joiner
+    OPENTHREAD_ARGS += --enable-cli-app=mtd
 endif
 ifneq (,$(filter openthread-ncp-ftd,$(USEMODULE)))
     $(info Compile OpenThread with NCP)

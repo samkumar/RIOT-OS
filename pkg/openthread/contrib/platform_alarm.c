@@ -18,17 +18,16 @@
 
 #include <stdint.h>
 
-#include "msg.h"
 #include "openthread/platform/alarm-milli.h"
 #include "ot.h"
+#include "msg.h"
 #include "xtimer.h"
-#include "timex.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
-uint32_t prev = 0;
-uint32_t long_cnt = 0;
+static uint32_t prev = 0;
+static uint32_t long_cnt = 0;
 
 /**
  * Set the alarm to fire at @p aDt milliseconds after @p aT0.
@@ -39,14 +38,14 @@ uint32_t long_cnt = 0;
  */
 void otPlatAlarmMilliStartAt(otInstance *aInstance, uint32_t aT0, uint32_t aDt)
 {
-    //DEBUG("ot_main->otPlatAlarmMilliStartAt: aT0: %" PRIu32 ", aDT: %" PRIu32 "\n", aT0, aDt);
-    DEBUG("[timer set] %lu ms\n", aDt);
-
+    DEBUG("otPlatAlarmMilliStartAt: aT0: %" PRIu32 ", aDT: %" PRIu32 "\n", aT0, aDt);
+    
     xtimer_remove(openthread_get_timer());
+
+    msg_t msg;
+    msg.type = OPENTHREAD_XTIMER_MSG_TYPE_EVENT;
     if (aDt <= 1) {
-        msg_t msg;
-        msg.type = OPENTHREAD_XTIMER_MSG_TYPE_EVENT;
-        msg_send(&msg, openthread_get_event_pid());
+        msg_send(&msg, openthread_get_preevent_pid());
     }
     else {
         uint32_t dt = aDt * US_PER_MS;
@@ -57,7 +56,7 @@ void otPlatAlarmMilliStartAt(otInstance *aInstance, uint32_t aT0, uint32_t aDt)
 /* OpenThread will call this to stop alarms */
 void otPlatAlarmMilliStop(otInstance *aInstance)
 {
-    //DEBUG("ot_main->otPlatAlarmMilliStop\n");
+    DEBUG("otPlatAlarmMilliStop\n");
     xtimer_remove(openthread_get_timer());
 }
 
@@ -65,12 +64,13 @@ void otPlatAlarmMilliStop(otInstance *aInstance)
 uint32_t otPlatAlarmMilliGetNow(void)
 {
     uint32_t now = xtimer_now_usec() / US_PER_MS;
+    /* With the same unit32_t type, microsec timer overflows faster than millisec timer. 
+     * This mismatch should be handled here */
     if (prev > now) {
         long_cnt++;
-        DEBUG("[timer renew]\n");
     }
     prev = now;
     now += long_cnt * (0xFFFFFFFF / US_PER_MS);
-    //DEBUG("ot_main->otPlatAlarmMilliGetNow: %" PRIu32 "\n", now);
+    DEBUG("otPlatAlarmMilliGetNow: %" PRIu32 "\n", now);
     return now;
 }

@@ -33,7 +33,7 @@
 #include "openthread/platform/radio.h"
 #include "ot.h"
 
-#define ENABLE_DEBUG (0)
+#define ENABLE_DEBUG (1)
 #include "debug.h"
 
 #define RADIO_IEEE802154_FCS_LEN    (2U)
@@ -42,14 +42,25 @@
 
 static otRadioFrame sTransmitFrame;
 static otRadioFrame sReceiveFrame;
+static otRadioFrame sAckFrame;
+static uint8_t rx_buf[OPENTHREAD_NETDEV_BUFLEN];
+static uint8_t tx_buf[OPENTHREAD_NETDEV_BUFLEN];
+static uint8_t ack_buf[IEEE802154_ACK_LENGTH];
 static int8_t Rssi;
 
 static netdev_t *_dev;
 
 static bool sDisabled;
 
-uint8_t short_address_list = 0;
-uint8_t ext_address_list = 0;
+static uint8_t short_address_list = 0;
+static uint8_t ext_address_list = 0;
+
+static mutex_t radio_mutex = MUTEX_INIT;
+
+/* get Openthread radio mutex */
+mutex_t* openthread_get_radio_mutex(void) {
+    return &radio_mutex;
+}
 
 /* set 15.4 channel */
 static int _set_channel(uint16_t channel)
@@ -123,15 +134,16 @@ static void _set_idle(void)
 }
 
 /* init framebuffers and initial state */
-void openthread_radio_init(netdev_t *dev, uint8_t *tb, uint8_t *rb)
+void openthread_radio_init(netdev_t *dev)
 {
-    sTransmitFrame.mPsdu = tb;
+    sTransmitFrame.mPsdu = tx_buf;
     sTransmitFrame.mLength = 0;
-    sReceiveFrame.mPsdu = rb;
+    sReceiveFrame.mPsdu = rx_buf;
     sReceiveFrame.mLength = 0;
+    sAckFrame.mPsdu = ack_buf;
+    sAckFrame.mLength = IEEE802154_ACK_LENGTH;
     _dev = dev;
 }
-
 
 /* OpenThread will call this for setting PAN ID */
 void otPlatRadioSetPanId(otInstance *aInstance, uint16_t panid)
@@ -212,10 +224,8 @@ otError otPlatRadioReceive(otInstance *aInstance, uint8_t aChannel)
 {
     //DEBUG("openthread: otPlatRadioReceive. Channel: %i\n", aChannel);
     (void) aInstance;
-
     _set_idle();
     _set_channel(aChannel);
-
     return OT_ERROR_NONE;
 }
 
@@ -253,11 +263,13 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
         DEBUG("%x ", aPacket->mPsdu[i]);
     }
     DEBUG("\n");*/
+    mutex_lock(openthread_get_radio_mutex());
     _set_channel(aPacket->mChannel);
     _set_power(aPacket->mPower);
 
     /* send packet though netdev */
     _dev->driver->send(_dev, &pkt, 1);
+    mutex_unlock(openthread_get_radio_mutex());
 
     return OT_ERROR_NONE;
 }
@@ -404,57 +416,48 @@ int8_t otPlatRadioGetReceiveSensitivity(otInstance *aInstance)
 
 /* create a fake ACK frame */
 // TODO: pass received ACK frame instead of generating one.
-static inline otRadioFrame _create_fake_ack_frame(bool ackPending)
+static inline void _create_fake_ack_frame(bool ackPending)
 {
-    otRadioFrame ackFrame;
-    uint8_t psdu[IEEE802154_ACK_LENGTH];
-
-    ackFrame.mPsdu = psdu;
-    ackFrame.mLength = IEEE802154_ACK_LENGTH;
-    ackFrame.mPsdu[0] = IEEE802154_FCF_TYPE_ACK;
-
-    if (ackPending)
-    {
-        ackFrame.mPsdu[0] |= IEEE802154_FCF_FRAME_PEND;
+    sAckFrame.mPsdu[0] = IEEE802154_FCF_TYPE_ACK;
+    if (ackPending) {
+        sAckFrame.mPsdu[0] |= IEEE802154_FCF_FRAME_PEND;
     }
+    sAckFrame.mPsdu[1] = 0;
+    sAckFrame.mPsdu[2] = sTransmitFrame.mPsdu[IEEE802154_DSN_OFFSET];
 
-    ackFrame.mPsdu[1] = 0;
-    ackFrame.mPsdu[2] = sTransmitFrame.mPsdu[IEEE802154_DSN_OFFSET];
-
-    ackFrame.mPower = OT_RADIO_RSSI_INVALID;
-
-    return ackFrame;
+    sAckFrame.mPower = OT_RADIO_RSSI_INVALID;
 }
 
 /* Called upon TX event */
 void sent_pkt(otInstance *aInstance, netdev_event_t event)
 {
-    otRadioFrame ackFrame;
+    /* unlock radio mutex */
+    mutex_unlock(openthread_get_radio_mutex());
+    
     /* Tell OpenThread transmission is done depending on the NETDEV event */
     switch (event) {
         case NETDEV_EVENT_TX_COMPLETE:
-            DEBUG("ot: TX_COMPLETE\n");
-            ackFrame = _create_fake_ack_frame(false);
-            otPlatRadioTxDone(aInstance, &sTransmitFrame, &ackFrame, OT_ERROR_NONE);
+            DEBUG("\not_event: TX_COMPLETE\n");
+            _create_fake_ack_frame(false);
+            otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_COMPLETE_DATA_PENDING:
-            DEBUG("ot: TX_COMPLETE_DATA_PENDING\n");
-            ackFrame = _create_fake_ack_frame(true);
-            otPlatRadioTxDone(aInstance, &sTransmitFrame, &ackFrame, OT_ERROR_NONE);
+            DEBUG("\not_event: TX_COMPLETE_DATA_PENDING\n");
+            _create_fake_ack_frame(true);
+            otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_NOACK:
-            DEBUG("ot: TX_NOACK\n");
+            DEBUG("\not_event: TX_NOACK\n");
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_NO_ACK);
             break;
         case NETDEV_EVENT_TX_MEDIUM_BUSY:
-            DEBUG("ot: TX_MEDIUM_BUSY\n");
+            DEBUG("\not_event: TX_MEDIUM_BUSY\n");
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_CHANNEL_ACCESS_FAILURE);
             break;
         default:
             break;
     }
 }
-
 
 /* Called upon NETDEV_EVENT_RX_COMPLETE event */
 void recv_pkt(otInstance *aInstance, netdev_t *dev)
@@ -466,7 +469,9 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
     int len = dev->driver->recv(dev, NULL, 0, NULL);
 
     /* very unlikely */
-    if ((len > (unsigned) UINT16_MAX)) {
+    if ((len > (unsigned) UINT16_MAX)) {    
+        /* unlock radio mutex */
+        mutex_unlock(openthread_get_radio_mutex());
         DEBUG("Len too high: %d\n", len);
         res = -1;
         goto exit;
@@ -479,6 +484,8 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
     
     /* Read received frame */
     res = dev->driver->recv(dev, (char *) sReceiveFrame.mPsdu, len, &rx_info);
+    /* unlock radio mutex */
+    mutex_unlock(openthread_get_radio_mutex());
 #if MODULE_AT86RF231 | MODULE_AT86RF233
     Rssi = (int8_t)rx_info.rssi - 94;
 #else
@@ -486,7 +493,7 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
 #endif
     sReceiveFrame.mPower = Rssi;
 
-    DEBUG("ot: RX_COMPLETE, len %d, rssi %d\n", (int) sReceiveFrame.mLength, sReceiveFrame.mPower);
+    DEBUG("\not_event: RX_COMPLETE, len %d, rssi %d\n", (int) sReceiveFrame.mLength, sReceiveFrame.mPower);
     /*for (int i = 0; i < sReceiveFrame.mLength; ++i) {
         DEBUG("%x ", sReceiveFrame.mPsdu[i]);
     }

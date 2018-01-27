@@ -33,14 +33,17 @@ extern "C" {
 #include "net/ethernet.h"
 #include "net/gnrc/netdev.h"
 #include "thread.h"
+#include "mutex.h"
 #include "openthread/types.h"
 #include "openthread/platform/radio.h"
 
+/**< event indicating the tasklet is non-empty */
+#define OPENTHREAD_TASK_MSG_TYPE_EVENT                      (0x2235)
 /**< xtimer message receiver event */
-#define OPENTHREAD_XTIMER_MSG_TYPE_EVENT                    (0x2235)
+#define OPENTHREAD_XTIMER_MSG_TYPE_EVENT                    (0x2236)
 /**< event indicating a serial (UART) message was sent to OpenThread */
-#define OPENTHREAD_SERIAL_MSG_TYPE_EVENT                    (0x2236)
-/**< event for frame reception */
+#define OPENTHREAD_SERIAL_MSG_TYPE_EVENT                    (0x2237)
+/**< event for frame reception and transmission complete */
 #define OPENTHREAD_NETDEV_MSG_TYPE_EVENT                    (0x2239)
 /**< event indicating an OT_JOB message */
 #define OPENTHREAD_JOB_MSG_TYPE_EVENT                       (0x2241)
@@ -114,68 +117,96 @@ void openthread_bootstrap(void);
  * @brief   Init OpenThread radio
  *
  * @param[in]  dev                pointer to a netdev interface
- * @param[in]  tb                 pointer to the TX buffer designed for OpenThread
- * @param[in]  event              pointer to the RX buffer designed for Open_Thread
  */
-void openthread_radio_init(netdev_t *dev, uint8_t *tb, uint8_t *rb);
+void openthread_radio_init(netdev_t *dev);
 
 /**
- * @brief   Starts OpenThread thread.
+ * @brief   Starts OpenThread Preevent Thread.
  *
- * @param[in]  stack              pointer to the stack designed for OpenThread
+ * @param[in]  stack              pointer to the stack designed for OpenThread Preevent Thread
  * @param[in]  stacksize          size of the stack
- * @param[in]  priority           priority of the OpenThread stack
- * @param[in]  name               name of the OpenThread stack
- * @param[in]  netdev             pointer to the netdev interface
+ * @param[in]  priority           priority of the stack
+ * @param[in]  name               name of the stack
  *
- * @return  PID of OpenThread thread
+ * @return  PID of OpenThread Preevent Thread
  * @return  -EINVAL if there was an error creating the thread
  */
-//int openthread_rx_init(char *stack, int stacksize, char priority, const char *name, netdev_t *netdev);
+int openthread_preevent_init(char *stack, int stacksize, char priority, const char *name);
 
 /**
- * @brief   Starts OpenThread thread.
+ * @brief   Starts OpenThread Event Thread.
  *
- * @param[in]  stack              pointer to the stack designed for OpenThread timer
+ * @param[in]  stack              pointer to the stack designed for OpenThread Event Thread
  * @param[in]  stacksize          size of the stack
- * @param[in]  priority           priority of the OpenThread timer stack
- * @param[in]  name               name of the OpenThread timer stack
+ * @param[in]  priority           priority of the stack
+ * @param[in]  name               name of the stack
  *
- * @return  PID of OpenThread event thread
+ * @return  PID of OpenThread Event Thread
  * @return  -EINVAL if there was an error creating the thread
  */
 int openthread_event_init(char *stack, int stacksize, char priority, const char *name);
 
 /**
- * @brief   get PID of OpenThread main thread.
+ * @brief   Starts OpenThread Task Thread.
  *
- * @return  PID of OpenThread main thread
+ * @param[in]  stack              pointer to the stack designed for OpenThread Task Thread
+ * @param[in]  stacksize          size of the stack
+ * @param[in]  priority           priority of the stack
+ * @param[in]  name               name of the stack
+ *
+ * @return  PID of OpenThread Task Thread
+ * @return  -EINVAL if there was an error creating the thread
  */
-kernel_pid_t openthread_get_main_pid(void);
+int openthread_task_init(char *stack, int stacksize, char priority, const char *name);
 
 /**
- * @brief   get PID of OpenThread Critical Event thread.
+ * @brief   get PID of OpenThread Preevent thread.
  *
- * @return  PID of OpenThread Critical Event thread
+ * @return  PID of OpenThread Preevent thread
+ */
+kernel_pid_t openthread_get_preevent_pid(void);
+
+/**
+ * @brief   get PID of OpenThread Event Thread.
+ *
+ * @return  PID of OpenThread Event Thread
  */
 kernel_pid_t openthread_get_event_pid(void);
 
 /**
+ * @brief   get PID of OpenThread Task Thread.
+ *
+ * @return  PID of OpenThread Task Thread
+ */
+kernel_pid_t openthread_get_task_pid(void);
+
+/**
  * @brief   get instance of OpenThread.
  *
- * @return  instance of OpenThread thread
+ * @return  instance of OpenThread
  */
 otInstance* openthread_get_instance(void);
 
 /**
  * @brief   get timer of OpenThread.
  *
- * @return  timer of OpenThread thread
+ * @return  timer of OpenThread
  */
 xtimer_t* openthread_get_timer(void);
 
-bool openthread_main_stack_overflow_check(void);
-bool openthread_event_stack_overflow_check(void);
+/**
+ * @brief   get netdev of OpenThread.
+ *
+ * @return  netdev of OpenThread
+ */
+netdev_t* openthread_get_netdev(void);
+
+/**
+ * @brief   get radio mutex of OpenThread.
+ *
+ * @return  mutex for OpenThread radio
+ */
+mutex_t* openthread_get_radio_mutex(void);
 
 /**
  * @brief   Init OpenThread random

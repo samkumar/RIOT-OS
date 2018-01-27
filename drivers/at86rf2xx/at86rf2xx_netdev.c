@@ -47,6 +47,8 @@ static void _isr(netdev_t *netdev);
 static int _get(netdev_t *netdev, netopt_t opt, void *val, size_t max_len);
 static int _set(netdev_t *netdev, netopt_t opt, const void *val, size_t len);
 
+static bool sending = false;
+
 const netdev_driver_t at86rf2xx_driver = {
     .send = _send,
     .recv = _recv,
@@ -62,7 +64,8 @@ static void _irq_handler(void *arg)
 
     if (dev->event_callback) {
 #if MODULE_OPENTHREAD
-        if (((at86rf2xx_t *) dev)->netdev.flags & AT86RF2XX_OPT_TELL_TX_END) {
+        if (sending) {
+            sending = false;
             dev->event_callback(dev, NETDEV_EVENT_ISR2);
         } else {
             dev->event_callback(dev, NETDEV_EVENT_ISR);
@@ -127,6 +130,7 @@ static int _send(netdev_t *netdev, const struct iovec *vector, unsigned count)
     /* send data out directly if pre-loading id disabled */
     if (!(dev->netdev.flags & AT86RF2XX_OPT_PRELOADING)) {
         at86rf2xx_tx_exec(dev);
+        sending = true;
     }
     /* return the number of bytes that were actually send out */
     return (int)len;
@@ -604,12 +608,12 @@ static void _isr(netdev_t *netdev)
 				}
 #endif
 #endif
-#if MODULE_OPENTHREAD
+#if MODULE_OPENTHREAD_MTD
 				/* Wake up for a while when receiving an ACK with pending bit */
 				if (trac_status == AT86RF2XX_TRX_STATE__TRAC_SUCCESS_DATA_PENDING) {
 	                dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;		      
 				} else {
-                    dev->idle_state = AT86RF2XX_STATE_SLEEP;		
+                    dev->idle_state = AT86RF2XX_STATE_SLEEP;
                 }
 #endif
                 at86rf2xx_set_state(dev, dev->idle_state);
