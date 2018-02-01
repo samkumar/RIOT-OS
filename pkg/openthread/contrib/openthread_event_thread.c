@@ -111,8 +111,8 @@ static void *_openthread_event_thread(void *arg) {
 #ifdef MODULE_OPENTHREAD_NCP_FTD
     otNcpInit(sInstance);
     DEBUG("OT-NCP initialization is OK\n");
-    otCommissionerStart(sInstance);
-    DEBUG("OT-Commisioner initialization is OK\n");
+    //otCommissionerStart(sInstance);
+    //DEBUG("OT-Commisioner initialization is OK\n");
 #endif
 
 #if OPENTHREAD_ENABLE_DIAG
