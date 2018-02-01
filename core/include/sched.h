@@ -104,6 +104,13 @@ typedef struct _thread thread_t;
 #define SCHED_PRIO_LEVELS 16
 #endif
 
+#ifdef CPU_DUTYCYCLE_MONITOR
+extern volatile uint64_t cpuOnTime;
+extern volatile uint64_t cpuOffTime;
+extern volatile uint32_t contextSwitchCnt;
+extern volatile uint32_t preemptCnt;
+#endif
+
 /**
  * @brief   Triggers the scheduler to schedule the next thread
  * @returns 1 if sched_active_thread/sched_active_pid was changed, 0 otherwise.

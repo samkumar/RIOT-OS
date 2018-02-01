@@ -81,6 +81,12 @@ void kernel_init(void)
 {
     (void) irq_disable();
 
+#ifdef MODULE_SCHEDSTATISTICS
+    for (int i=0; i<KERNEL_PID_LAST + 1; i++) {
+        sched_pidlist[i].laststart = 0;
+    }
+#endif
+
     thread_create(idle_stack, sizeof(idle_stack),
             THREAD_PRIORITY_IDLE,
             THREAD_CREATE_WOUT_YIELD | THREAD_CREATE_STACKTEST,

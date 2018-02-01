@@ -107,6 +107,11 @@ int __attribute__((used)) sched_run(void)
     if (active_thread) {
         if (active_thread->status == STATUS_RUNNING) {
             active_thread->status = STATUS_PENDING;
+#ifdef CPU_DUTYCYCLE_MONITOR
+            if (active_thread->priority != THREAD_PRIORITY_IDLE) {
+                preemptCnt++;
+            }
+#endif
         }
 
 #ifdef SCHED_TEST_STACK
@@ -119,6 +124,19 @@ int __attribute__((used)) sched_run(void)
         schedstat *active_stat = &sched_pidlist[active_thread->pid];
         if (active_stat->laststart) {
             active_stat->runtime_ticks += now - active_stat->laststart;
+#ifdef CPU_DUTYCYCLE_MONITOR
+            if (contextSwitchCnt) {
+                if (active_thread->priority == THREAD_PRIORITY_IDLE) {
+                    cpuOffTime += (uint64_t)(now - active_stat->laststart);
+                } else {
+                    cpuOnTime += (uint64_t)(now - active_stat->laststart);
+                }
+            }
+            if (active_thread->priority != THREAD_PRIORITY_IDLE && 
+                next_thread->priority != THREAD_PRIORITY_IDLE) {
+                contextSwitchCnt++;
+            }
+#endif
         }
 #endif
     }

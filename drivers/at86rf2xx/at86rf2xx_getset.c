@@ -27,6 +27,7 @@
 #include "at86rf2xx_internal.h"
 #include "at86rf2xx_registers.h"
 #include "periph/spi.h"
+#include "xtimer.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -90,6 +91,10 @@ static const uint8_t dbm_to_tx_pow[] = {0x0f, 0x0f, 0x0f, 0x0e, 0x0e, 0x0e,
                                         0x0e, 0x0d, 0x0d, 0x0c, 0x0c, 0x0b,
                                         0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06,
                                         0x05, 0x03, 0x00};
+#endif
+
+#ifdef RADIO_DUTYCYCLE_MONITOR
+static uint32_t prev = 0;
 #endif
 
 uint16_t at86rf2xx_get_addr_short(at86rf2xx_t *dev)
@@ -505,10 +510,28 @@ uint8_t at86rf2xx_set_state(at86rf2xx_t *dev, uint8_t state)
     /* check if we need to wake up from sleep mode */
     else if (old_state == AT86RF2XX_STATE_SLEEP) {
         DEBUG("at86rf2xx: waking up from sleep mode\n");
+#ifdef RADIO_DUTYCYCLE_MONITOR
+        if (prev == 0) {
+            prev = xtimer_now().ticks32;
+        } else {
+            uint32_t now = xtimer_now().ticks32;
+            radioOffTime += (now - prev);
+            prev = now;
+        }
+#endif
         at86rf2xx_assert_awake(dev);
     }
 
     if (state == AT86RF2XX_STATE_SLEEP) {
+#ifdef RADIO_DUTYCYCLE_MONITOR
+        if (prev == 0) {
+            prev = xtimer_now().ticks32;
+        } else {
+            uint32_t now = xtimer_now().ticks32;
+            radioOnTime += (now - prev);
+            prev = now;
+        }
+#endif
         /* First go to TRX_OFF */
         at86rf2xx_set_state(dev, AT86RF2XX_STATE_FORCE_TRX_OFF);
         /* Discard all IRQ flags, framebuffer is lost anyway */

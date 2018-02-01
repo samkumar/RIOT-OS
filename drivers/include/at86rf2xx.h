@@ -189,6 +189,11 @@ typedef struct {
     /** @} */
 } at86rf2xx_t;
 
+#ifdef RADIO_DUTYCYCLE_MONITOR
+extern uint64_t radioOnTime;
+extern uint64_t radioOffTime;
+#endif
+
 /**
  * @brief   Setup an AT86RF2xx based device state
  *
