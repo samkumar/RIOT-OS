@@ -74,6 +74,12 @@ static int _set_power(int16_t power)
     return _dev->driver->set(_dev, NETOPT_TX_POWER, &power, sizeof(int16_t));
 }
 
+/* get transmission power */
+static void _get_power(int16_t power)
+{
+    _dev->driver->get(_dev, NETOPT_TX_POWER, &power, sizeof(int16_t));
+}
+
 /* set IEEE802.15.4 PAN ID */
 static int _set_panid(uint16_t panid)
 {
@@ -237,11 +243,23 @@ otRadioFrame *otPlatRadioGetTransmitBuffer(otInstance *aInstance)
 }
 
 /* OpenThread will call this function to set the transmit power */
-void otPlatRadioSetDefaultTxPower(otInstance *aInstance, int8_t aPower)
+otError otPlatRadioSetTransmitPower(otInstance *aInstance, int8_t aPower)
 {
     (void)aInstance;
-
     _set_power(aPower);
+
+    return OT_ERROR_NONE;
+}
+
+/* OpenThread will call this function to get the transmit power */
+otError otPlatRadioGetTransmitPower(otInstance *aInstance, int8_t *aPower)
+{
+    (void)aInstance;
+    uint16_t power = 0;
+    _get_power(power);
+    *aPower = (uint8_t) power;
+    
+    return OT_ERROR_NONE;
 }
 
 /* OpenThread will call this for transmitting a packet*/
@@ -258,14 +276,13 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
     pkt.iov_len = aPacket->mLength - RADIO_IEEE802154_FCS_LEN;
 
     /*Set channel and power based on transmit frame */
-    DEBUG("otTx->channel: %i, length %d, power %d\n", (int) aPacket->mChannel, (int)aPacket->mLength, aPacket->mPower);
+    //DEBUG("otTx->channel: %i, length %d\n", (int) aPacket->mChannel, (int)aPacket->mLength);
     /*for (int i = 0; i < aPacket->mLength; ++i) {
         DEBUG("%x ", aPacket->mPsdu[i]);
     }
     DEBUG("\n");*/
     mutex_lock(openthread_get_radio_mutex());
     _set_channel(aPacket->mChannel);
-    _set_power(aPacket->mPower);
 
     /* send packet though netdev */
     _dev->driver->send(_dev, &pkt, 1);
@@ -425,7 +442,7 @@ static inline void _create_fake_ack_frame(bool ackPending)
     sAckFrame.mPsdu[1] = 0;
     sAckFrame.mPsdu[2] = sTransmitFrame.mPsdu[IEEE802154_DSN_OFFSET];
 
-    sAckFrame.mPower = OT_RADIO_RSSI_INVALID;
+    sAckFrame.mRssi = OT_RADIO_RSSI_INVALID;
 }
 
 /* Called upon TX event */
@@ -437,21 +454,21 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
     /* Tell OpenThread transmission is done depending on the NETDEV event */
     switch (event) {
         case NETDEV_EVENT_TX_COMPLETE:
-            DEBUG("\not_event: TX_COMPLETE\n");
+            DEBUG("\nTX_COMPLETE\n");
             _create_fake_ack_frame(false);
             otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_COMPLETE_DATA_PENDING:
-            DEBUG("\not_event: TX_COMPLETE_DATA_PENDING\n");
+            DEBUG("\nTX_COMPLETE_DATA_PENDING\n");
             _create_fake_ack_frame(true);
             otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_NOACK:
-            DEBUG("\not_event: TX_NOACK\n");
+            DEBUG("\nTX_NOACK\n");
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_NO_ACK);
             break;
         case NETDEV_EVENT_TX_MEDIUM_BUSY:
-            DEBUG("\not_event: TX_MEDIUM_BUSY\n");
+            DEBUG("\nTX_MEDIUM_BUSY\n");
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_CHANNEL_ACCESS_FAILURE);
             break;
         default:
@@ -491,9 +508,9 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
 #else
     Rssi = (int8_t)rx_info.rssi;
 #endif
-    sReceiveFrame.mPower = Rssi;
+    sReceiveFrame.mRssi = Rssi;
 
-    DEBUG("\not_event: RX_COMPLETE, len %d, rssi %d\n", (int) sReceiveFrame.mLength, sReceiveFrame.mPower);
+    DEBUG("\nRX: len %d, rssi %d\n", (int) sReceiveFrame.mLength, sReceiveFrame.mRssi);
     /*for (int i = 0; i < sReceiveFrame.mLength; ++i) {
         DEBUG("%x ", sReceiveFrame.mPsdu[i]);
     }
