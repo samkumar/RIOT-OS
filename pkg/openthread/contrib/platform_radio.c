@@ -75,9 +75,9 @@ static int _set_power(int16_t power)
 }
 
 /* get transmission power */
-static void _get_power(int16_t power)
+static void _get_power(int16_t *power)
 {
-    _dev->driver->get(_dev, NETOPT_TX_POWER, &power, sizeof(int16_t));
+    _dev->driver->get(_dev, NETOPT_TX_POWER, power, sizeof(int16_t));
 }
 
 /* set IEEE802.15.4 PAN ID */
@@ -149,6 +149,8 @@ void openthread_radio_init(netdev_t *dev)
     sAckFrame.mPsdu = ack_buf;
     sAckFrame.mLength = IEEE802154_ACK_LENGTH;
     _dev = dev;
+    int16_t otTxPower = OPENTHREAD_TXPOWER;
+    _set_power(otTxPower);
 }
 
 /* OpenThread will call this for setting PAN ID */
@@ -245,6 +247,7 @@ otRadioFrame *otPlatRadioGetTransmitBuffer(otInstance *aInstance)
 /* OpenThread will call this function to set the transmit power */
 otError otPlatRadioSetTransmitPower(otInstance *aInstance, int8_t aPower)
 {
+    DEBUG("otPlatRadioSetTransmitPower\n");
     (void)aInstance;
     _set_power(aPower);
 
@@ -254,10 +257,11 @@ otError otPlatRadioSetTransmitPower(otInstance *aInstance, int8_t aPower)
 /* OpenThread will call this function to get the transmit power */
 otError otPlatRadioGetTransmitPower(otInstance *aInstance, int8_t *aPower)
 {
+    DEBUG("otPlatRadioGetTransmitPower\n");
     (void)aInstance;
-    uint16_t power = 0;
-    _get_power(power);
-    *aPower = (uint8_t) power;
+    int16_t power = 0;
+    _get_power(&power);
+    *aPower = (int8_t) power;
     
     return OT_ERROR_NONE;
 }
