@@ -34,15 +34,17 @@ extern "C" {
 #include "net/gnrc/netdev.h"
 #include "thread.h"
 #include "mutex.h"
+#include "platform_config.h"
 #include "openthread/types.h"
-#include "openthread/platform/radio.h"
 
 /**< event indicating the tasklet is non-empty */
 #define OPENTHREAD_TASK_MSG_TYPE_EVENT                      (0x2235)
-/**< xtimer message receiver event */
-#define OPENTHREAD_XTIMER_MSG_TYPE_EVENT                    (0x2236)
+/**< milli-timer message receiver event */
+#define OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT                (0x2236)
+/**< micro-timer message receiver event */
+#define OPENTHREAD_MICROTIMER_MSG_TYPE_EVENT                (0x2237)
 /**< event indicating a serial (UART) message was sent to OpenThread */
-#define OPENTHREAD_SERIAL_MSG_TYPE_EVENT                    (0x2237)
+#define OPENTHREAD_SERIAL_MSG_TYPE_EVENT                    (0x2238)
 /**< event for frame reception and transmission complete */
 #define OPENTHREAD_NETDEV_MSG_TYPE_EVENT                    (0x2239)
 /**< event indicating an OT_JOB message */
@@ -188,11 +190,20 @@ kernel_pid_t openthread_get_task_pid(void);
 otInstance* openthread_get_instance(void);
 
 /**
- * @brief   get timer of OpenThread.
+ * @brief   get millitimer of OpenThread.
  *
- * @return  timer of OpenThread
+ * @return  millitimer of OpenThread
  */
-xtimer_t* openthread_get_timer(void);
+xtimer_t* openthread_get_millitimer(void);
+
+#ifdef MODULE_OPENTHREAD_FTD
+/**
+ * @brief   get microtimer of OpenThread.
+ *
+ * @return  microtimer of OpenThread
+ */
+xtimer_t* openthread_get_microtimer(void);
+#endif
 
 /**
  * @brief   get netdev of OpenThread.
@@ -207,6 +218,10 @@ netdev_t* openthread_get_netdev(void);
  * @return  mutex for OpenThread radio
  */
 mutex_t* openthread_get_radio_mutex(void);
+
+void openthread_event_thread_overflow_check(void);
+void openthread_preevent_thread_overflow_check(void);
+void openthread_task_thread_overflow_check(void);
 
 /**
  * @brief   Init OpenThread random

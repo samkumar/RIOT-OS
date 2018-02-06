@@ -32,6 +32,10 @@
 #include "openthread/commissioner.h"
 #endif
 
+#ifdef MODULE_AT86RF2XX
+#include "at86rf2xx.h"
+#endif
+
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
@@ -58,6 +62,9 @@ void otTaskletsSignalPending(otInstance *aInstance) {
     /* 1) Triggered in OpenThread Event Thread: just indicator update */
     if (thread_getpid() == openthread_get_event_pid()) {
         otTaskPending = true;
+        msg_t msg;
+        msg.type = OPENTHREAD_TASK_MSG_TYPE_EVENT;
+        msg_try_send(&msg, openthread_get_task_pid()); 
     /* 2) Triggered in OpenThread Task Thread: do nothing */
     } else if (thread_getpid() == openthread_get_task_pid()) {
         ;
@@ -121,17 +128,24 @@ static void *_openthread_event_thread(void *arg) {
 
     while (1) {
         msg_receive(&msg);
+        //printf("\not_event start\n");
         switch (msg.type) {
             case OPENTHREAD_NETDEV_MSG_TYPE_EVENT:
                 /* Received an event from radio driver */
                 DEBUG("\not_event: OPENTHREAD_NETDEV_MSG_TYPE_EVENT received\n");
+                /* Wait until the task thread finishes accessing the shared resoure (radio) */
                 mutex_lock(openthread_get_radio_mutex());
                 openthread_get_netdev()->driver->isr(openthread_get_netdev());
                 mutex_unlock(openthread_get_radio_mutex());
+#ifdef MODULE_OPENTHREAD_FTD
+                unsigned state = irq_disable();
+                ((at86rf2xx_t *)openthread_get_netdev())->pending_irq--;
+                irq_restore(state);
+#endif
                 break;
-            case OPENTHREAD_XTIMER_MSG_TYPE_EVENT:
-                /* Tell OpenThread a time event was received */
-                DEBUG("\not_event: OPENTHREAD_XTIMER_MSG_TYPE_EVENT received\n");
+            case OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT:
+                /* Tell OpenThread a millisec time event was received */
+                DEBUG("\not_event: OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT received\n");
                 otPlatAlarmMilliFired(sInstance);
                 break;
             case OPENTHREAD_SERIAL_MSG_TYPE_EVENT:
@@ -143,21 +157,18 @@ static void *_openthread_event_thread(void *arg) {
                 serialBuffer->serial_buffer_status = OPENTHREAD_SERIAL_BUFFER_STATUS_FREE;
                 break;
             case OPENTHREAD_JOB_MSG_TYPE_EVENT:
-                DEBUG("\not_event: OPENTHREAD_JOB_MSG_TYPE_EVENT received\n");
+                DEBUG("\not_event: OPENTHREAD_JOB_MSG_TYPE_EVENT receimake deved\n");
                 job = msg.content.ptr;
                 reply.content.value = ot_exec_command(sInstance, job->command, job->arg, job->answer);
                 msg_reply(&msg, &reply);
                 break;
         }
+        
+        /* Execute this just in case a timer event is missed */
+        otPlatAlarmMilliFired(sInstance);
 
-        if (!msg_avail() && otTaskPending) {
-            /* No events remain and the tasklet is non-empty */
-            DEBUG("ot_event: Pass to ot_task\n");
-            otTaskPending = false;
-            msg_t msg;
-            msg.type = OPENTHREAD_TASK_MSG_TYPE_EVENT;
-            msg_send(&msg, openthread_get_task_pid());
-        }
+        /* Stack overflow check */
+        openthread_event_thread_overflow_check();
     }
 
     return NULL;

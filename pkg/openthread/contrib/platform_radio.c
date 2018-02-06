@@ -22,6 +22,7 @@
 
 #include "byteorder.h"
 #include "errno.h"
+#include "irq.h"
 #include "net/ethernet/hdr.h"
 #include "net/ethertype.h"
 #include "net/ieee802154.h"
@@ -46,21 +47,16 @@ static otRadioFrame sAckFrame;
 static uint8_t rx_buf[OPENTHREAD_NETDEV_BUFLEN];
 static uint8_t tx_buf[OPENTHREAD_NETDEV_BUFLEN];
 static uint8_t ack_buf[IEEE802154_ACK_LENGTH];
-static int8_t Rssi;
 
+static struct iovec pkt;
+
+static int8_t Rssi;
 static netdev_t *_dev;
 
 static bool sDisabled;
 
 static uint8_t short_address_list = 0;
 static uint8_t ext_address_list = 0;
-
-static mutex_t radio_mutex = MUTEX_INIT;
-
-/* get Openthread radio mutex */
-mutex_t* openthread_get_radio_mutex(void) {
-    return &radio_mutex;
-}
 
 /* set 15.4 channel */
 static int _set_channel(uint16_t channel)
@@ -270,14 +266,14 @@ otError otPlatRadioGetTransmitPower(otInstance *aInstance, int8_t *aPower)
 otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
 {
     (void) aInstance;
-    struct iovec pkt;
+    (void) aPacket;
 
     /* Populate iovec with transmit data
      * Unlike RIOT, OpenThread includes two bytes FCS (0x00 0x00) so
      * these bytes are removed
      */
-    pkt.iov_base = aPacket->mPsdu;
-    pkt.iov_len = aPacket->mLength - RADIO_IEEE802154_FCS_LEN;
+    pkt.iov_base = sTransmitFrame.mPsdu;
+    pkt.iov_len = sTransmitFrame.mLength - RADIO_IEEE802154_FCS_LEN;
 
     /*Set channel and power based on transmit frame */
     //DEBUG("otTx->channel: %i, length %d\n", (int) aPacket->mChannel, (int)aPacket->mLength);
@@ -285,12 +281,26 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
         DEBUG("%x ", aPacket->mPsdu[i]);
     }
     DEBUG("\n");*/
-    mutex_lock(openthread_get_radio_mutex());
-    _set_channel(aPacket->mChannel);
 
-    /* send packet though netdev */
-    _dev->driver->send(_dev, &pkt, 1);
-    mutex_unlock(openthread_get_radio_mutex());
+    int success = -1;
+    while(1) {
+        mutex_lock(openthread_get_radio_mutex());
+        printf("try->");
+        //_set_channel(aPacket->mChannel);
+        /* send packet though netdev */
+        success = _dev->driver->send(_dev, &pkt, 1);
+        printf("done %d\n", success);
+        mutex_unlock(openthread_get_radio_mutex());
+        if (success == -1) {
+            /* Fail to send since the transceiver is busy (receiving).
+             * Retry in a little bit. 
+             */
+            xtimer_usleep(1000+rand()%4000);
+        } else {
+            /* Succeed in sending */
+            break;
+        }
+    }
 
     return OT_ERROR_NONE;
 }
@@ -299,9 +309,14 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
 otRadioCaps otPlatRadioGetCaps(otInstance *aInstance)
 {
     //DEBUG("openthread: otPlatRadioGetCaps\n");
-    /* radio drivers should handle retransmission and CSMA */
 #if MODULE_AT86RF231 | MODULE_AT86RF233
+#ifdef MODULE_OPENTHREAD_FTD
+    /* radio drivers do not support retransmission and CSMA for better performance */
+    return OT_RADIO_CAPS_ACK_TIMEOUT;
+#else
+    /* radio drivers should handle retransmission and CSMA to minimize CPU run */
     return OT_RADIO_CAPS_ACK_TIMEOUT | OT_RADIO_CAPS_TRANSMIT_RETRIES | OT_RADIO_CAPS_CSMA_BACKOFF;
+#endif
 #else
     return OT_RADIO_CAPS_NONE;
 #endif
@@ -452,27 +467,24 @@ static inline void _create_fake_ack_frame(bool ackPending)
 /* Called upon TX event */
 void sent_pkt(otInstance *aInstance, netdev_event_t event)
 {
-    /* unlock radio mutex */
-    mutex_unlock(openthread_get_radio_mutex());
-    
     /* Tell OpenThread transmission is done depending on the NETDEV event */
     switch (event) {
         case NETDEV_EVENT_TX_COMPLETE:
-            DEBUG("\nTX_COMPLETE\n");
+            DEBUG("TX_COMPLETE\n");
             _create_fake_ack_frame(false);
             otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_COMPLETE_DATA_PENDING:
-            DEBUG("\nTX_COMPLETE_DATA_PENDING\n");
+            DEBUG("TX_COMPLETE_DATA_PENDING\n");
             _create_fake_ack_frame(true);
             otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_NOACK:
-            DEBUG("\nTX_NOACK\n");
+            DEBUG("TX_NOACK\n");
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_NO_ACK);
             break;
         case NETDEV_EVENT_TX_MEDIUM_BUSY:
-            DEBUG("\nTX_MEDIUM_BUSY\n");
+            DEBUG("TX_MEDIUM_BUSY\n");
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_CHANNEL_ACCESS_FAILURE);
             break;
         default:
@@ -491,8 +503,6 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
 
     /* very unlikely */
     if ((len > (unsigned) UINT16_MAX)) {    
-        /* unlock radio mutex */
-        mutex_unlock(openthread_get_radio_mutex());
         DEBUG("Len too high: %d\n", len);
         res = -1;
         goto exit;
@@ -505,8 +515,7 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
     
     /* Read received frame */
     res = dev->driver->recv(dev, (char *) sReceiveFrame.mPsdu, len, &rx_info);
-    /* unlock radio mutex */
-    mutex_unlock(openthread_get_radio_mutex());
+
 #if MODULE_AT86RF231 | MODULE_AT86RF233
     Rssi = (int8_t)rx_info.rssi - 94;
 #else

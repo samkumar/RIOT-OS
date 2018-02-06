@@ -34,6 +34,7 @@
 #include "at86rf2xx_netdev.h"
 #include "at86rf2xx_internal.h"
 #include "at86rf2xx_registers.h"
+#include "irq.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -63,7 +64,7 @@ static void _irq_handler(void *arg)
     netdev_t *dev = (netdev_t *) arg;
 
     if (dev->event_callback) {
-#if MODULE_OPENTHREAD
+#ifdef MODULE_OPENTHREAD
         if (sending) {
             sending = false;
             dev->event_callback(dev, NETDEV_EVENT_ISR2);
@@ -111,7 +112,15 @@ static int _send(netdev_t *netdev, const struct iovec *vector, unsigned count)
     const struct iovec *ptr = vector;
     size_t len = 0;
 
-    at86rf2xx_tx_prepare(dev);
+    /* When an RX_END event happens while executing this function, this event is
+     * processed after this function ends, misinterpreted as a TX_END event 
+     */
+    bool state_transition = at86rf2xx_tx_prepare(dev);
+    if (!state_transition) {
+        return -1;
+    }
+
+    sending = true;
 
     /* load packet data into FIFO */
     for (unsigned i = 0; i < count; i++, ptr++) {
@@ -130,7 +139,6 @@ static int _send(netdev_t *netdev, const struct iovec *vector, unsigned count)
     /* send data out directly if pre-loading id disabled */
     if (!(dev->netdev.flags & AT86RF2XX_OPT_PRELOADING)) {
         at86rf2xx_tx_exec(dev);
-        sending = true;
     }
     /* return the number of bytes that were actually send out */
     return (int)len;

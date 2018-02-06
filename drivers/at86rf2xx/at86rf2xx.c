@@ -47,6 +47,9 @@ void at86rf2xx_setup(at86rf2xx_t *dev, const at86rf2xx_params_t *params)
     /* radio state is P_ON when first powered-on */
     dev->state = AT86RF2XX_STATE_P_ON;
     dev->pending_tx = 0;
+#ifdef MODULE_OPENTHREAD_FTD
+    dev->pending_irq = 0;
+#endif
 }
 
 void at86rf2xx_reset(at86rf2xx_t *dev)
@@ -113,15 +116,12 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     tmp |= (AT86RF2XX_TRX_CTRL_0_CLKM_CTRL__OFF);
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_CTRL_0, tmp);
 
-	/* AUTO_CSMA */
-#if AUTO_CSMA_EN
     at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA, true);
-#else
-    at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA, false);
-	/* CCA setting for manual CSMA */
-	tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__PHY_CC_CCA);
-	tmp |= AT86RF2XX_PHY_CC_CCA_DEFAULT__CCA_MODE;
-	at86rf2xx_reg_write(dev, AT86RF2XX_REG__PHY_CC_CCA, tmp);
+#if MODULE_OPENTHREAD_FTD
+    /* software CSMA */
+    at86rf2xx_set_max_retries(dev, 0);
+    at86rf2xx_set_csma_max_retries(dev, 0);
+    at86rf2xx_set_csma_backoff_exp(dev, 0, 0);
 #endif
 
     /* enable interrupts */
@@ -149,25 +149,76 @@ size_t at86rf2xx_send(at86rf2xx_t *dev, uint8_t *data, size_t len)
     return len;
 }
 
-void at86rf2xx_tx_prepare(at86rf2xx_t *dev)
+bool at86rf2xx_tx_prepare(at86rf2xx_t *dev)
 {
     uint8_t state;
 
     dev->pending_tx++;
 
+#ifdef MODULE_OPENTHREAD_FTD
+    state = at86rf2xx_get_status(dev);
+    if (state == AT86RF2XX_STATE_BUSY_RX_AACK ||
+        state == AT86RF2XX_STATE_BUSY_TX_ARET) {
+        /* We should NOT send right now. This CSMA attempt should fail. */
+        dev->pending_tx--;
+        return false;
+    }
+
+    int irq_state = irq_disable();
+    if (dev->pending_irq != 0) {
+        irq_restore(irq_state);
+        dev->pending_tx--;
+        /*
+         * If there are pending interrupts, we don't want to send just yet.
+         * What if the interrupt is for a received packet?
+         * Instead, we just return false. When we handle the interrupt, we will
+         * check for a received packet, and then attempt this CSMA probe again.
+         */
+        return false;
+    }
+    irq_restore(irq_state);
+
+    at86rf2xx_set_state(dev, AT86RF2XX_STATE_TX_ARET_ON);
+    if (at86rf2xx_get_status(dev) != AT86RF2XX_STATE_TX_ARET_ON) {
+        /*
+         * This means we transitioned to a busy state at the very last
+         * minute. Fail this CSMA attempt.
+         */
+        dev->pending_tx--;
+        return false;
+    }
+
+    /*
+     * Check for pending interrupts one last time. After this, no receive
+     * interrupt can happen, because we are in TX_ARET_ON.
+     */
+    irq_state = irq_disable();
+    if (dev->pending_irq != 0) {
+        irq_restore(irq_state);
+        at86rf2xx_set_state(dev, state);
+        dev->pending_tx--;
+        /*
+         * As above, we return false if there is a pending interrupt.
+         */
+        return false;
+    }
+    irq_restore(irq_state);
+#else
     /* make sure ongoing transmissions are finished */
     do {
         state = at86rf2xx_get_status(dev);
     } while (state == AT86RF2XX_STATE_BUSY_RX_AACK ||
              state == AT86RF2XX_STATE_BUSY_TX_ARET);
 
+    at86rf2xx_set_state(dev, AT86RF2XX_STATE_TX_ARET_ON);
+
     if (state != AT86RF2XX_STATE_TX_ARET_ON) {
         dev->idle_state = state;
     }
-
-    at86rf2xx_set_state(dev, AT86RF2XX_STATE_TX_ARET_ON);
+#endif
 
     dev->tx_frame_len = IEEE802154_FCS_LEN;
+    return true;
 }
 
 size_t at86rf2xx_tx_load(at86rf2xx_t *dev, uint8_t *data,

@@ -44,6 +44,7 @@ static int queue_msg(thread_t *target, const msg_t *m)
     int n = cib_put(&(target->msg_queue));
     if (n < 0) {
         DEBUG("queue_msg(): message queue is full (or there is none)\n");
+        sched_context_switch_request = 1;
         return 0;
     }
 
@@ -138,6 +139,9 @@ static int _msg_send(msg_t *m, kernel_pid_t target_pid, bool block, unsigned sta
         }
         else {
             newstatus = STATUS_SEND_BLOCKED;
+if (me->pid == 5) {
+    printf("weird!!\n");
+}
         }
 
         sched_set_status((thread_t*) me, newstatus);
@@ -193,7 +197,7 @@ int msg_send_int(msg_t *m, kernel_pid_t target_pid)
     thread_t *target = (thread_t *) sched_threads[target_pid];
 
     if (target == NULL) {
-        DEBUG("msg_send_int(): target thread does not exist\n");
+        printf("msg_send_int(): target thread does not exist\n");
         return -1;
     }
 

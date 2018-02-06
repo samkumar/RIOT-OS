@@ -21,7 +21,7 @@
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
-#define OPENTHREAD_PREEVENT_QUEUE_LEN (2)
+#define OPENTHREAD_PREEVENT_QUEUE_LEN (1)
 static msg_t _queue[OPENTHREAD_PREEVENT_QUEUE_LEN];
 static kernel_pid_t _preevent_pid;
 
@@ -62,19 +62,16 @@ static void *_openthread_preevent_thread(void *arg) {
     while (1) {
         msg_receive(&msg);
         switch (msg.type) {
-            case OPENTHREAD_XTIMER_MSG_TYPE_EVENT:
+            case OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT:
                 /* Tell event_thread a time event was received */
-                DEBUG("ot_preevent: OPENTHREAD_XTIMER_MSG_TYPE_EVENT received\n");
-                msg.type = OPENTHREAD_XTIMER_MSG_TYPE_EVENT;
-                msg_send(&msg, openthread_get_event_pid());
-                break;
-            case OPENTHREAD_NETDEV_MSG_TYPE_EVENT:
-                /* Tell event_thread a radio event was received (post-processing a sent packet) */
-                DEBUG("ot_preevent: OPENTHREAD_NETDEV_MSG_TYPE_EVENT received\n");
-                msg.type = OPENTHREAD_NETDEV_MSG_TYPE_EVENT;
+                DEBUG("ot_preevent: OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT received\n");
+                msg.type = OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT;
                 msg_send(&msg, openthread_get_event_pid());
                 break;
         }
+
+        /* Stack overflow check */
+        openthread_preevent_thread_overflow_check();
     }
 
     return NULL;

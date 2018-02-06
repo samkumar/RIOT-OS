@@ -186,6 +186,9 @@ typedef struct {
     /* Only radios with the XAH_CTRL_2 register support frame retry reporting */
     uint8_t tx_retries;                 /**< Number of NOACK retransmissions */
 #endif
+#ifdef MODULE_OPENTHREAD_FTD
+    uint8_t pending_irq;
+#endif
     /** @} */
 } at86rf2xx_t;
 
@@ -446,7 +449,7 @@ size_t at86rf2xx_send(at86rf2xx_t *dev, uint8_t *data, size_t len);
  *
  * @param[in] dev            device to prepare for sending
  */
-void at86rf2xx_tx_prepare(at86rf2xx_t *dev);
+bool at86rf2xx_tx_prepare(at86rf2xx_t *dev);
 
 /**
  * @brief   Load chunks of data into the transmit buffer of the given device

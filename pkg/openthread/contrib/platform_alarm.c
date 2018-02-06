@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2017 Fundacion Inria Chile
+ * Copyright (C) 2018 UC Berkeley
  *
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -13,12 +14,16 @@
  * @brief       Implementation of OpenThread alarm platform abstraction
  *
  * @author      Jose Ignacio Alamos <jialamos@uc.cl>
+ * @author      Hyung-Sin Kim <hs.kim@cs.berkeley.edu>
  * @}
  */
 
 #include <stdint.h>
 
 #include "openthread/platform/alarm-milli.h"
+#ifdef MODULE_OPENTHREAD_FTD
+#include "openthread/platform/alarm-micro.h"
+#endif
 #include "ot.h"
 #include "msg.h"
 #include "xtimer.h"
@@ -40,16 +45,9 @@ void otPlatAlarmMilliStartAt(otInstance *aInstance, uint32_t aT0, uint32_t aDt)
 {
     DEBUG("otPlatAlarmMilliStartAt: aT0: %" PRIu32 ", aDT: %" PRIu32 "\n", aT0, aDt);
     
-    xtimer_remove(openthread_get_timer());
-
-    msg_t msg;
-    msg.type = OPENTHREAD_XTIMER_MSG_TYPE_EVENT;
-    if (aDt <= 1) {
-        msg_send(&msg, openthread_get_preevent_pid());
-    }
-    else {
+    if (aDt > 0) {
         uint32_t dt = aDt * US_PER_MS;
-        xtimer_set(openthread_get_timer(), dt);
+        xtimer_set(openthread_get_millitimer(), dt);
     }
 }
 
@@ -57,7 +55,7 @@ void otPlatAlarmMilliStartAt(otInstance *aInstance, uint32_t aT0, uint32_t aDt)
 void otPlatAlarmMilliStop(otInstance *aInstance)
 {
     DEBUG("otPlatAlarmMilliStop\n");
-    xtimer_remove(openthread_get_timer());
+    xtimer_remove(openthread_get_millitimer());
 }
 
 /* OpenThread will call this for getting running time in millisecs */
@@ -74,3 +72,41 @@ uint32_t otPlatAlarmMilliGetNow(void)
     DEBUG("otPlatAlarmMilliGetNow: %" PRIu32 "\n", now);
     return now;
 }
+
+#ifdef MODULE_OPENTHREAD_FTD
+/**
+ * Set the alarm to fire at @p aDt microseconds after @p aT0.
+ *
+ * @param[in] aInstance  The OpenThread instance structure.
+ * @param[in] aT0        The reference time.
+ * @param[in] aDt        The time delay in microseconds from @p aT0.
+ */
+void otPlatAlarmMicroStartAt(otInstance *aInstance, uint32_t aT0, uint32_t aDt)
+{
+    DEBUG("otPlatAlarmMicroStartAt: aT0: %" PRIu32 ", aDT: %" PRIu32 "\n", aT0, aDt);
+    if (aDt <= 1) {
+        xtimer_remove(openthread_get_microtimer());
+        msg_t msg;
+        msg.type = OPENTHREAD_MICROTIMER_MSG_TYPE_EVENT;
+        msg_try_send(&msg, openthread_get_task_pid());
+    }
+    else {
+        xtimer_set(openthread_get_microtimer(), aDt);
+    }
+}
+
+/* OpenThread will call this to stop alarms */
+void otPlatAlarmMicroStop(otInstance *aInstance)
+{
+    DEBUG("otPlatAlarmMicroStop\n");
+    xtimer_remove(openthread_get_microtimer());
+}
+
+/* OpenThread will call this for getting running time in microsecs */
+uint32_t otPlatAlarmMicroGetNow(void)
+{
+    uint32_t now = xtimer_now_usec();
+    DEBUG("otPlatAlarmMicroGetNow: %" PRIu32 "\n", now);
+    return now;
+}
+#endif

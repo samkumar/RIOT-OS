@@ -467,7 +467,9 @@ static inline void _set_state(at86rf2xx_t *dev, uint8_t state, uint8_t cmd)
      * in https://github.com/RIOT-OS/RIOT/pull/5244
      */
     if (state != AT86RF2XX_STATE_RX_AACK_ON) {
-        while (at86rf2xx_get_status(dev) != state) {}
+        while (at86rf2xx_get_status(dev) != state) {
+            at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_STATE, cmd);    
+        }
     }
     /* Although RX_AACK_ON state doesn't get read back,
      * at least make sure if state transition is in progress or not
