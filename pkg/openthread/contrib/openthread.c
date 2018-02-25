@@ -46,6 +46,7 @@ static at86rf2xx_t at86rf2xx_dev;
 #endif
 
 static mutex_t radio_mutex = MUTEX_INIT;
+static mutex_t buffer_mutex = MUTEX_INIT;
 
 static char ot_task_thread_stack[THREAD_STACKSIZE_MAIN+4];
 static char ot_event_thread_stack[THREAD_STACKSIZE_MAIN+1000+4];
@@ -81,6 +82,11 @@ void openthread_task_thread_overflow_check(void) {
 /* get Openthread radio mutex */
 mutex_t* openthread_get_radio_mutex(void) {
     return &radio_mutex;
+}
+
+/* get Openthread buffer mutex */
+mutex_t* openthread_get_buffer_mutex(void) {
+    return &buffer_mutex;
 }
 
 /* get OpenThread netdev */

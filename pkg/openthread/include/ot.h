@@ -213,11 +213,18 @@ xtimer_t* openthread_get_microtimer(void);
 netdev_t* openthread_get_netdev(void);
 
 /**
+ * @brief   get buffer mutex of OpenThread.
+ *
+ * @return  mutex for OpenThread buffer
+ */
+mutex_t* openthread_get_radio_mutex(void);
+
+/**
  * @brief   get radio mutex of OpenThread.
  *
  * @return  mutex for OpenThread radio
  */
-mutex_t* openthread_get_radio_mutex(void);
+mutex_t* openthread_get_buffer_mutex(void);
 
 void openthread_event_thread_overflow_check(void);
 void openthread_preevent_thread_overflow_check(void);

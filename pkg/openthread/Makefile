@@ -3,7 +3,7 @@ PKG_BUILDDIR ?= $(RIOTBASE)/pkg/openthread/source
 
 ifneq (,$(filter openthread-cli-ftd,$(USEMODULE)))
     $(info Compile OpenThread for FTD device)
-    OPENTHREAD_ARGS += --enable-cli-app=ftd --enable-joiner
+    OPENTHREAD_ARGS += --enable-cli-app=ftd #--enable-joiner
 endif
 ifneq (,$(filter openthread-cli-mtd,$(USEMODULE)))
     $(info Compile OpenThread for MTD device)
@@ -11,7 +11,7 @@ ifneq (,$(filter openthread-cli-mtd,$(USEMODULE)))
 endif
 ifneq (,$(filter openthread-ncp-ftd,$(USEMODULE)))
     $(info Compile OpenThread with NCP)
-    OPENTHREAD_ARGS += --enable-ncp-app=ftd --with-ncp-bus=uart --enable-border-router --enable-tmf-proxy --enable-commissioner 
+    OPENTHREAD_ARGS += --enable-ncp-app=ftd --with-ncp-bus=uart --enable-border-router #--enable-tmf-proxy --enable-commissioner 
 endif
 OPENTHREAD_ARGS += --enable-application-coap
 CONFIG_FILE      = OPENTHREAD_PROJECT_CORE_CONFIG_FILE='\"platform_config.h\"'
