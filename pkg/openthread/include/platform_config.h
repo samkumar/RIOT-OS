@@ -41,6 +41,8 @@ extern "C" {
 #define OPENTHREAD_CONFIG_ENABLE_PLATFORM_USEC_TIMER 1
 #endif
 
+#define OPENTHREAD_CONFIG_MAX_TX_ATTEMPTS_DIRECT    10
+
 #ifdef __cplusplus
 }
 #endif
