@@ -471,6 +471,9 @@ static inline void _create_fake_ack_frame(bool ackPending)
 /* Called upon TX event */
 void sent_pkt(otInstance *aInstance, netdev_event_t event)
 {
+    if (event == NETDEV_EVENT_TX_NOACK) {
+        xtimer_usleep(100000);
+    }
     mutex_lock(openthread_get_buffer_mutex());
     /* Tell OpenThread transmission is done depending on the NETDEV event */
     switch (event) {
