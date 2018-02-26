@@ -109,6 +109,7 @@ extern volatile uint64_t cpuOnTime;
 extern volatile uint64_t cpuOffTime;
 extern volatile uint32_t contextSwitchCnt;
 extern volatile uint32_t preemptCnt;
+extern volatile uint8_t yielding;
 #endif
 
 /**

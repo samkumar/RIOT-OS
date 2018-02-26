@@ -45,6 +45,10 @@
 #include <inttypes.h>
 #endif
 
+#ifdef CPU_DUTYCYCLE_MONITOR
+volatile uint8_t yielding = 0;
+#endif
+
 volatile int sched_num_threads = 0;
 
 volatile unsigned int sched_context_switch_request;
@@ -108,7 +112,7 @@ int __attribute__((used)) sched_run(void)
         if (active_thread->status == STATUS_RUNNING) {
             active_thread->status = STATUS_PENDING;
 #ifdef CPU_DUTYCYCLE_MONITOR
-            if (active_thread->priority != THREAD_PRIORITY_IDLE) {
+            if (active_thread->priority != THREAD_PRIORITY_IDLE && !yielding) {
                 preemptCnt++;
             }
 #endif
@@ -140,6 +144,10 @@ int __attribute__((used)) sched_run(void)
         }
 #endif
     }
+
+#ifdef CPU_DUTYCYCLE_MONITOR
+    yielding = 0;
+#endif
 
 #ifdef MODULE_SCHEDSTATISTICS
     schedstat *next_stat = &sched_pidlist[next_thread->pid];

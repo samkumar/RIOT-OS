@@ -115,6 +115,9 @@ static int _msg_send(msg_t *m, kernel_pid_t target_pid, bool block, unsigned sta
                   __LINE__, target_pid);
             irq_restore(state);
             if (me->status == STATUS_REPLY_BLOCKED) {
+#ifdef CPU_DUTYCYCLE_MONITOR
+                yielding = 1;
+#endif
                 thread_yield_higher();
             }
             return 1;
@@ -152,6 +155,9 @@ if (me->pid == 5) {
         target->flags |= THREAD_FLAG_MSG_WAITING;
         thread_flags_wake(target);
 #endif
+#ifdef CPU_DUTYCYCLE_MONITOR
+        yielding = 1;
+#endif
 
         irq_restore(state);
         thread_yield_higher();
@@ -167,7 +173,9 @@ if (me->pid == 5) {
         msg_t *target_message = (msg_t*) target->wait_data;
         *target_message = *m;
         sched_set_status(target, STATUS_PENDING);
-
+#ifdef CPU_DUTYCYCLE_MONITOR
+        yielding = 1;
+#endif
         irq_restore(state);
         thread_yield_higher();
     }
@@ -329,6 +337,9 @@ static int _msg_receive(msg_t *m, int block)
             DEBUG("_msg_receive(): %" PRIkernel_pid ": No msg in queue. Going blocked.\n",
                   sched_active_thread->pid);
             sched_set_status(me, STATUS_RECEIVE_BLOCKED);
+#ifdef CPU_DUTYCYCLE_MONITOR
+            yielding = 1;
+#endif
 
             irq_restore(state);
             thread_yield_higher();
