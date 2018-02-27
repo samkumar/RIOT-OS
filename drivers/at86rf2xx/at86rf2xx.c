@@ -123,6 +123,10 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     at86rf2xx_set_csma_max_retries(dev, 0);
     at86rf2xx_set_csma_backoff_exp(dev, 0, 0);
 #endif
+    /* provide 32us ACK time */
+    tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__XAH_CTRL_1);
+    tmp |= AT86RF2XX_XAH_CTRL_1__AACK_ACK_TIME;
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__XAH_CTRL_1, tmp);
 
     /* enable interrupts */
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK,
