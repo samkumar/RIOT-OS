@@ -448,7 +448,7 @@ ssize_t sock_ip_recv(sock_ip_t *sock, void *data, size_t max_len,
 ssize_t sock_ip_send(sock_ip_t *sock, const void *data, size_t len,
                      uint8_t proto, const sock_ip_ep_t *remote);
 
-#include "sock_types.h"
+//#include "sock_types.h"
 
 #ifdef __cplusplus
 }

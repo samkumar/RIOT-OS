@@ -20,6 +20,7 @@
 
 #include <assert.h>
 
+#include "tcp_freebsd/gnrc_tcp_freebsd_internal.h"
 #include "openthread/platform/uart.h"
 #include "ot.h"
 #include "random.h"
@@ -168,7 +169,7 @@ static void _event_cb(netdev_t *dev, netdev_event_t event) {
         case NETDEV_EVENT_TX_COMPLETE_DATA_PENDING:
         case NETDEV_EVENT_TX_NOACK:
         case NETDEV_EVENT_TX_MEDIUM_BUSY:
-            //assert(thread_get_pid() == openthread_get_event_pid()); 
+            //assert(thread_get_pid() == openthread_get_event_pid());
             sent_pkt(openthread_get_instance(), event);
             break;
         default:
@@ -233,11 +234,14 @@ void openthread_bootstrap(void)
     otPlatUartEnable();
     DEBUG("OT-UART setting is OK\n");
 
+    /* init FreeBSD TCP module */
+    gnrc_tcp_freebsd_init();
+
     /* init three threads for openthread */
     openthread_preevent_init(ot_preevent_thread_stack, sizeof(ot_preevent_thread_stack),
-                         THREAD_PRIORITY_MAIN - 3, "openthread_preevent"); 
+                         THREAD_PRIORITY_MAIN - 3, "openthread_preevent");
     openthread_task_init(ot_task_thread_stack, sizeof(ot_task_thread_stack),
-                         THREAD_PRIORITY_MAIN - 1, "openthread_task"); 
+                         THREAD_PRIORITY_MAIN - 1, "openthread_task");
     openthread_event_init(ot_event_thread_stack, sizeof(ot_event_thread_stack),
-                         THREAD_PRIORITY_MAIN - 2, "openthread_event"); 
+                         THREAD_PRIORITY_MAIN - 2, "openthread_event");
 }

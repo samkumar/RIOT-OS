@@ -11,7 +11,7 @@ ifneq (,$(filter openthread-cli-mtd,$(USEMODULE)))
 endif
 ifneq (,$(filter openthread-ncp-ftd,$(USEMODULE)))
     $(info Compile OpenThread with NCP)
-    OPENTHREAD_ARGS += --enable-ncp-app=ftd --with-ncp-bus=uart --enable-border-router #--enable-tmf-proxy --enable-commissioner 
+    OPENTHREAD_ARGS += --enable-ncp-app=ftd --with-ncp-bus=uart --enable-border-router #--enable-tmf-proxy --enable-commissioner
 endif
 OPENTHREAD_ARGS += --enable-application-coap
 CONFIG_FILE      = OPENTHREAD_PROJECT_CORE_CONFIG_FILE='\"platform_config.h\"'
@@ -20,7 +20,7 @@ $(info $$OPENTHREAD_ARGS is [${OPENTHREAD_ARGS}])
 .PHONY: all
 
 OPENTHREAD_COMMON_FLAGS=-fdata-sections -ffunction-sections -Os
-all: 
+all:
 	cd $(PKG_BUILDDIR) && PREFIX="/" ./bootstrap
 	cd $(PKG_BUILDDIR) && CPP="$(CPP)" CC="$(CC)" CXX="$(CXX)"\
 		OBJC="" OBJCXX="" AR="$(AR)" RANLIB="$(RANLIB)" NM="$(NM)" \
@@ -47,4 +47,3 @@ ifneq (,$(filter openthread-ncp-ftd,$(USEMODULE)))
 	cp $(PKG_BUILDDIR)/output/lib/libopenthread-ncp-ftd.a ${BINDIR}/openthread-ncp-ftd.a
 endif
 	sed -ie 's/BASE/_BASE/g' $(PKG_BUILDDIR)/output/include/openthread/types.h
-
