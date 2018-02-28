@@ -1466,7 +1466,7 @@ memsendfail:
 			mtu = ro.ro_rt->rt_mtu;
 		RO_RTFREE(&ro);
 #endif
-        otMessageWrite(message, 0, outbuf, sizeof(outbuf));
+		otMessageWrite(message, 0, outbuf, sizeof(struct tcphdr) + optlen);
 		send_message(message, &ip6info);
 #if 0 // The TinyOS code
 		// Send packet the TinyOS way

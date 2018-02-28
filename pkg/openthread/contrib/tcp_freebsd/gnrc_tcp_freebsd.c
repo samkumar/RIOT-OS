@@ -241,7 +241,7 @@ void tcp_freebsd_receive(void* iphdr, otMessage* message)
     otMessageRead(message, otMessageGetOffset(message), th, sizeof(struct tcphdr));
 
     packet_len = htons(iph->ip6_plen);
-    empirical_len = otMessageGetLength(message);
+    empirical_len = otMessageGetLength(message) - otMessageGetOffset(message);
 
     if (packet_len != empirical_len) {
         DEBUG("Sizes don't add up: packet length is %" PRIu16 ", but got %" PRIu16 "\n", packet_len, empirical_len);
@@ -565,7 +565,7 @@ error_t asock_abort_impl(int asockid)
 otMessage* new_message(void)
 {
     otInstance* instance = openthread_get_instance();
-    otMessage* message = otIp6NewMessageForTransport(instance, true);
+    otMessage* message = otIp6NewMessageForTransport(instance, false);
     return message;
 }
 
