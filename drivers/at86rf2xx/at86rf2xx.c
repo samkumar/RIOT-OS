@@ -128,6 +128,12 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     tmp |= AT86RF2XX_XAH_CTRL_1__AACK_ACK_TIME;
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__XAH_CTRL_1, tmp);
 
+    /* filter packet below -94 dBm */
+    tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__RX_SYN);
+    tmp &= ~(AT86RF2XX_RX_SYN__RX_PDT_LEVEL);
+    tmp |= (0x01 & AT86RF2XX_RX_SYN__RX_PDT_LEVEL);
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__RX_SYN, tmp);
+
     /* enable interrupts */
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK,
                         AT86RF2XX_IRQ_STATUS_MASK__TRX_END);
