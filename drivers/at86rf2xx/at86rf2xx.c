@@ -152,6 +152,12 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     /* go into RX state */
     at86rf2xx_set_state(dev, AT86RF2XX_STATE_RX_AACK_ON);
 
+#ifdef CONTINUOUS_CCA
+    /* Trigger an ED */
+    at86rf2xx_set_option(dev, AT86RF2XX_OPT_TELL_CCA_ED_DONE, true);
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__PHY_ED_LEVEL, 1);
+#endif
+
     DEBUG("at86rf2xx_reset(): reset complete.\n");
 }
 

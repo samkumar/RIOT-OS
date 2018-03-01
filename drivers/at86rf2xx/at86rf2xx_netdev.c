@@ -593,6 +593,12 @@ static void _isr(netdev_t *netdev)
         DEBUG("[at86rf2xx] EVT - RX_START\n");
     }
 
+    if (irq_mask & AT86RF2XX_IRQ_STATUS_MASK__CCA_ED_DONE) {
+        printf("%d\n", at86rf2xx_get_ed_level(dev));
+        at86rf2xx_reg_write(dev, AT86RF2XX_REG__PHY_ED_LEVEL, 1);
+        DEBUG("[at86rf2xx] EVT - CCA_ED_DONE\n");
+    }
+
     if (irq_mask & AT86RF2XX_IRQ_STATUS_MASK__TRX_END) {
         if (state == AT86RF2XX_STATE_RX_AACK_ON ||
             state == AT86RF2XX_STATE_BUSY_RX_AACK) {

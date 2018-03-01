@@ -393,6 +393,12 @@ void at86rf2xx_set_option(at86rf2xx_t *dev, uint16_t option, bool state)
                 tmp |= AT86RF2XX_IRQ_STATUS_MASK__RX_START;
                 at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK, tmp);
                 break;
+            case AT86RF2XX_OPT_TELL_CCA_ED_DONE:
+                DEBUG("[at86rf2xx] opt: enabling CCA_ED_DONE IRQ\n");
+                tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_MASK);
+                tmp |= AT86RF2XX_IRQ_STATUS_MASK__CCA_ED_DONE;
+                at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK, tmp);
+                break;
             default:
                 /* do nothing */
                 break;
@@ -438,6 +444,12 @@ void at86rf2xx_set_option(at86rf2xx_t *dev, uint16_t option, bool state)
                 DEBUG("[at86rf2xx] opt: disabling SFD IRQ\n");
                 tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_MASK);
                 tmp &= ~AT86RF2XX_IRQ_STATUS_MASK__RX_START;
+                at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK, tmp);
+                break;
+            case AT86RF2XX_OPT_TELL_CCA_ED_DONE:
+                DEBUG("[at86rf2xx] opt: disabling CCA_ED_DONE IRQ\n");
+                tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_MASK);
+                tmp &= ~AT86RF2XX_IRQ_STATUS_MASK__CCA_ED_DONE;
                 at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK, tmp);
                 break;
             default:
