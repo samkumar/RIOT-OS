@@ -123,6 +123,8 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     at86rf2xx_set_csma_max_retries(dev, 0);
     at86rf2xx_set_csma_backoff_exp(dev, 0, 0);
 #endif
+
+#if HIGH_DATA_RATE
     /* provide 32us ACK time */
     tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__XAH_CTRL_1);
     tmp |= AT86RF2XX_XAH_CTRL_1__AACK_ACK_TIME;
@@ -133,6 +135,13 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     tmp &= ~(AT86RF2XX_RX_SYN__RX_PDT_LEVEL);
     tmp |= (0x01 & AT86RF2XX_RX_SYN__RX_PDT_LEVEL);
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__RX_SYN, tmp);
+
+    /* high data rate (2Mbps) */
+    tmp = at86rf2xx_reg_read(dev, AT86RF2XX_REG__TRX_CTRL_2);
+    tmp |= AT86RF2XX_TRX_CTRL_2_MASK__OQPSK_DATA_RATE;
+    tmp |= AT86RF2XX_TRX_CTRL_2_MASK__OQPSK_SCRAM_EN;
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_CTRL_2, tmp);
+#endif
 
     /* enable interrupts */
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__IRQ_MASK,
