@@ -28,7 +28,8 @@
 extern "C" {
 #endif
 
-#include "../contrib/tcp_freebsd/bsdtcp/netinet/in.h"
+#include <netinet/in.h>
+//#include "../contrib/tcp_freebsd/bsdtcp/netinet/in.h"
 //#include "../net/gnrc/transport_layer/tcp_freebsd/lib/lbuf.h"
 #include <stdbool.h>
 
@@ -55,7 +56,7 @@ bool gnrc_tcp_freebsd_portisfree(uint16_t port);
 int bsdtcp_active_socket(connectDone_t cd, sendReady_t sr, receiveReady_t rr, connectionLost_t cl, void* ctx);
 int bsdtcp_passive_socket(acceptReady_t ar, acceptDone_t ad, void* ctx);
 int bsdtcp_set_ctx(int fd, void* newctx);
-int bsdtcp_bind(int fd, uint16_t port);
+int bsdtcp_bind(int fd, const struct in6_addr* address, uint16_t port);
 int bsdtcp_connect(int fd, struct sockaddr_in6* faddrport, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
 int bsdtcp_listen(int fd);
 int bsdtcp_send(int fd, const void* data, size_t length, size_t* bytessent);

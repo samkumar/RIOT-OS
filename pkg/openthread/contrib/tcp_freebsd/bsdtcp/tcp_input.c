@@ -1365,8 +1365,8 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, otMessage* msg, struct tcpcb* 
 		tcp_dooptions(&to, optp, optlen, TO_SYN);
 
 		//syncache_add(&inc, &to, th, inp, &so, m, NULL, NULL);
-		// INSTEAD OF ADDING TO THE SYNCACHE, INITIALIZE THE NEW SOCKET RIGHT AWAY
-		// CODE IS TAKEN FROM THE syncache_socket FUNCTION
+		// samkumar: INSTEAD OF ADDING TO THE SYNCACHE, INITIALIZE THE NEW
+        // SOCKET RIGHT AWAY. CODE IS TAKEN FROM THE syncache_socket FUNCTION.
 		tp = accept_ready(tpl); // Try to allocate an active socket to accept into
         if (tp == NULL) {
             /* If we couldn't allocate, just ignore the SYN. */
@@ -1374,7 +1374,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, otMessage* msg, struct tcpcb* 
         }
 		tcp_state_change(tp, TCPS_SYN_RECEIVED);
 		tpmarkpassiveopen(tp);
-		tp->t_flags |= TF_ACKNOW; // my addition
+		tp->t_flags |= TF_ACKNOW; // samkumar: my addition
 		tp->iss = tcp_new_isn(tp);
 		tp->irs = th->th_seq;
 		tcp_rcvseqinit(tp);
@@ -1386,6 +1386,7 @@ tcp_input(struct ip6_hdr* ip6, struct tcphdr* th, otMessage* msg, struct tcpcb* 
 		tp->rcv_wnd = imin(imax(cbuf_free_space(&tp->recvbuf), 0), TCP_MAXWIN);
 		tp->rcv_adv += tp->rcv_wnd;
 		tp->last_ack_sent = tp->rcv_nxt;
+        memcpy(&tp->laddr, &ip6->ip6_dst, sizeof(tp->laddr));
 		memcpy(&tp->faddr, &ip6->ip6_src, sizeof(tp->faddr));
 		tp->fport = th->th_sport;
 		tp->lport = tpl->lport;

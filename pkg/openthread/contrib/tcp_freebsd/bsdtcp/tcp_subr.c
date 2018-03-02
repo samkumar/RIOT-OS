@@ -227,12 +227,15 @@ tcp_state_change(struct tcpcb *tp, int newstate)
 
  /* This is based on tcp_newtcb in tcp_subr.c, and tcp_usr_attach in tcp_usrreq.c.
     The length of the reassembly bitmap is fixed at ceil(0.125 * recvbuflen). */
-__attribute__((used)) void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
+__attribute__((used)) void initialize_tcb(struct tcpcb* tp, const struct in6_addr* laddr, uint16_t lport, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp) {
 	uint32_t ticks = get_ticks();
 	int initindex = tp->index;
 
     memset(tp, 0x00, sizeof(struct tcpcb));
     tp->reass_fin_index = -1;
+    if (laddr != NULL) {
+        memcpy(&tp->laddr, laddr, sizeof(tp->laddr));
+    }
     tp->lport = lport;
     tp->index = initindex;
     // Congestion control algorithm.
@@ -530,6 +533,7 @@ tcpip_fillheaders(struct tcpcb* tp, otMessageInfo* ip_ptr, void *tcp_ptr)
     //ip6->ip6_vfc = 0x60;
     //memset(&ip6->ip6_src, 0x00, sizeof(ip6->ip6_src));
     memset(ip_ptr, 0x00, sizeof(otMessageInfo));
+    memcpy(&ip_ptr->mSockAddr, &tp->laddr, sizeof(ip_ptr->mSockAddr));
     memcpy(&ip_ptr->mPeerAddr, &tp->faddr, sizeof(ip_ptr->mPeerAddr));
     //ip6->ip6_dst = tp->faddr;
 	/* Fill in the TCP header */

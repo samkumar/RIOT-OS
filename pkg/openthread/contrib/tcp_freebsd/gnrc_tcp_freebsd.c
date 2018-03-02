@@ -31,10 +31,12 @@
 #include "thread.h"
 #include "net/gnrc/pkt.h"
 #include "../include/tcp_freebsd.h"
+#include "netinet/in.h"
 
 #include <openthread/ip6.h>
 #include <openthread/types.h>
 #include <openthread/message.h>
+#include <openthread/thread.h>
 #include "ot.h"
 
 #include "bsdtcp/tcp.h"
@@ -46,7 +48,7 @@
 
 #include "mutex.h"
 
-#define ENABLE_DEBUG    (0)
+#define ENABLE_DEBUG    (1)
 #include "debug.h"
 
 #define SUCCESS 0
@@ -183,7 +185,7 @@ struct tcpcb* accept_ready(struct tcpcb_listen* tpl)
     }
     assert(args.asockid >= 0 && args.asockid < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
     struct tcpcb* asock = &tcbs[args.asockid];
-    initialize_tcb(asock, asock->lport, args.sendbuf, args.sendbuflen, args.recvbuf, args.recvbuflen, args.reassbmp);
+    initialize_tcb(asock, NULL, asock->lport, args.sendbuf, args.sendbuflen, args.recvbuf, args.recvbuflen, args.reassbmp);
     return asock;
 }
 
@@ -388,7 +390,7 @@ int gnrc_tcp_freebsd_init(void)
         tcp_init();
         for (i = 0; i < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
             tcbs[i].index = i;
-            initialize_tcb(&tcbs[i], 0, NULL, 0, NULL, 0, NULL);
+            initialize_tcb(&tcbs[i], NULL, 0, NULL, 0, NULL, 0, NULL);
         }
         for (i = 0; i < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS; i++) {
             tcbls[i].t_state = TCPS_CLOSED;
@@ -441,7 +443,11 @@ void asock_getPeerInfo_impl(int asockid, struct in6_addr** addr, uint16_t** port
     mutex_unlock(&tcp_lock);
 }
 
-error_t asock_bind_impl(int asockid, uint16_t port)
+const struct in6_addr* get_default_ipv6_address(void) {
+    return (const struct in6_addr*) otThreadGetMeshLocalEid(openthread_get_instance());
+}
+
+error_t asock_bind_impl(int asockid, const struct in6_addr* address, uint16_t port)
 {
     error_t rv;
     uint16_t oldport;
@@ -451,6 +457,10 @@ error_t asock_bind_impl(int asockid, uint16_t port)
     tcbs[asockid].lport = 0;
     if (port == 0 || gnrc_tcp_freebsd_portisfree(port)) {
         tcbs[asockid].lport = port;
+        if (memcmp(address, &in6addr_any, sizeof(struct in6_addr)) == 0) {
+            address = get_default_ipv6_address();
+        }
+        memcpy(&tcbs[asockid].laddr, address, sizeof(struct in6_addr));
         rv = SUCCESS;
         goto done;
     }
@@ -461,7 +471,7 @@ done:
     return rv;
 }
 
-error_t psock_bind_impl(int psockid, uint16_t port)
+error_t psock_bind_impl(int psockid, const struct in6_addr* address, uint16_t port)
 {
     error_t rv;
     uint16_t oldport;
@@ -471,6 +481,10 @@ error_t psock_bind_impl(int psockid, uint16_t port)
     tcbls[psockid].lport = 0;
     if (port == 0 || gnrc_tcp_freebsd_portisfree(port)) {
         tcbls[psockid].lport = port;
+        if (memcmp(address, &in6addr_any, sizeof(struct in6_addr)) == 0) {
+            address = get_default_ipv6_address();
+        }
+        memcpy(&tcbs[psockid].laddr, address, sizeof(struct in6_addr));
         rv = SUCCESS;
         goto done;
     }
@@ -498,7 +512,12 @@ error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* send
         rv = EISCONN;
         goto done;
     }
-    initialize_tcb(tp, tp->lport, sendbuf, sendbuflen, recvbuf, recvbuflen, reassbmp);
+    {
+        // TODO: restructure code to avoid copying laddr like this?
+        struct in6_addr laddr;
+        memcpy(&laddr, &tp->laddr, sizeof(struct in6_addr));
+        initialize_tcb(tp, &laddr, tp->lport, sendbuf, sendbuflen, recvbuf, recvbuflen, reassbmp);
+    }
     rv = (error_t) tcp6_usr_connect(tp, addr);
 
 done:

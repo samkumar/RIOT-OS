@@ -48,13 +48,13 @@
 #define MICROS_PER_TICK 1000 // number of microseconds per tick
 
 #define FRAMES_PER_SEG 5
-#define FRAMECAP_6LOWPAN (124 - 23 - 5) // Fragmentation limit: maximum frame size of the IP and TCP headers
+#define FRAMECAP_6LOWPAN (122 - 11 - 5)/*(124 - 23 - 5)*/ // Fragmentation limit: maximum frame size of the IP and TCP headers
 
-#ifdef MODULE_GNRC_SIXLOWPAN_IPHC
-#define IP6HDR_SIZE (2 + 1 + 1 + 16 + 8) // IPHC header (2) + Next header (1) + Hop count (1) + Dest. addr (16) + Src. addr (8)
-#else
-#define IP6HDR_SIZE 40
-#endif
+//#ifdef MODULE_GNRC_SIXLOWPAN_IPHC
+#define IP6HDR_SIZE (2 + 1 + 1 + 16 + 16) // IPHC header (2) + Next header (1) + Hop count (1) + Dest. addr (16) + Src. addr (8)
+//#else
+//#define IP6HDR_SIZE 40
+//#endif
 
 #define SIG_CONN_ESTABLISHED 0x01
 #define SIG_RECVBUF_NOTEMPTY 0x02
@@ -96,8 +96,8 @@ int psock_getID_impl(int psockid);
 int asock_getID_impl(int asockid);
 int asock_getState_impl(int asockid);
 void asock_getPeerInfo_impl(int asockid, struct in6_addr** addr, uint16_t** port);
-error_t asock_bind_impl(int asockid, uint16_t port);
-error_t psock_bind_impl(int psockid, uint16_t port);
+error_t asock_bind_impl(int asockid, const struct in6_addr* addr, uint16_t port);
+error_t psock_bind_impl(int psockid, const struct in6_addr* addr, uint16_t port);
 error_t psock_listen_impl(int psockid);
 error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
 error_t asock_send_impl(int asockid, const uint8_t* data, size_t len, int moretocome, size_t* status);

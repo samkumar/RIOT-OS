@@ -215,7 +215,7 @@ int bsdtcp_set_ctx(int fd, void* newctx) {
     return 0;
 }
 
-int bsdtcp_bind(int fd, uint16_t port)
+int bsdtcp_bind(int fd, const struct in6_addr* address, uint16_t port)
 {
     int rv;
     bool passive;
@@ -224,10 +224,10 @@ int bsdtcp_bind(int fd, uint16_t port)
         return EBADF;
     }
     if (passive) {
-        rv = psock_bind_impl(fd, port);
+        rv = psock_bind_impl(fd, address, port);
         DEBUG("Bound passive socket to port %" PRIu16 "\n", port);
     } else {
-        rv = asock_bind_impl(fd, port);
+        rv = asock_bind_impl(fd, address, port);
         DEBUG("Bound active socket to port %" PRIu16 "\n", port);
     }
     return rv;

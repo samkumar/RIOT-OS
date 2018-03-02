@@ -350,7 +350,7 @@ static bool sock_tcp_freebsd_active_set(sock_tcp_freebsd_t* conn, int asock)
             conn->sfields.active.asock = asock;
             /* How to get the recvbuf? */
         }
-        bsdtcp_bind(conn->sfields.active.asock, conn->local_port);
+        bsdtcp_bind(conn->sfields.active.asock, (struct in6_addr*) &conn->local_addr, conn->local_port);
 
         conn->sfields.active.is_connecting = false;
         cond_init(&conn->sfields.active.connect_cond);
@@ -375,7 +375,7 @@ static bool sock_tcp_freebsd_passive_set(sock_tcp_freebsd_t* conn, int queue_len
             conn->haspassive = false;
             return false;
         }
-        bsdtcp_bind(conn->sfields.passive.psock, conn->local_port);
+        bsdtcp_bind(conn->sfields.passive.psock, (struct in6_addr*) &conn->local_addr, conn->local_port);
 
         cond_init(&conn->sfields.passive.accept_cond);
 

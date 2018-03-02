@@ -150,6 +150,7 @@ struct tcpcb {
 	uint16_t lport; // local port, network byte order
 	uint16_t fport; // foreign port, network byte order
 
+	struct in6_addr laddr; // local IP address
 	struct in6_addr faddr; // foreign IP address
 
 #if 0 // I used unused space in the receive buffer for the reassembly queue
@@ -298,7 +299,7 @@ struct tcpcb {
 };
 
 /* Defined in tcp_subr.c. */
-void initialize_tcb(struct tcpcb* tp, uint16_t lport, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
+void initialize_tcb(struct tcpcb* tp, const struct in6_addr* laddr, uint16_t lport, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
 
 /* Copied from the "dead" portions below. */
 

@@ -143,6 +143,7 @@ tcp_twrespond(struct tcpcb* tp, int flags)
     //memset(&ip6->ip6_src, 0x00, sizeof(ip6->ip6_src));
 	//ip6->ip6_dst = tp->faddr;
 
+    memcpy(&ip6info.mSockAddr, &tp->laddr, sizeof(ip6info.mSockAddr));
     memcpy(&ip6info.mPeerAddr, &tp->faddr, sizeof(ip6info.mPeerAddr));
 	nth->th_sport = tp->lport;
 	nth->th_dport = tp->fport;
