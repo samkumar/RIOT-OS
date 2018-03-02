@@ -76,7 +76,7 @@ struct task tcp_timers[GNRC_TCP_FREEBSD_NUM_TIMERS];
 /**
  * @brief   Allocate memory for the TCP thread's stack
  */
-#define GNRC_TCP_FREEBSD_STACK_SIZE 1024
+#define GNRC_TCP_FREEBSD_STACK_SIZE 2048
 #define GNRC_TCP_FREEBSD_PRIO 7
 #if ENABLE_DEBUG
 //static char _packet_stack[GNRC_TCP_FREEBSD_STACK_SIZE + THREAD_EXTRA_STACKSIZE_PRINTF];
