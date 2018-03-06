@@ -1072,6 +1072,7 @@ memsendfail:
 		goto out;
 	}
 	if (otMessageSetLength(message, sizeof(struct tcphdr) + optlen + len) != OT_ERROR_NONE) {
+		free_message(message);
 		goto out;
 	}
 	if (len) {

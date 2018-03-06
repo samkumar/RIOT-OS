@@ -78,6 +78,7 @@ int gnrc_tcp_freebsd_init(void);
  * the kernel.
  */
 otMessage* new_message(void);
+void free_message(otMessage* pkg);
 void send_message(otMessage* pkt, otMessageInfo* info);
 uint32_t get_ticks(void);
 uint32_t get_millis(void);

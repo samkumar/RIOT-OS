@@ -94,7 +94,13 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 	optlen = tcp_addoptions(&to, opt);
 
     otMessage* message = new_message();
-    otMessageSetLength(message, sizeof(struct tcphdr) + optlen);
+    if (message == NULL) {
+        return 0; // drop the message
+    }
+    if (otMessageSetLength(message, sizeof(struct tcphdr) + optlen) != OT_ERROR_NONE) {
+        free_message(message);
+        return 0; // drop the message
+    }
 
     /*gnrc_pktsnip_t* tcpsnip = gnrc_pktbuf_add(NULL, NULL, sizeof(struct tcphdr) + optlen, GNRC_NETTYPE_TCP);
     if (tcpsnip == NULL) {

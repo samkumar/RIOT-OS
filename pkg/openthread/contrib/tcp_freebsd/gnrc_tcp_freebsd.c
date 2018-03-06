@@ -77,7 +77,7 @@ struct task tcp_timers[GNRC_TCP_FREEBSD_NUM_TIMERS];
  * @brief   Allocate memory for the TCP thread's stack
  */
 #define GNRC_TCP_FREEBSD_STACK_SIZE 2048
-#define GNRC_TCP_FREEBSD_PRIO 7
+#define GNRC_TCP_FREEBSD_PRIO 14
 #if ENABLE_DEBUG
 //static char _packet_stack[GNRC_TCP_FREEBSD_STACK_SIZE + THREAD_EXTRA_STACKSIZE_PRINTF];
 static char _timer_stack[GNRC_TCP_FREEBSD_STACK_SIZE + THREAD_EXTRA_STACKSIZE_PRINTF];
@@ -588,9 +588,13 @@ otMessage* new_message(void)
     return message;
 }
 
+void free_message(otMessage* pkt) {
+    otMessageFree(pkt);
+}
+
 void send_message(otMessage* pkt, otMessageInfo* info)
 {
-    //DEBUG("Sending TCP message: %d, payload_size = %d\n", pkt->type, pkt->next->next == NULL ? 0 : pkt->next->next->size);
+    DEBUG("Sending TCP message: %p %p, payload_size = %d\n", pkt, info, otMessageGetLength(pkt));
     otInstance* instance = openthread_get_instance();
     otIp6SendAsTransport(instance, pkt, info, 6);
 }

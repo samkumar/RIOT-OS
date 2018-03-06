@@ -588,7 +588,10 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
     if (message == NULL) {
         return;
     }
-    otMessageSetLength(message, sizeof(struct tcphdr));
+    if (otMessageSetLength(message, sizeof(struct tcphdr)) != OT_ERROR_NONE) {
+        free_message(message);
+        return;
+    }
 
     struct tcphdr th;
     struct tcphdr* nth = &th;

@@ -85,9 +85,14 @@ mutex_t* openthread_get_radio_mutex(void) {
     return &radio_mutex;
 }
 
-/* get Openthread buffer mutex */
-mutex_t* openthread_get_buffer_mutex(void) {
-    return &buffer_mutex;
+/* lock Openthread buffer mutex */
+void openthread_lock_buffer_mutex(void) {
+    mutex_lock(&buffer_mutex);
+}
+
+/* unlock Openthread buffer mutex */
+void openthread_unlock_buffer_mutex(void) {
+    mutex_unlock(&buffer_mutex);
 }
 
 /* get OpenThread netdev */

@@ -27,7 +27,7 @@
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
-#define OPENTHREAD_TASK_QUEUE_LEN      (3)
+#define OPENTHREAD_TASK_QUEUE_LEN      (4)
 static msg_t _queue[OPENTHREAD_TASK_QUEUE_LEN];
 static kernel_pid_t _task_pid;
 
@@ -36,7 +36,7 @@ kernel_pid_t openthread_get_task_pid(void) {
     return _task_pid;
 }
 
-/* OpenThread Task Thread 
+/* OpenThread Task Thread
  * OpenThread posts tasks when sending a packet. This task thread processes these tasks,
  * pre-processing a packet, moving it to the radio queue and triggering a radio transmission.
  * When a transmission is completed, this event is reported to Event Thread.
@@ -45,7 +45,7 @@ kernel_pid_t openthread_get_task_pid(void) {
  * is preempted by OpenThread (Pre)Event Thread.
  *
  * The msg_queue size of this thread can be bounded by '1' since it receives a message from
- * OpenThread Event Thread only when the tasklet's state switches from empty to non-empty. 
+ * OpenThread Event Thread only when the tasklet's state switches from empty to non-empty.
 **/
 static void *_openthread_task_thread(void *arg) {
     _task_pid = thread_getpid();
@@ -82,6 +82,10 @@ static void *_openthread_task_thread(void *arg) {
                 openthread_get_netdev()->driver->isr(openthread_get_netdev());
                 mutex_unlock(openthread_get_radio_mutex());
                 break;
+            case OPENTHREAD_TX_FAIL_RADIO_BUSY:
+                DEBUG("\not_event: OPENTHREAD_TX_FAIL_RADIO_BUSY\n");
+                sent_pkt(openthread_get_instance(), NETDEV_EVENT_TX_MEDIUM_BUSY);
+                break;
         }
         while(otTaskletsArePending(openthread_get_instance())) {
 #ifdef MODULE_OPENTHREAD_FTD
@@ -90,7 +94,7 @@ static void *_openthread_task_thread(void *arg) {
 #endif
             //mutex_lock(openthread_get_buffer_mutex());
             otTaskletsProcess(openthread_get_instance());
-            //mutex_unlock(openthread_get_buffer_mutex());    
+            //mutex_unlock(openthread_get_buffer_mutex());
         }
 
         /* Stack overflow check */

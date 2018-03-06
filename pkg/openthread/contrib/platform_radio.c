@@ -258,7 +258,7 @@ otError otPlatRadioGetTransmitPower(otInstance *aInstance, int8_t *aPower)
     int16_t power = 0;
     _get_power(&power);
     *aPower = (int8_t) power;
-    
+
     return OT_ERROR_NONE;
 }
 
@@ -282,29 +282,27 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
     }
     DEBUG("\n");*/
 
-    int success = -1;
-    while(1) {
-        mutex_lock(openthread_get_radio_mutex());
-        printf("try->");
-        //_set_channel(aPacket->mChannel);
-        /* send packet though netdev */
-        success = _dev->driver->send(_dev, &pkt, 1);
-        printf("done %d\n", success);
-        if (success == -1) {
-            /* Fail to send since the transceiver is busy (receiving).
-             * Retry in a little bit. 
-             */
-            if (_get_state() != NETOPT_STATE_RX) {
-                _set_idle();
-            }
-            mutex_unlock(openthread_get_radio_mutex());
-            xtimer_usleep(1000+rand()%4000);
-        } else {
-            /* Succeed in sending */
-            mutex_unlock(openthread_get_radio_mutex());
-            break;
+    mutex_lock(openthread_get_radio_mutex());
+    //printf("try->");
+    //_set_channel(aPacket->mChannel);
+    /* send packet though netdev */
+    int success = _dev->driver->send(_dev, &pkt, 1);
+    //printf("done %d\n", success);
+    if (success == -1) {
+        /* Fail to send since the transceiver is busy (receiving).
+         * Retry in a little bit.
+         */
+        if (_get_state() != NETOPT_STATE_RX) {
+            _set_idle();
         }
+
+        msg_t fail_msg;
+        fail_msg.type = OPENTHREAD_TX_FAIL_RADIO_BUSY;
+        success = msg_send_to_self(&fail_msg);
+        assert(success == 1);
     }
+
+    mutex_unlock(openthread_get_radio_mutex());
 
     return OT_ERROR_NONE;
 }
@@ -409,7 +407,7 @@ otError otPlatRadioClearSrcMatchExtEntry(otInstance *aInstance, const otExtAddre
 /* OpenThread will call this to clear indirect transmission list */
 void otPlatRadioClearSrcMatchShortEntries(otInstance *aInstance)
 {
-    DEBUG("otPlatRadioClearSrcMatchShortEntries\n");    
+    DEBUG("otPlatRadioClearSrcMatchShortEntries\n");
     (void)aInstance;
     short_address_list = 0;
     if (ext_address_list == 0 && short_address_list == 0) {
@@ -426,7 +424,7 @@ void otPlatRadioClearSrcMatchExtEntries(otInstance *aInstance)
     ext_address_list = 0;
     if (ext_address_list == 0 && short_address_list == 0) {
         bool pending = false;
-        _dev->driver->set(_dev, NETOPT_ACK_PENDING, &pending, sizeof(bool)); 
+        _dev->driver->set(_dev, NETOPT_ACK_PENDING, &pending, sizeof(bool));
     }
 }
 
@@ -471,10 +469,7 @@ static inline void _create_fake_ack_frame(bool ackPending)
 /* Called upon TX event */
 void sent_pkt(otInstance *aInstance, netdev_event_t event)
 {
-    if (event == NETDEV_EVENT_TX_NOACK) {
-        xtimer_usleep(100000);
-    }
-    mutex_lock(openthread_get_buffer_mutex());
+    //mutex_lock(openthread_get_buffer_mutex());
     /* Tell OpenThread transmission is done depending on the NETDEV event */
     switch (event) {
         case NETDEV_EVENT_TX_COMPLETE:
@@ -498,7 +493,7 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
         default:
             break;
     }
-    mutex_unlock(openthread_get_buffer_mutex());
+    //mutex_unlock(openthread_get_buffer_mutex());
 }
 
 /* Called upon NETDEV_EVENT_RX_COMPLETE event */
@@ -511,7 +506,7 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
     int len = dev->driver->recv(dev, NULL, 0, NULL);
 
     /* very unlikely */
-    if ((len > (unsigned) UINT16_MAX)) {    
+    if ((len > (unsigned) UINT16_MAX)) {
         DEBUG("Len too high: %d\n", len);
         res = -1;
         goto exit;
@@ -521,7 +516,7 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
     /* Openthread needs a packet length with FCS included,
      * OpenThread do not use the data so we don't need to calculate FCS */
     sReceiveFrame.mLength = len + RADIO_IEEE802154_FCS_LEN;
-    
+
     /* Read received frame */
     res = dev->driver->recv(dev, (char *) sReceiveFrame.mPsdu, len, &rx_info);
 
@@ -532,14 +527,14 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
 #endif
     sReceiveFrame.mRssi = Rssi;
 
-    DEBUG("\nRX: len %d, rssi %d\n", (int) sReceiveFrame.mLength, sReceiveFrame.mRssi);
+    //DEBUG("\nRX: len %d, rssi %d\n", (int) sReceiveFrame.mLength, sReceiveFrame.mRssi);
     /*for (int i = 0; i < sReceiveFrame.mLength; ++i) {
         DEBUG("%x ", sReceiveFrame.mPsdu[i]);
     }
     DEBUG("\n");*/
 exit:
-    mutex_lock(openthread_get_buffer_mutex());
-    otPlatRadioReceiveDone(aInstance, res > 0 ? &sReceiveFrame : NULL, 
+    //mutex_lock(openthread_get_buffer_mutex());
+    otPlatRadioReceiveDone(aInstance, res > 0 ? &sReceiveFrame : NULL,
                            res > 0 ? OT_ERROR_NONE : OT_ERROR_ABORT);
-    mutex_unlock(openthread_get_buffer_mutex()); 
+    //mutex_unlock(openthread_get_buffer_mutex());
 }

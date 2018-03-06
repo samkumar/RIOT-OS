@@ -103,9 +103,9 @@ void xtimer_init(void)
 static uint32_t _stimer_diff(uint32_t prev, uint32_t now) {
     if (now >= prev) {
         return now - prev;
-    } else { 
+    } else {
         return (0xFFFFFFFF-prev) + now;
-    }	
+    }
 }
 #endif
 

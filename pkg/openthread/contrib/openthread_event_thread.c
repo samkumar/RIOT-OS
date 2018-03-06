@@ -64,7 +64,7 @@ void otTaskletsSignalPending(otInstance *aInstance) {
         otTaskPending = true;
         msg_t msg;
         msg.type = OPENTHREAD_TASK_MSG_TYPE_EVENT;
-        msg_try_send(&msg, openthread_get_task_pid()); 
+        msg_try_send(&msg, openthread_get_task_pid());
     /* 2) Triggered in OpenThread Task Thread: do nothing */
     } else if (thread_getpid() == openthread_get_task_pid()) {
         ;
@@ -72,14 +72,14 @@ void otTaskletsSignalPending(otInstance *aInstance) {
     } else {
         msg_t msg;
         msg.type = OPENTHREAD_TASK_MSG_TYPE_EVENT;
-        msg_send(&msg, openthread_get_task_pid());        
+        msg_send(&msg, openthread_get_task_pid());
     }
 }
 
-/* OpenThread Event Thread 
+/* OpenThread Event Thread
  * This thread processes all events by calling proper functions of OpenThread.
  * Given that processing interrupts is more urgent than processing posted tasks, this thread
- * preempts OpenThread Task Thread. It is preempted by OpenThread Preevent Thread. 
+ * preempts OpenThread Task Thread. It is preempted by OpenThread Preevent Thread.
 **/
 static void *_openthread_event_thread(void *arg) {
     _event_pid = thread_getpid();
@@ -97,7 +97,7 @@ static void *_openthread_event_thread(void *arg) {
     /* Init OpenThread instance */
     sInstance = otInstanceInitSingle();
     DEBUG("OT-instance setting is OK\n");
-    
+
     /* Init default parameters */
     otPanId panid = OPENTHREAD_PANID;
     uint8_t channel = OPENTHREAD_CHANNEL;
@@ -146,9 +146,9 @@ static void *_openthread_event_thread(void *arg) {
             case OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT:
                 /* Tell OpenThread a millisec time event was received */
                 DEBUG("\not_event: OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT received\n");
-                mutex_lock(openthread_get_buffer_mutex());
+                //mutex_lock(openthread_get_buffer_mutex());
                 otPlatAlarmMilliFired(sInstance);
-                mutex_unlock(openthread_get_buffer_mutex());
+                //mutex_unlock(openthread_get_buffer_mutex());
                 break;
             case OPENTHREAD_SERIAL_MSG_TYPE_EVENT:
                 /* Tell OpenThread about the reception of a CLI command */
@@ -167,12 +167,12 @@ static void *_openthread_event_thread(void *arg) {
                 msg_reply(&msg, &reply);
                 break;
         }
-        
+
         /* Execute this just in case a timer event is missed */
-        mutex_lock(openthread_get_buffer_mutex());
+        //mutex_lock(openthread_get_buffer_mutex());
         otPlatAlarmMilliFired(sInstance);
-        mutex_unlock(openthread_get_buffer_mutex());
-             
+        //mutex_unlock(openthread_get_buffer_mutex());
+
         /* Stack overflow check */
         openthread_event_thread_overflow_check();
     }

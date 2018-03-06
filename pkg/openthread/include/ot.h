@@ -47,6 +47,8 @@ extern "C" {
 #define OPENTHREAD_SERIAL_MSG_TYPE_EVENT                    (0x2238)
 /**< event for frame reception and transmission complete */
 #define OPENTHREAD_NETDEV_MSG_TYPE_EVENT                    (0x2239)
+/**< event for frame transmission failure (radio busy) */
+#define OPENTHREAD_TX_FAIL_RADIO_BUSY                       (0x223A)
 /**< event indicating an OT_JOB message */
 #define OPENTHREAD_JOB_MSG_TYPE_EVENT                       (0x2241)
 /**< number of serial reception buffer */
@@ -213,18 +215,21 @@ xtimer_t* openthread_get_microtimer(void);
 netdev_t* openthread_get_netdev(void);
 
 /**
- * @brief   get buffer mutex of OpenThread.
+ * @brief   get radio mutex of OpenThread.
  *
  * @return  mutex for OpenThread buffer
  */
 mutex_t* openthread_get_radio_mutex(void);
 
 /**
- * @brief   get radio mutex of OpenThread.
- *
- * @return  mutex for OpenThread radio
+ * @brief   lock buffer mutex of OpenThread.
  */
-mutex_t* openthread_get_buffer_mutex(void);
+void openthread_lock_buffer_mutex(void);
+
+/**
+ * @brief   unlock buffer mutex of OpenThread.
+ */
+void openthread_unlock_buffer_mutex(void);
 
 void openthread_event_thread_overflow_check(void);
 void openthread_preevent_thread_overflow_check(void);
