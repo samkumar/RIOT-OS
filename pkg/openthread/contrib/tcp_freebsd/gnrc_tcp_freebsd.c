@@ -76,11 +76,11 @@ struct task tcp_timers[GNRC_TCP_FREEBSD_NUM_TIMERS];
 /**
  * @brief   Allocate memory for the TCP thread's stack
  */
-#define GNRC_TCP_FREEBSD_STACK_SIZE 2048
+#define GNRC_TCP_FREEBSD_STACK_SIZE 1024
 #define GNRC_TCP_FREEBSD_PRIO 14
 #if ENABLE_DEBUG
 //static char _packet_stack[GNRC_TCP_FREEBSD_STACK_SIZE + THREAD_EXTRA_STACKSIZE_PRINTF];
-static char _timer_stack[GNRC_TCP_FREEBSD_STACK_SIZE + THREAD_EXTRA_STACKSIZE_PRINTF];
+static char _timer_stack[GNRC_TCP_FREEBSD_STACK_SIZE/* + THREAD_EXTRA_STACKSIZE_PRINTF*/];
 #else
 //static char _packet_stack[GNRC_TCP_FREEBSD_STACK_SIZE];
 static char _timer_stack[GNRC_TCP_FREEBSD_STACK_SIZE];
@@ -211,7 +211,7 @@ bool accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struc
  * @brief   Called when a TCP segment is received and passed up from the IPv6
  *          layer.
  */
-void tcp_freebsd_receive(void* iphdr, otMessage* message)
+void tcp_freebsd_receive(void* iphdr, otMessage* message, otMessageInfo* info)
 {
     //gnrc_pktsnip_t* tcp;
     //gnrc_pktsnip_t* ipv6;
@@ -254,13 +254,16 @@ void tcp_freebsd_receive(void* iphdr, otMessage* message)
     }
     otMessageRead(message, otMessageGetOffset(message) + sizeof(struct tcphdr), th + 1, (th->th_off << 2) - sizeof(struct tcphdr));
 
-    // TODO: Figure out how checksums should work
-    /*const gnrc_pktsnip_t* snips[2] = { tcp, NULL };
-    uint16_t csum = get_tcp_checksum(ipv6, snips);
+    struct tcp_checksum_state cksum_state;
+    cksum_state.partial_sum = (uint32_t) otMessageChecksum(0x0000u, message);
+    cksum_state.half_read = false;
+    tcp_checksum_pseudoheader(&cksum_state, info, empirical_len);
+    uint16_t csum = tcp_checksum_finalize(&cksum_state);
+    printf("Pseudoheader checksum is %x\n", csum);
     if (csum != 0) {
         DEBUG("Dropping packet: bad checksum (%" PRIu16 ")\n", csum);
         goto done;
-    }*/
+    }
 
     sport = th->th_sport; // network byte order
     dport = th->th_dport; // network byte order
@@ -597,6 +600,14 @@ void send_message(otMessage* pkt, otMessageInfo* info)
     DEBUG("Sending TCP message: %p %p, payload_size = %d\n", pkt, info, otMessageGetLength(pkt));
     otInstance* instance = openthread_get_instance();
     otIp6SendAsTransport(instance, pkt, info, 6);
+}
+
+void tcp_freebsd_finalize_cksum(otMessage* pkt, uint16_t pseudoheader_cksum) {
+    uint16_t cksum = otMessageChecksum(0x0000u, pkt);
+    uint32_t sum = ((uint32_t) cksum) + ((uint32_t) pseudoheader_cksum);
+    cksum = ((uint16_t) sum) + (uint16_t) (sum >> 16);
+    cksum = ~htons(cksum);
+    otMessageWrite(pkt, otMessageGetOffset(pkt) + 16, &cksum, 2);
 }
 
 uint32_t get_millis(void)

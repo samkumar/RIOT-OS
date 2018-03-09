@@ -29,6 +29,56 @@ inline uint16_t deref_safe(uint16_t* unaligned) {
     return ((uint16_t) *((uint8_t*) unaligned))
         | (((uint16_t) *(((uint8_t*) unaligned) + 1)) << 8);
 }
+
+void tcp_checksum(struct tcp_checksum_state* state, void* buf, size_t len) {
+    uint16_t* current = (uint16_t*) buf;
+    uint16_t* end;
+    if (state->half_read && len > 0) {
+        state->partial_sum += ((uint32_t) *((uint8_t*) current)) << 8;
+        current = (uint16_t*) (((uint8_t*) current) + 1);
+        len -= 1;
+    }
+    if (len & 0x1u) {
+        // This iovec does not end on a half-word boundary
+        end = (uint16_t*) (((uint8_t*) current) + len - 1);
+        state->partial_sum += *((uint8_t*) end);
+        state->half_read = true;
+    } else {
+        // This iovec ends on a half-word boundary
+        end = (uint16_t*) (((uint8_t*) current) + len);
+        state->half_read = false;
+    }
+    while (current != end) {
+        // read the memory byte by byte, in case iovec isn't word-aligned
+        state->partial_sum += deref_safe(current++);
+    }
+}
+
+void tcp_checksum_pseudoheader(struct tcp_checksum_state* state, otMessageInfo* info, uint16_t payload_len) {
+    uint16_t* current;
+
+    for (current = (uint16_t*) &info->mSockAddr;
+         current != (uint16_t*) (&info->mSockAddr + 1); current++) {
+        state->partial_sum += (uint32_t) htons(*current);
+    }
+
+    for (current = (uint16_t*) &info->mPeerAddr;
+         current != (uint16_t*) (&info->mPeerAddr + 1); current++) {
+        state->partial_sum += (uint32_t) htons(*current);
+    }
+
+    state->partial_sum += payload_len;
+
+    state->partial_sum += 6; // TCP
+}
+
+uint16_t tcp_checksum_finalize(struct tcp_checksum_state* state) {
+    uint32_t cksum = state->partial_sum;
+    while ((cksum >> 16) != 0) {
+        cksum = (cksum & 0xFFFF) + (cksum >> 16);
+    }
+    return ~((uint16_t) cksum);
+}
 #if 0
 int gnrc_tcp_calc_csum(const gnrc_pktsnip_t *hdr, const gnrc_pktsnip_t *pseudo_hdr)
 {

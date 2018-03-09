@@ -74,6 +74,19 @@ struct ip6_packet {
 int gnrc_tcp_freebsd_init(void);
 
 /*
+ * Structure and functions for TCP checksum.
+ */
+struct tcp_checksum_state {
+    uint32_t partial_sum;
+    bool half_read;
+};
+void tcp_checksum(struct tcp_checksum_state* state, void* buf, size_t len);
+void tcp_checksum_pseudoheader(struct tcp_checksum_state* state, otMessageInfo* info, uint16_t payload_len);
+uint16_t tcp_checksum_finalize(struct tcp_checksum_state* state);
+
+void tcp_freebsd_finalize_cksum(otMessage* pkt, uint16_t pseudoheader_cksum);
+
+/*
  * Functions that the TCP protocol logic can call to interact with the rest of
  * the kernel.
  */

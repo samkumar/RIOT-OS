@@ -31,7 +31,7 @@ enum tcp_input_consts {
     tcprexmtthresh = 3,
     V_drop_synfin = 0,
     V_tcp_do_ecn = 0,
-    V_tcp_do_rfc3042 = 0,
+    V_tcp_do_rfc3042 = 1,
     V_path_mtu_discovery = 0,
     V_tcp_delack_enabled = 1,
     V_tcp_initcwnd_segments = 0,
