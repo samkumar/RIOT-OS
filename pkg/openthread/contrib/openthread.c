@@ -48,6 +48,7 @@ static at86rf2xx_t at86rf2xx_dev;
 
 static mutex_t radio_mutex = MUTEX_INIT;
 static mutex_t buffer_mutex = MUTEX_INIT;
+static mutex_t coarse_mutex = MUTEX_INIT;
 
 static char ot_task_thread_stack[THREAD_STACKSIZE_MAIN+4];
 static char ot_event_thread_stack[THREAD_STACKSIZE_MAIN+1000+4];
@@ -95,6 +96,16 @@ void openthread_unlock_buffer_mutex(void) {
     mutex_unlock(&buffer_mutex);
 }
 
+/* lock Openthread coarse mutex */
+void openthread_lock_coarse_mutex(void) {
+    mutex_lock(&coarse_mutex);
+}
+
+/* unlock Openthread coarse mutex */
+void openthread_unlock_coarse_mutex(void) {
+    mutex_unlock(&coarse_mutex);
+}
+
 /* get OpenThread netdev */
 netdev_t* openthread_get_netdev(void) {
     return (netdev_t*) &at86rf2xx_dev;
@@ -133,6 +144,7 @@ static void _microtimer_cb(void* arg) {
 #endif
 
 /* Interupt handler for OpenThread event thread */
+/* NOTE: the coarse_mutex must be held by the _caller_ of this function. */
 static void _event_cb(netdev_t *dev, netdev_event_t event) {
     switch (event) {
         case NETDEV_EVENT_ISR:

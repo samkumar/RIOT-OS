@@ -467,9 +467,9 @@ static inline void _create_fake_ack_frame(bool ackPending)
 }
 
 /* Called upon TX event */
+/* NOTE: the coarse_mutex must be held by the _caller_ of this function. */
 void sent_pkt(otInstance *aInstance, netdev_event_t event)
 {
-    //mutex_lock(openthread_get_buffer_mutex());
     /* Tell OpenThread transmission is done depending on the NETDEV event */
     switch (event) {
         case NETDEV_EVENT_TX_COMPLETE:
@@ -493,10 +493,10 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
         default:
             break;
     }
-    //mutex_unlock(openthread_get_buffer_mutex());
 }
 
 /* Called upon NETDEV_EVENT_RX_COMPLETE event */
+/* NOTE: the coarse_mutex must be held by the _caller_ of this function. */
 void recv_pkt(otInstance *aInstance, netdev_t *dev)
 {
     netdev_ieee802154_rx_info_t rx_info;
@@ -533,8 +533,6 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
     }
     DEBUG("\n");*/
 exit:
-    //mutex_lock(openthread_get_buffer_mutex());
     otPlatRadioReceiveDone(aInstance, res > 0 ? &sReceiveFrame : NULL,
                            res > 0 ? OT_ERROR_NONE : OT_ERROR_ABORT);
-    //mutex_unlock(openthread_get_buffer_mutex());
 }

@@ -57,6 +57,7 @@ static void *_openthread_task_thread(void *arg) {
 
     while (1) {
         msg_receive(&msg);
+        openthread_lock_coarse_mutex();
 //printf("\not_task start\n");
         switch (msg.type) {
             case OPENTHREAD_TASK_MSG_TYPE_EVENT:
@@ -92,10 +93,9 @@ static void *_openthread_task_thread(void *arg) {
             /* Call this function just in case a timer event is missed */
             otPlatAlarmMicroFired(openthread_get_instance());
 #endif
-            //mutex_lock(openthread_get_buffer_mutex());
             otTaskletsProcess(openthread_get_instance());
-            //mutex_unlock(openthread_get_buffer_mutex());
         }
+        openthread_unlock_coarse_mutex();
 
         /* Stack overflow check */
         openthread_task_thread_overflow_check();

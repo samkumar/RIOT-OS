@@ -129,6 +129,7 @@ static void *_openthread_event_thread(void *arg) {
     while (1) {
         msg_receive(&msg);
         //printf("\not_event start\n");
+        openthread_lock_coarse_mutex();
         switch (msg.type) {
             case OPENTHREAD_NETDEV_MSG_TYPE_EVENT:
                 /* Received an event from radio driver */
@@ -146,18 +147,14 @@ static void *_openthread_event_thread(void *arg) {
             case OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT:
                 /* Tell OpenThread a millisec time event was received */
                 DEBUG("\not_event: OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT received\n");
-                //mutex_lock(openthread_get_buffer_mutex());
                 otPlatAlarmMilliFired(sInstance);
-                //mutex_unlock(openthread_get_buffer_mutex());
                 break;
             case OPENTHREAD_SERIAL_MSG_TYPE_EVENT:
                 /* Tell OpenThread about the reception of a CLI command */
                 DEBUG("\not_event: OPENTHREAD_SERIAL_MSG_TYPE received\n");
                 serialBuffer = (serial_msg_t*)msg.content.ptr;
                 DEBUG("%s", serialBuffer->buf);
-                //mutex_lock(openthread_get_buffer_mutex());
                 otPlatUartReceived((uint8_t*) serialBuffer->buf,serialBuffer->length);
-                //mutex_unlock(openthread_get_buffer_mutex());
                 serialBuffer->serial_buffer_status = OPENTHREAD_SERIAL_BUFFER_STATUS_FREE;
                 break;
             case OPENTHREAD_JOB_MSG_TYPE_EVENT:
@@ -169,9 +166,8 @@ static void *_openthread_event_thread(void *arg) {
         }
 
         /* Execute this just in case a timer event is missed */
-        //mutex_lock(openthread_get_buffer_mutex());
         otPlatAlarmMilliFired(sInstance);
-        //mutex_unlock(openthread_get_buffer_mutex());
+        openthread_unlock_coarse_mutex();
 
         /* Stack overflow check */
         openthread_event_thread_overflow_check();

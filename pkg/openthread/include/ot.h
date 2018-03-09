@@ -231,6 +231,16 @@ void openthread_lock_buffer_mutex(void);
  */
 void openthread_unlock_buffer_mutex(void);
 
+/**
+ * @brief   lock coarse mutex of OpenThread.
+ */
+void openthread_lock_coarse_mutex(void);
+
+/**
+ * @brief   unlock coarse mutex of OpenThread.
+ */
+void openthread_unlock_coarse_mutex(void);
+
 void openthread_event_thread_overflow_check(void);
 void openthread_preevent_thread_overflow_check(void);
 void openthread_task_thread_overflow_check(void);
