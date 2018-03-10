@@ -252,7 +252,7 @@ void openthread_bootstrap(void)
     DEBUG("OT-UART setting is OK\n");
 
     /* init FreeBSD TCP module */
-    gnrc_tcp_freebsd_init();
+    //gnrc_tcp_freebsd_init();
 
     /* init three threads for openthread */
     openthread_preevent_init(ot_preevent_thread_stack, sizeof(ot_preevent_thread_stack),
