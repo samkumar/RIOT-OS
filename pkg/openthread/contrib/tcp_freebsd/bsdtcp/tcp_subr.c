@@ -626,6 +626,7 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
 	else
 		nth->th_win = htons((u_short)win);
 	nth->th_urp = 0;
+    nth->th_sum = 0;
 
     otMessageWrite(message, 0, &th, sizeof(struct tcphdr));
 

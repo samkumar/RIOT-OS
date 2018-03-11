@@ -219,6 +219,7 @@ again:
 		long cwin;
 
 		cwin = min(tp->snd_wnd, tp->snd_cwnd) - sack_bytes_rxmt;
+		printf("snd_cwnd = %d\n", (int) tp->snd_cwnd);
 		if (cwin < 0)
 			cwin = 0;
 		/* Do not retransmit SACK segments beyond snd_recover */
@@ -1069,10 +1070,14 @@ memsendfail:
 
 	otMessage* message = new_message();
 	if (message == NULL) {
+		error = ENOBUFS;
+		sack_rxmit = 0;
 		goto out;
 	}
 	if (otMessageSetLength(message, sizeof(struct tcphdr) + optlen + len) != OT_ERROR_NONE) {
 		free_message(message);
+		error = ENOBUFS;
+		sack_rxmit = 0;
 		goto out;
 	}
 	if (len) {

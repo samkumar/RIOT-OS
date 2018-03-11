@@ -48,7 +48,7 @@
 
 #include "mutex.h"
 
-#define ENABLE_DEBUG    (1)
+#define ENABLE_DEBUG    (0)
 #include "debug.h"
 
 #define SUCCESS 0
@@ -259,7 +259,6 @@ void tcp_freebsd_receive(void* iphdr, otMessage* message, otMessageInfo* info)
     cksum_state.half_read = false;
     tcp_checksum_pseudoheader(&cksum_state, info, empirical_len);
     uint16_t csum = tcp_checksum_finalize(&cksum_state);
-    printf("Pseudoheader checksum is %x\n", csum);
     if (csum != 0) {
         DEBUG("Dropping packet: bad checksum (%" PRIu16 ")\n", csum);
         goto done;
@@ -587,7 +586,10 @@ error_t asock_abort_impl(int asockid)
 otMessage* new_message(void)
 {
     otInstance* instance = openthread_get_instance();
-    otMessage* message = otIp6NewMessageForTransport(instance, false);
+    otMessage* message = otIp6NewMessageForTransport(instance, true);
+    if (message == NULL) {
+        printf("Message allocation failed for TCP\n");
+    }
     return message;
 }
 

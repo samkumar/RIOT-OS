@@ -160,6 +160,7 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 	nth->th_flags = flags;
 	nth->th_win = htons(tp->tw_last_win);
 	nth->th_urp = 0;
+    nth->th_sum = 0;
 
 	memcpy(nth + 1, opt, optlen);
     otMessageWrite(message, 0, outbuf, sizeof(struct tcphdr) + optlen);
