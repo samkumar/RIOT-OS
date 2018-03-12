@@ -76,7 +76,7 @@ static void *_openthread_task_thread(void *arg) {
             case OPENTHREAD_NETDEV_MSG_TYPE_EVENT:
                 /* Received an event from radio driver */
                 DEBUG("\not_event: OPENTHREAD_NETDEV_MSG_TYPE_EVENT received\n");
-                printf("\nfin->");
+                //printf("\nfin->");
                 //msg.type = OPENTHREAD_NETDEV_MSG_TYPE_EVENT;
                 //msg_send(&msg, openthread_get_event_pid());
                 mutex_lock(openthread_get_radio_mutex());
