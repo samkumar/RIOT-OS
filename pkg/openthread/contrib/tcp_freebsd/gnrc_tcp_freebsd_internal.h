@@ -95,6 +95,7 @@ void free_message(otMessage* pkg);
 void send_message(otMessage* pkt, otMessageInfo* info);
 uint32_t get_ticks(void);
 uint32_t get_millis(void);
+uint64_t get_micros(void);
 void set_timer(struct tcpcb* tcb, uint8_t timer_id, uint32_t delay);
 void stop_timer(struct tcpcb* tcb, uint8_t timer_id);
 struct tcpcb* accept_ready(struct tcpcb_listen* tpl);

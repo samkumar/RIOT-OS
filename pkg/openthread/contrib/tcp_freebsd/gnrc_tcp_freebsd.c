@@ -207,6 +207,9 @@ bool accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struc
     return accepted_successfully;
 }
 
+int sent_pkts = 0;
+int recv_pkts = 0;
+
 /**
  * @brief   Called when a TCP segment is received and passed up from the IPv6
  *          layer.
@@ -263,6 +266,8 @@ void tcp_freebsd_receive(void* iphdr, otMessage* message, otMessageInfo* info)
         DEBUG("Dropping packet: bad checksum (%" PRIu16 ")\n", csum);
         goto done;
     }
+
+    recv_pkts++;
 
     sport = th->th_sport; // network byte order
     dport = th->th_dport; // network byte order
@@ -586,7 +591,7 @@ error_t asock_abort_impl(int asockid)
 otMessage* new_message(void)
 {
     otInstance* instance = openthread_get_instance();
-    otMessage* message = otIp6NewMessageForTransport(instance, true);
+    otMessage* message = otIp6NewMessageForTransport(instance, false);
     if (message == NULL) {
         printf("Message allocation failed for TCP\n");
     }
@@ -600,6 +605,7 @@ void free_message(otMessage* pkt) {
 void send_message(otMessage* pkt, otMessageInfo* info)
 {
     DEBUG("Sending TCP message: %p %p, payload_size = %d\n", pkt, info, otMessageGetLength(pkt));
+    sent_pkts++;
     otInstance* instance = openthread_get_instance();
     otIp6SendAsTransport(instance, pkt, info, 6);
 }
@@ -610,6 +616,11 @@ void tcp_freebsd_finalize_cksum(otMessage* pkt, uint16_t pseudoheader_cksum) {
     cksum = ((uint16_t) sum) + (uint16_t) (sum >> 16);
     cksum = ~htons(cksum);
     otMessageWrite(pkt, otMessageGetOffset(pkt) + 16, &cksum, 2);
+}
+
+uint64_t get_micros(void)
+{
+    return xtimer_now_usec64();
 }
 
 uint32_t get_millis(void)

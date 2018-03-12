@@ -88,6 +88,8 @@
 
 #include "tcp_const.h"
 
+#include "xtimer.h"
+
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
@@ -214,6 +216,8 @@ cc_conn_init(struct tcpcb *tp)
 
 	if (CC_ALGO(tp)->conn_init != NULL)
 		CC_ALGO(tp)->conn_init(tp->ccv);
+
+    printf("CC_INIT: time = %llu, cwnd = %d, ssthresh =  %d\n", xtimer_now_usec64(), (int) tp->snd_cwnd, (int) tp->snd_ssthresh);
 }
 
 void inline
@@ -244,6 +248,7 @@ cc_cong_signal(struct tcpcb *tp, struct tcphdr *th, uint32_t type)
 		tp->snd_ssthresh = max(2, min(tp->snd_wnd, tp->snd_cwnd) / 2 /
 		    tp->t_maxseg) * tp->t_maxseg;
 		tp->snd_cwnd = tp->t_maxseg;
+        printf("CC_RTO: time = %llu, cwnd = %d, ssthresh = %d\n", xtimer_now_usec64(), (int) tp->snd_cwnd, (int) tp->snd_ssthresh);
 		break;
 	case CC_RTO_ERR:
 //		TCPSTAT_INC(tcps_sndrexmitbad);
@@ -258,6 +263,7 @@ cc_cong_signal(struct tcpcb *tp, struct tcphdr *th, uint32_t type)
 		tp->snd_nxt = tp->snd_max;
 		tp->t_flags &= ~TF_PREVVALID;
 		tp->t_badrxtwin = 0;
+        printf("CC_RTO_ERR: time = %llu, cwnd = %d, ssthresh = %d\n", xtimer_now_usec64(), (int) tp->snd_cwnd, (int) tp->snd_ssthresh);
 		break;
 	}
 
@@ -2682,6 +2688,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th, otMessage* msg,
 						}
 					} else
 						tp->snd_cwnd += tp->t_maxseg;
+                    printf("DUPACK: ");
 					(void) tcp_output(tp);
 					goto drop;
 				} else if (tp->t_dupacks == tcprexmtthresh) {
@@ -2712,6 +2719,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th, otMessage* msg,
 					tcp_timer_activate(tp, TT_REXMT, 0);
 					tp->t_rtttime = 0;
 
+                    printf("DUPACK_THRESH: ");
 					if (tp->t_flags & TF_SACK_PERMIT) {
 //						TCPSTAT_INC(
 //						    tcps_sack_recovery_episode);
@@ -2730,6 +2738,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th, otMessage* msg,
 					tp->snd_cwnd = tp->snd_ssthresh +
 					     tp->t_maxseg *
 					     (tp->t_dupacks - tp->snd_limited);
+                    printf("SET_cwnd: cwnd = %d\n", (int) tp->snd_cwnd);
 					if (SEQ_GT(onxt, tp->snd_nxt))
 						tp->snd_nxt = onxt;
 					goto drop;
@@ -2751,6 +2760,8 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th, otMessage* msg,
 					cc_ack_received(tp, th, CC_DUPACK);
 					oldcwnd = tp->snd_cwnd;
 					oldsndmax = tp->snd_max;
+
+                    printf("LIM_TRANS: ");
 
 					KASSERT(tp->t_dupacks == 1 ||
 					    tp->t_dupacks == 2,
@@ -2786,6 +2797,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th, otMessage* msg,
 					} else if (sent > 0)
 						++tp->snd_limited;
 					tp->snd_cwnd = oldcwnd;
+                    printf("RESET_cwnd: cwnd = %d\n", (int) tp->snd_cwnd);
 					goto drop;
 				}
 			} else
@@ -3553,6 +3565,8 @@ tcp_xmit_timer(struct tcpcb *tp, int rtt)
 	TCPT_RANGESET(tp->t_rxtcur, TCP_REXMTVAL(tp),
 		      max(tp->t_rttmin, rtt + 2), TCPTV_REXMTMAX);
 
+    printf("TIMER: time = %llu, rtt is %d; srtt = %d, rttvar = %d\n", xtimer_now_usec64(), rtt, (int) tp->t_srtt, (int) tp->t_rttvar);
+
 	/*
 	 * We received an ack for a packet that wasn't retransmitted;
 	 * it is probably safe to discard any error indications we've
@@ -3923,6 +3937,7 @@ tcp_newreno_partial_ack(struct tcpcb *tp, struct tcphdr *th)
 	 */
 	tp->snd_cwnd = tp->t_maxseg + BYTES_THIS_ACK(tp, th);
 	tp->t_flags |= TF_ACKNOW;
+    printf("Partial_ACK: ");
 	(void) tcp_output(tp);
 	tp->snd_cwnd = ocwnd;
 	if (SEQ_GT(onxt, tp->snd_nxt))
@@ -3936,4 +3951,5 @@ tcp_newreno_partial_ack(struct tcpcb *tp, struct tcphdr *th)
 	else
 		tp->snd_cwnd = 0;
 	tp->snd_cwnd += tp->t_maxseg;
+    printf("Partial_ACK_final: snd_cwnd = %d\n", (int) tp->snd_cwnd);
 }

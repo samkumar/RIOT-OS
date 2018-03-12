@@ -51,6 +51,8 @@
 #include <openthread/types.h>
 #include <openthread/message.h>
 
+#include "xtimer.h"
+
 // From ip_compat.h
 #define	bcopy(a,b,c)	memmove(b,a,c)
 
@@ -198,6 +200,7 @@ again:
 	mtu = 0;
 	off = tp->snd_nxt - tp->snd_una;
 	sendwin = min(tp->snd_wnd, tp->snd_cwnd);
+	printf("time = %llu, snd_wnd = %d, snd_cwnd = %d\n", xtimer_now_usec64(), (int) tp->snd_wnd, (int) tp->snd_cwnd);
 
 	flags = tcp_outflags[tp->t_state];
 	/*
@@ -219,7 +222,6 @@ again:
 		long cwin;
 
 		cwin = min(tp->snd_wnd, tp->snd_cwnd) - sack_bytes_rxmt;
-		printf("snd_cwnd = %d\n", (int) tp->snd_cwnd);
 		if (cwin < 0)
 			cwin = 0;
 		/* Do not retransmit SACK segments beyond snd_recover */
