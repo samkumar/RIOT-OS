@@ -51,8 +51,6 @@
 #include <openthread/types.h>
 #include <openthread/message.h>
 
-#include "xtimer.h"
-
 // From ip_compat.h
 #define	bcopy(a,b,c)	memmove(b,a,c)
 
@@ -200,7 +198,9 @@ again:
 	mtu = 0;
 	off = tp->snd_nxt - tp->snd_una;
 	sendwin = min(tp->snd_wnd, tp->snd_cwnd);
-	printf("time = %llu, snd_wnd = %d, snd_cwnd = %d\n", xtimer_now_usec64(), (int) tp->snd_wnd, (int) tp->snd_cwnd);
+#ifdef INSTRUMENT_TCP
+	printf("TCP output %u %d %d\n", (unsigned int) get_micros(), (int) tp->snd_wnd, (int) tp->snd_cwnd);
+#endif
 
 	flags = tcp_outflags[tp->t_state];
 	/*
