@@ -484,6 +484,11 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
             break;
         case NETDEV_EVENT_TX_NOACK:
             DEBUG("TX_NOACK\n");
+#ifdef OPENTHREAD_CONFIG_LINK_RETRY_DELAY
+            openthread_unlock_coarse_mutex();
+            xtimer_usleep(OPENTHREAD_CONFIG_LINK_RETRY_DELAY);
+            openthread_lock_coarse_mutex();
+#endif
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_NO_ACK);
             break;
         case NETDEV_EVENT_TX_MEDIUM_BUSY:

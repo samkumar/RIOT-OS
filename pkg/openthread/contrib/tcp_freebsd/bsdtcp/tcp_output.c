@@ -182,6 +182,11 @@ tcp_output(struct tcpcb *tp)
 			idle = 0;
 		}
 	}
+	// This is printed once per _window_ that is transmitted
+#ifdef INSTRUMENT_TCP
+	printf("TCP output %u %d %d\n", (unsigned int) get_micros(), (int) tp->snd_wnd, (int) tp->snd_cwnd);
+#endif
+
 again:
 	/*
 	 * If we've recently taken a timeout, snd_max will be greater than
@@ -198,9 +203,6 @@ again:
 	mtu = 0;
 	off = tp->snd_nxt - tp->snd_una;
 	sendwin = min(tp->snd_wnd, tp->snd_cwnd);
-#ifdef INSTRUMENT_TCP
-	printf("TCP output %u %d %d\n", (unsigned int) get_micros(), (int) tp->snd_wnd, (int) tp->snd_cwnd);
-#endif
 
 	flags = tcp_outflags[tp->t_state];
 	/*
@@ -1670,6 +1672,9 @@ timer:
 			    !tcp_timer_active(tp, TT_PERSIST))
 	                        tcp_timer_activate(tp, TT_REXMT, tp->t_rxtcur);
 			tp->snd_cwnd = tp->t_maxseg;
+#ifdef INSTRUMENT_TCP
+			printf("TCP ALLOCFAIL %u %d\n", (unsigned int) get_micros(), (int) tp->snd_cwnd);
+#endif
 			return (0);
 		case EMSGSIZE:
 			/*
