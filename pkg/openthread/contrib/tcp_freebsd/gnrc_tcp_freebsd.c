@@ -59,7 +59,7 @@
 static kernel_pid_t _packet_pid = KERNEL_PID_UNDEF;
 static kernel_pid_t _timer_pid = KERNEL_PID_UNDEF;
 
-static mutex_t tcp_lock = MUTEX_INIT;
+mutex_t tcp_lock = MUTEX_INIT;
 
 /**
  * @brief    Statically allocated pools of active and passive TCP sockets

@@ -55,30 +55,30 @@ static char ot_event_thread_stack[THREAD_STACKSIZE_MAIN+1000+4];
 static char ot_preevent_thread_stack[THREAD_STACKSIZE_IDLE+4];
 
 void openthread_event_thread_overflow_check(void) {
-    if (ot_event_thread_stack[0] != 0x42 || ot_event_thread_stack[1] != 0xA3 ||
-        ot_event_thread_stack[2] != 0x7B || ot_event_thread_stack[3] != 0x22) {
-        while(1) {
-            printf("event stack overflow!!\n");
-        }
-    }
+    // if (ot_event_thread_stack[0] != 0x42 || ot_event_thread_stack[1] != 0xA3 ||
+    //     ot_event_thread_stack[2] != 0x7B || ot_event_thread_stack[3] != 0x22) {
+    //     while(1) {
+    //         printf("event stack overflow!!\n");
+    //     }
+    // }
 }
 
 void openthread_preevent_thread_overflow_check(void) {
-    if (ot_preevent_thread_stack[0] != 0x11 || ot_preevent_thread_stack[1] != 0x73 ||
-        ot_preevent_thread_stack[2] != 0xBF || ot_preevent_thread_stack[3] != 0xD2) {
-        while(1) {
-            printf("preevent stack overflow!!\n");
-        }
-    }
+    // if (ot_preevent_thread_stack[0] != 0x11 || ot_preevent_thread_stack[1] != 0x73 ||
+    //     ot_preevent_thread_stack[2] != 0xBF || ot_preevent_thread_stack[3] != 0xD2) {
+    //     while(1) {
+    //         printf("preevent stack overflow!!\n");
+    //     }
+    // }
 }
 
 void openthread_task_thread_overflow_check(void) {
-    if (ot_task_thread_stack[0] != 0x1E || ot_task_thread_stack[1] != 0x90 ||
-        ot_task_thread_stack[2] != 0x0C || ot_task_thread_stack[3] != 0x66) {
-        while (1) {
-            printf("task stack overflow!!\n");
-        }
-    }
+    // if (ot_task_thread_stack[0] != 0x1E || ot_task_thread_stack[1] != 0x90 ||
+    //     ot_task_thread_stack[2] != 0x0C || ot_task_thread_stack[3] != 0x66) {
+    //     while (1) {
+    //         printf("task stack overflow!!\n");
+    //     }
+    // }
 }
 
 /* get Openthread radio mutex */
@@ -221,18 +221,18 @@ void openthread_bootstrap(void)
     ot_microtimer.callback = _microtimer_cb;
 #endif
 
-    ot_event_thread_stack[0] = 0x42;
-    ot_event_thread_stack[1] = 0xA3;
-    ot_event_thread_stack[2] = 0x7B;
-    ot_event_thread_stack[3] = 0x22;
-    ot_preevent_thread_stack[0] = 0x11;
-    ot_preevent_thread_stack[1] = 0x73;
-    ot_preevent_thread_stack[2] = 0xBF;
-    ot_preevent_thread_stack[3] = 0xD2;
-    ot_task_thread_stack[0] = 0x1E;
-    ot_task_thread_stack[1] = 0x90;
-    ot_task_thread_stack[2] = 0x0C;
-    ot_task_thread_stack[3] = 0x66;
+    // ot_event_thread_stack[0] = 0x42;
+    // ot_event_thread_stack[1] = 0xA3;
+    // ot_event_thread_stack[2] = 0x7B;
+    // ot_event_thread_stack[3] = 0x22;
+    // ot_preevent_thread_stack[0] = 0x11;
+    // ot_preevent_thread_stack[1] = 0x73;
+    // ot_preevent_thread_stack[2] = 0xBF;
+    // ot_preevent_thread_stack[3] = 0xD2;
+    // ot_task_thread_stack[0] = 0x1E;
+    // ot_task_thread_stack[1] = 0x90;
+    // ot_task_thread_stack[2] = 0x0C;
+    // ot_task_thread_stack[3] = 0x66;
 
     /* setup netdev modules */
 #ifdef MODULE_AT86RF2XX
