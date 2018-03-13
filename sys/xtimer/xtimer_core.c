@@ -637,7 +637,7 @@ overflow:
                 reference = 0;
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
                 prev_s = _stimer_lltimer_now();
-#endif        
+#endif
                 now = _xtimer_lltimer_now();
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
                 prev_x = now;
@@ -649,7 +649,7 @@ overflow:
         _in_handler = 0;
 
         if (overflow_list_head || long_list_head) {
-            /* schedule callback on next overflow */  
+            /* schedule callback on next overflow */
             _lltimer_set(0xFFFFFFFF);
         }
     }

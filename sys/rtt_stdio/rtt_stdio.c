@@ -115,6 +115,12 @@
  */
 static mutex_t _rx_mutex = MUTEX_INIT;
 
+
+/**
+ * @brief use mutex for writing
+ */
+static mutex_t _write_mutex = MUTEX_INIT;
+
 /**
  * @brief buffer holding stdout
  */
@@ -382,11 +388,16 @@ int uart_stdio_read(char* buffer, int count) {
 }
 
 int uart_stdio_write(const char* buffer, int len) {
+    mutex_lock(&_write_mutex);
     int written = rtt_write(buffer, len);
-    xtimer_ticks32_t last_wakeup = xtimer_now();
+    mutex_unlock(&_write_mutex);
+    //xtimer_ticks32_t last_wakeup = xtimer_now();
     while (blocking_stdout && written < len) {
-        xtimer_periodic_wakeup(&last_wakeup, STDIO_POLL_INTERVAL);
+        xtimer_usleep(STDIO_POLL_INTERVAL);
+        //xtimer_periodic_wakeup(&last_wakeup, STDIO_POLL_INTERVAL);
+        mutex_lock(&_write_mutex);
         written += rtt_write(&buffer[written], len-written);
+        mutex_unlock(&_write_mutex);
     }
     return written;
 }
