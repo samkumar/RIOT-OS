@@ -31,7 +31,7 @@
 #include "at86rf2xx_params.h"
 #endif
 
-#define ENABLE_DEBUG (1)
+#define ENABLE_DEBUG (0)
 #include "debug.h"
 
 static xtimer_t ot_millitimer;
