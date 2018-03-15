@@ -46,6 +46,7 @@
 #include "task_sched.h"
 #include "xtimer.h"
 
+#include "ot.h"
 #include "mutex.h"
 
 #define ENABLE_DEBUG    (0)
@@ -95,6 +96,7 @@ static void _handle_timer(int timer_id)
     tp = &tcbs[timer_id >> 2];
     timer_id &= 0x3;
 
+    openthread_lock_coarse_mutex();
     mutex_lock(&tcp_lock);
 
     switch (timer_id) {
@@ -122,6 +124,7 @@ static void _handle_timer(int timer_id)
     }
 
     mutex_unlock(&tcp_lock);
+    openthread_unlock_coarse_mutex();
 }
 
 /**
@@ -233,6 +236,11 @@ void tcp_freebsd_receive(void* iphdr, otMessage* message, otMessageInfo* info)
 
     /* Bitmask of signals that need to be sent to the user of this module. */
     uint8_t signals = 0;
+
+    /*
+     * In this entrypoint, the openthread lock is held, so there is no need
+     * to acquire it here.
+     */
 
     /* Number of lbuf entries that the user of this module can free. */
     //uint32_t freedentries = 0;
@@ -536,9 +544,11 @@ error_t asock_send_impl(int asockid, const uint8_t* data, size_t len, int moreto
 {
     error_t rv;
     struct tcpcb* tp = &tcbs[asockid];
+    openthread_lock_coarse_mutex();
     mutex_lock(&tcp_lock);
     rv = (error_t) tcp_usr_send(tp, moretocome, data, len, bytessent);
     mutex_unlock(&tcp_lock);
+    openthread_unlock_coarse_mutex();
     return rv;
 }
 
@@ -546,16 +556,19 @@ error_t asock_receive_impl(int asockid, uint8_t* buffer, uint32_t len, size_t* b
 {
     error_t rv;
     struct tcpcb* tp = &tcbs[asockid];
+    openthread_lock_coarse_mutex();
     mutex_lock(&tcp_lock);
     *bytesrcvd = cbuf_read(&tp->recvbuf, buffer, 0, len, 1, cbuf_copy_into_buffer);
     rv = (error_t) tcp_usr_rcvd(tp);
     mutex_unlock(&tcp_lock);
+    openthread_unlock_coarse_mutex();
     return rv;
 }
 
 error_t asock_shutdown_impl(int asockid, bool shut_rd, bool shut_wr)
 {
     int error = SUCCESS;
+    openthread_lock_coarse_mutex();
     mutex_lock(&tcp_lock);
     if (shut_rd) {
         cbuf_pop(&tcbs[asockid].recvbuf, cbuf_used_space(&tcbs[asockid].recvbuf)); // remove all data from the cbuf
@@ -567,6 +580,7 @@ error_t asock_shutdown_impl(int asockid, bool shut_rd, bool shut_wr)
         error = tcp_usr_shutdown(&tcbs[asockid]);
     }
     mutex_unlock(&tcp_lock);
+    openthread_unlock_coarse_mutex();
     return error;
 }
 
@@ -580,9 +594,11 @@ error_t psock_close_impl(int psockid)
 
 error_t asock_abort_impl(int asockid)
 {
+    openthread_lock_coarse_mutex();
     mutex_lock(&tcp_lock);
     tcp_usr_abort(&tcbs[asockid]);
     mutex_unlock(&tcp_lock);
+    openthread_unlock_coarse_mutex();
     return SUCCESS;
 }
 
