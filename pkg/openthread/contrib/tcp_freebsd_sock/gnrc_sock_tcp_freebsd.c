@@ -563,6 +563,14 @@ unlockreturn:
     if (conn->pending_ops == 0) {
         cond_signal(&conn->pending_cond);
     }
+    if (rv != 0) {
+        /*
+         * If there was an error in connect, the sock layer won't actually
+         * fill in the socket, so we can't count on a call to close(). We need
+         * to free resources.
+         */
+        sock_tcp_freebsd_active_clear(conn);
+    }
     mutex_unlock(&conn->lock);
     return rv;
 }
