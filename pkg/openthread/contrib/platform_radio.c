@@ -33,6 +33,7 @@
 #include "openthread/platform/platform.h"
 #include "openthread/platform/radio.h"
 #include "ot.h"
+#include "random.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -486,7 +487,7 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
             DEBUG("TX_NOACK\n");
 #ifdef OPENTHREAD_CONFIG_LINK_RETRY_DELAY
             openthread_unlock_coarse_mutex();
-            xtimer_usleep(OPENTHREAD_CONFIG_LINK_RETRY_DELAY);
+            xtimer_usleep(random_uint32_range(0, OPENTHREAD_CONFIG_LINK_RETRY_DELAY));
             openthread_lock_coarse_mutex();
 #endif
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_NO_ACK);
