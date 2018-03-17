@@ -212,6 +212,7 @@ bool accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struc
 
 int sent_pkts = 0;
 int recv_pkts = 0;
+int bad_cksum_pkts = 0;
 
 /**
  * @brief   Called when a TCP segment is received and passed up from the IPv6
@@ -271,7 +272,8 @@ void tcp_freebsd_receive(void* iphdr, otMessage* message, otMessageInfo* info)
     tcp_checksum_pseudoheader(&cksum_state, info, empirical_len);
     uint16_t csum = tcp_checksum_finalize(&cksum_state);
     if (csum != 0) {
-        DEBUG("Dropping packet: bad checksum (%" PRIu16 ")\n", csum);
+        printf("Dropping packet: bad checksum (%" PRIu16 ")\n", csum);
+        bad_cksum_pkts++;
         goto done;
     }
 
