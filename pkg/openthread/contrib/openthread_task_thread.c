@@ -87,6 +87,10 @@ static void *_openthread_task_thread(void *arg) {
                 DEBUG("\not_event: OPENTHREAD_TX_FAIL_RADIO_BUSY\n");
                 sent_pkt(openthread_get_instance(), NETDEV_EVENT_TX_MEDIUM_BUSY);
                 break;
+            case OPENTHREAD_LINK_RETRY_TIMEOUT:
+                DEBUG("\not_event: OPENTHREAD_LINK_RETRY_TIMEOUT\n");
+                sent_pkt(openthread_get_instance(), NETDEV_EVENT_TX_FAIL);
+                break;
         }
         while(otTaskletsArePending(openthread_get_instance())) {
 #ifdef MODULE_OPENTHREAD_FTD

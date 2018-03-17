@@ -49,6 +49,8 @@ extern "C" {
 #define OPENTHREAD_NETDEV_MSG_TYPE_EVENT                    (0x2239)
 /**< event for frame transmission failure (radio busy) */
 #define OPENTHREAD_TX_FAIL_RADIO_BUSY                       (0x223A)
+/**< event for link retransmission timer */
+#define OPENTHREAD_LINK_RETRY_TIMEOUT                       (0x223B)
 /**< event indicating an OT_JOB message */
 #define OPENTHREAD_JOB_MSG_TYPE_EVENT                       (0x2241)
 /**< number of serial reception buffer */

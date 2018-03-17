@@ -48,7 +48,7 @@ static void _isr(netdev_t *netdev);
 static int _get(netdev_t *netdev, netopt_t opt, void *val, size_t max_len);
 static int _set(netdev_t *netdev, netopt_t opt, const void *val, size_t len);
 
-static bool sending = false;
+static volatile bool sending = false;
 
 const netdev_driver_t at86rf2xx_driver = {
     .send = _send,

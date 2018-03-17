@@ -49,6 +49,9 @@ static uint8_t rx_buf[OPENTHREAD_NETDEV_BUFLEN];
 static uint8_t tx_buf[OPENTHREAD_NETDEV_BUFLEN];
 static uint8_t ack_buf[IEEE802154_ACK_LENGTH];
 
+static xtimer_t link_retry_timer;
+static msg_t link_retry_msg;
+
 static struct iovec pkt;
 
 static int8_t Rssi;
@@ -148,6 +151,8 @@ void openthread_radio_init(netdev_t *dev)
     _dev = dev;
     int16_t otTxPower = OPENTHREAD_TXPOWER;
     _set_power(otTxPower);
+
+    memset(&link_retry_timer, 0x00, sizeof(link_retry_timer));
 }
 
 /* OpenThread will call this for setting PAN ID */
@@ -486,10 +491,17 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
         case NETDEV_EVENT_TX_NOACK:
             DEBUG("TX_NOACK\n");
 #ifdef OPENTHREAD_CONFIG_LINK_RETRY_DELAY
-            openthread_unlock_coarse_mutex();
-            xtimer_usleep(random_uint32_range(0, OPENTHREAD_CONFIG_LINK_RETRY_DELAY));
-            openthread_lock_coarse_mutex();
+            {
+
+                link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
+                link_retry_msg.content.value = 0;
+                uint32_t link_delay = random_uint32_range(0, OPENTHREAD_CONFIG_LINK_RETRY_DELAY);
+                xtimer_set_msg(&link_retry_timer, link_delay, &link_retry_msg, openthread_get_task_pid());
+            }
+            break;
 #endif
+            /* fallthrough intentional in #else case */
+        case NETDEV_EVENT_TX_FAIL:
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_NO_ACK);
             break;
         case NETDEV_EVENT_TX_MEDIUM_BUSY:

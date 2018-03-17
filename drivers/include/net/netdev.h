@@ -232,6 +232,7 @@ typedef enum {
     NETDEV_EVENT_TX_COMPLETE_DATA_PENDING,  /**< transfer packet complete and data pending flag */
     NETDEV_EVENT_TX_NOACK,                  /**< ACK requested but not received */
     NETDEV_EVENT_TX_MEDIUM_BUSY,            /**< couldn't transfer packet */
+    NETDEV_EVENT_TX_FAIL,                   /**< couldn't send packet for another reason */
     NETDEV_EVENT_LINK_UP,                   /**< link established */
     NETDEV_EVENT_LINK_DOWN,                 /**< link gone */
     NETDEV_EVENT_TX_TIMEOUT,                /**< timeout when sending */
