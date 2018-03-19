@@ -51,7 +51,7 @@ static mutex_t buffer_mutex = MUTEX_INIT;
 static mutex_t coarse_mutex = MUTEX_INIT;
 
 static char ot_task_thread_stack[THREAD_STACKSIZE_MAIN+4];
-static char ot_event_thread_stack[THREAD_STACKSIZE_MAIN+1000+4];
+static char ot_event_thread_stack[THREAD_STACKSIZE_MAIN+500+4];
 static char ot_preevent_thread_stack[THREAD_STACKSIZE_IDLE+4];
 
 void openthread_event_thread_overflow_check(void) {
