@@ -549,6 +549,7 @@ int sock_tcp_freebsd_connect(sock_tcp_freebsd_t *conn, const void *addr, size_t 
         buffer_pool[conn->sfields.active.asock].reass_buffer);
     if (error != 0) {
         rv = -error;
+        sock_tcp_freebsd_active_clear(conn);
         goto unlockreturn;
     }
 
