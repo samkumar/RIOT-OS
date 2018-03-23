@@ -520,23 +520,19 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
     netdev_ieee802154_rx_info_t rx_info;
     int res;
 
-    /* Read frame length from driver */
-    int len = dev->driver->recv(dev, NULL, 0, NULL);
+    /* Fill OpenThread receive frame */
 
-    /* very unlikely */
-    if ((len > (unsigned) UINT16_MAX)) {
-        DEBUG("Len too high: %d\n", len);
+    /* Read received frame */
+    res = dev->driver->recv(dev, (char *) sReceiveFrame.mPsdu, OPENTHREAD_NETDEV_BUFLEN, &rx_info);
+    if (res < 0) {
+        DEBUG("Error: %d\n", -res);
         res = -1;
         goto exit;
     }
 
-    /* Fill OpenThread receive frame */
     /* Openthread needs a packet length with FCS included,
      * OpenThread do not use the data so we don't need to calculate FCS */
-    sReceiveFrame.mLength = len + RADIO_IEEE802154_FCS_LEN;
-
-    /* Read received frame */
-    res = dev->driver->recv(dev, (char *) sReceiveFrame.mPsdu, len, &rx_info);
+    sReceiveFrame.mLength = res + RADIO_IEEE802154_FCS_LEN;
 
 #if MODULE_AT86RF231 | MODULE_AT86RF233
     Rssi = (int8_t)rx_info.rssi - 94;
