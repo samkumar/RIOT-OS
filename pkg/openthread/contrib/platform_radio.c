@@ -49,8 +49,10 @@ static uint8_t rx_buf[OPENTHREAD_NETDEV_BUFLEN];
 static uint8_t tx_buf[OPENTHREAD_NETDEV_BUFLEN];
 static uint8_t ack_buf[IEEE802154_ACK_LENGTH];
 
+#ifdef OPENTHREAD_CONFIG_LINK_RETRY_DELAY
 static xtimer_t link_retry_timer;
 static msg_t link_retry_msg;
+#endif
 
 static struct iovec pkt;
 
@@ -152,7 +154,9 @@ void openthread_radio_init(netdev_t *dev)
     int16_t otTxPower = OPENTHREAD_TXPOWER;
     _set_power(otTxPower);
 
+#ifdef OPENTHREAD_CONFIG_LINK_RETRY_DELAY
     memset(&link_retry_timer, 0x00, sizeof(link_retry_timer));
+#endif
 }
 
 /* OpenThread will call this for setting PAN ID */
