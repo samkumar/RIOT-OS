@@ -37,6 +37,9 @@ extern "C" {
  */
 #define XTIMER_DEV          TIMER_DEV(1)
 #define XTIMER_CHAN         (0)
+
+// This fixes problems where some timers are missed.
+#define XTIMER_OVERHEAD 0
 /** @} */
 
 /**
