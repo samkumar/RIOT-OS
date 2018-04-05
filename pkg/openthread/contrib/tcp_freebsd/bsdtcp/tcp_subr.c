@@ -528,13 +528,13 @@ tcpip_fillheaders(struct tcpcb* tp, otMessageInfo* ip_ptr, void *tcp_ptr)
 #endif /* INET */
 #endif
 	/* Fill in the IP header */
-	// The source address is copied here in send_message.
 
     //ip6->ip6_vfc = 0x60;
     //memset(&ip6->ip6_src, 0x00, sizeof(ip6->ip6_src));
     memset(ip_ptr, 0x00, sizeof(otMessageInfo));
     memcpy(&ip_ptr->mSockAddr, &tp->laddr, sizeof(ip_ptr->mSockAddr));
     memcpy(&ip_ptr->mPeerAddr, &tp->faddr, sizeof(ip_ptr->mPeerAddr));
+    ip_ptr->mVersionClassFlow = 0x60000000;
     //ip6->ip6_dst = tp->faddr;
 	/* Fill in the TCP header */
 	//th->th_sport = inp->inp_lport;
@@ -614,6 +614,7 @@ tcp_respond(struct tcpcb *tp, struct ip6_hdr* ip6gen, struct tcphdr *thgen,
     memset(&ip6info, 0x00, sizeof(otMessageInfo));
     memcpy(&ip6info.mSockAddr, &ip6gen->ip6_dst, sizeof(ip6info.mSockAddr));
     memcpy(&ip6info.mPeerAddr, &ip6gen->ip6_src, sizeof(ip6info.mPeerAddr));
+    ip6info.mVersionClassFlow = 0x60000000;
 	nth->th_sport = thgen->th_dport;
 	nth->th_dport = thgen->th_sport;
 	nth->th_seq = htonl(seq);

@@ -151,6 +151,7 @@ tcp_twrespond(struct tcpcb* tp, int flags)
 
     memcpy(&ip6info.mSockAddr, &tp->laddr, sizeof(ip6info.mSockAddr));
     memcpy(&ip6info.mPeerAddr, &tp->faddr, sizeof(ip6info.mPeerAddr));
+    ip6info.mVersionClassFlow = 0x60000000;
 	nth->th_sport = tp->lport;
 	nth->th_dport = tp->fport;
 	nth->th_seq = htonl(tp->snd_nxt);

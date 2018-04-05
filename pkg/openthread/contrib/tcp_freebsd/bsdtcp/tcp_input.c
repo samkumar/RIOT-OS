@@ -1685,7 +1685,7 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th, otMessage* msg,
 //			TCPSTAT_INC(tcps_ecn_ect1);
 			break;
 		}
-#if 0
+
 		/* Process a packet differently from RFC3168. */
 		cc_ecnpkt_handler(tp, th, iptos);
 
@@ -1693,7 +1693,6 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th, otMessage* msg,
 		if (thflags & TH_ECE) {
 			cc_cong_signal(tp, th, CC_ECN);
 		}
-#endif
 	}
 
 	/*

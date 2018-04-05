@@ -38,6 +38,7 @@
 #include "tcp_var.h"
 #include "tcp_seq.h"
 #include "tcp_timer.h"
+#include "ip.h"
 #include "../lib/cbuf.h"
 
 #include "tcp_const.h"
@@ -1208,13 +1209,23 @@ memsendfail:
 	 * resend those bits a number of times as per
 	 * RFC 3168.
 	 */
-#if 0 // FOR NOW, SKIP ECN, SINCE IT ISN'T CRITICAL. I MAY ADD THIS BACK LATER.
 	if (tp->t_state == TCPS_SYN_SENT && V_tcp_do_ecn) {
 		if (tp->t_rxtshift >= 1) {
 			if (tp->t_rxtshift <= V_tcp_ecn_maxretries)
 				flags |= TH_ECE|TH_CWR;
 		} else
 			flags |= TH_ECE|TH_CWR;
+	}
+
+	/*
+	 * Added by Sam: make tcp_output reply with ECE flag in the SYN-ACK for
+	 * ECN-enabled connections. The existing code in FreeBSD didn't have to do
+	 * this, because it didn't use tcp_output to send the SYN-ACK; it
+	 * constructed the SYN-ACK segment manually.
+	 */
+	if (tp->t_state == TCPS_SYN_RECEIVED && tp->t_flags & TF_ECN_PERMIT &&
+		V_tcp_do_ecn) {
+		flags |= TH_ECE;
 	}
 
 	if (tp->t_state == TCPS_ESTABLISHED &&
@@ -1226,6 +1237,7 @@ memsendfail:
 		 */
 		if (len > 0 && SEQ_GEQ(tp->snd_nxt, tp->snd_max) &&
 		    !((tp->t_flags & TF_FORCEDATA) && len == 1)) {
+#if 0 // Sam: we need to make OpenThread, which generates the IP header, do this
 #ifdef INET6
 			if (isipv6)
 				ip6->ip6_flow |= htonl(IPTOS_ECN_ECT0 << 20);
@@ -1233,6 +1245,8 @@ memsendfail:
 #endif
 				ip->ip_tos |= IPTOS_ECN_ECT0;
 			TCPSTAT_INC(tcps_ecn_ect0);
+#endif
+            ip6info.mVersionClassFlow |= (IPTOS_ECN_ECT0 << 20);
 		}
 
 		/*
@@ -1245,7 +1259,7 @@ memsendfail:
 		if (tp->t_flags & TF_ECN_SND_ECE)
 			flags |= TH_ECE;
 	}
-#endif
+
 	/*
 	 * If we are doing retransmissions, then snd_nxt will
 	 * not reflect the first unsent octet.  For ACK only
