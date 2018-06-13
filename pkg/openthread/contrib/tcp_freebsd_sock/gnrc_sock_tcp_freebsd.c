@@ -29,8 +29,8 @@
 #include "debug.h"
 
 #define NACTIVESOCKS 1
-#define SEND_BUF_LEN 1024
-#define RECV_BUF_LEN 1024
+#define SEND_BUF_LEN 2310
+#define RECV_BUF_LEN 100
 #define REASS_BMP_LEN ((RECV_BUF_LEN + 7) >> 3)
 
 struct buffers {
@@ -42,8 +42,8 @@ struct buffers {
 static struct buffers buffer_pool[NACTIVESOCKS];
 
 #define NPASSIVESOCKS 1
-#define ACCEPT_QUEUE_LEN 16
-#define ACCEPT_QUEUE_SHIFT 4
+#define ACCEPT_QUEUE_LEN 4
+#define ACCEPT_QUEUE_SHIFT 2
 
 struct queues {
     uint8_t accept_queue[ACCEPT_QUEUE_LEN];

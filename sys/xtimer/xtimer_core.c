@@ -205,15 +205,15 @@ static inline void _lltimer_set(uint32_t target)
 
 int _xtimer_set_absolute(xtimer_t *timer, uint32_t target, uint32_t now)
 {
+    unsigned state = irq_disable();
 #if (XTIMER_HZ < 1000000ul) && (STIMER_HZ >= 1000000ul)
-#else 
+#else
     now = _xtimer_now();
 #endif
     int res = 0;
 
     DEBUG("timer_set_absolute(): now=%" PRIu32 " target=%" PRIu32 "\n", now, target);
 
-    unsigned state = irq_disable();
     timer->next = NULL;
     if ((target >= now) && ((target - XTIMER_BACKOFF) < now)) {
         irq_restore(state);
