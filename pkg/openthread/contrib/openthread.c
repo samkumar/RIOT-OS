@@ -20,7 +20,7 @@
 
 #include <assert.h>
 
-#include "tcp_freebsd/gnrc_tcp_freebsd_internal.h"
+//#include "tcp_freebsd/gnrc_tcp_freebsd_internal.h"
 #include "openthread/platform/uart.h"
 #include "ot.h"
 #include "random.h"
