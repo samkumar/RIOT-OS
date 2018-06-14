@@ -549,7 +549,6 @@ int sock_tcp_freebsd_connect(sock_tcp_freebsd_t *conn, const void *addr, size_t 
         buffer_pool[conn->sfields.active.asock].reass_buffer);
     if (error != 0) {
         rv = -error;
-        sock_tcp_freebsd_active_clear(conn);
         goto unlockreturn;
     }
 
@@ -563,6 +562,14 @@ unlockreturn:
     conn->pending_ops -= 1;
     if (conn->pending_ops == 0) {
         cond_signal(&conn->pending_cond);
+    }
+    if (rv != 0) {
+        /*
+         * If there was an error in connect, the sock layer won't actually
+         * fill in the socket, so we can't count on a call to close(). We need
+         * to free resources.
+         */
+        sock_tcp_freebsd_active_clear(conn);
     }
     mutex_unlock(&conn->lock);
     return rv;
