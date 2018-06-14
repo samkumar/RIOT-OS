@@ -609,7 +609,7 @@ error_t asock_abort_impl(int asockid)
 otMessage* new_message(void)
 {
     otInstance* instance = openthread_get_instance();
-    otMessage* message = otIp6NewMessageForTransport(instance, false);
+    otMessage* message = otIp6NewMessageForTransport(instance, true);
     if (message == NULL) {
         printf("Message allocation failed for TCP\n");
     }
