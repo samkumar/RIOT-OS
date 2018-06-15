@@ -33,7 +33,7 @@
 #define OPENTHREAD_SPINEL_FRAME_MARKER      (0x7e)
 
 static serial_msg_t * gSerialMessage[OPENTHREAD_NUMBER_OF_SERIAL_BUFFER];
-static uint8_t gSerialBuff[OPENTHREAD_NUMBER_OF_SERIAL_BUFFER][OPENTHREAD_SERIAL_BUFFER_SIZE];
+static serial_msg_t gSerialBuff[OPENTHREAD_NUMBER_OF_SERIAL_BUFFER];
 static uint16_t frameLength = 0;
 
 #ifdef MODULE_OPENTHREAD_NCP_FTD
