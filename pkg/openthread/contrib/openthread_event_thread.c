@@ -46,6 +46,9 @@ static kernel_pid_t _event_pid;
 static otInstance *sInstance;
 static bool otTaskPending = false;
 
+/* For border router application; indicates message received over serial. */
+void br_on_serial(void);
+
 /* get OpenThread instance */
 otInstance* openthread_get_instance(void) {
     return sInstance;
@@ -152,6 +155,7 @@ static void *_openthread_event_thread(void *arg) {
             case OPENTHREAD_SERIAL_MSG_TYPE_EVENT:
                 /* Tell OpenThread about the reception of a CLI command */
                 DEBUG("\not_event: OPENTHREAD_SERIAL_MSG_TYPE received\n");
+                br_on_serial();
                 serialBuffer = (serial_msg_t*)msg.content.ptr;
                 DEBUG("%s", serialBuffer->buf);
                 otPlatUartReceived((uint8_t*) serialBuffer->buf,serialBuffer->length);

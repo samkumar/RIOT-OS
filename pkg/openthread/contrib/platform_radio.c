@@ -64,6 +64,10 @@ static bool sDisabled;
 static uint8_t short_address_list = 0;
 static uint8_t ext_address_list = 0;
 
+/* For border router application; indicates frame sent/received. */
+void br_on_tx(void);
+void br_on_rx(void);
+
 /* set 15.4 channel */
 static int _set_channel(uint16_t channel)
 {
@@ -233,7 +237,7 @@ otError otPlatRadioSleep(otInstance *aInstance)
     return OT_ERROR_NONE;
 }
 
-/*OpenThread will call this for waiting the reception of a packet */
+/* OpenThread will call this for waiting the reception of a packet */
 otError otPlatRadioReceive(otInstance *aInstance, uint8_t aChannel)
 {
     //DEBUG("openthread: otPlatRadioReceive. Channel: %i\n", aChannel);
@@ -296,6 +300,7 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
     //printf("try->");
     //_set_channel(aPacket->mChannel);
     /* send packet though netdev */
+    br_on_tx();
     int success = _dev->driver->send(_dev, &pkt, 1);
     //printf("done %d\n", success);
     if (success == -1) {
@@ -527,6 +532,7 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
     /* Fill OpenThread receive frame */
 
     /* Read received frame */
+    br_on_rx();
     res = dev->driver->recv(dev, (char *) sReceiveFrame.mPsdu, OPENTHREAD_NETDEV_BUFLEN, &rx_info);
     if (res < 0) {
         DEBUG("Error: %d\n", -res);
