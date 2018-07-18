@@ -74,8 +74,6 @@ static void uart_handler(void* arg, char c)  {
             return;
         }
         if (frameLength == 1) {  /* It means that we handle the Start of a Spinel frame instead of the end */
-
-            frameLength--;
             return;
         }
         if(gSerialMessage[currentSerialBufferNumber]->serial_buffer_status != OPENTHREAD_SERIAL_BUFFER_STATUS_FULL) {

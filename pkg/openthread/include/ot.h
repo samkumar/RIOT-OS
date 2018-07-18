@@ -54,7 +54,7 @@ extern "C" {
 /**< event indicating an OT_JOB message */
 #define OPENTHREAD_JOB_MSG_TYPE_EVENT                       (0x2241)
 /**< number of serial reception buffer */
-#define OPENTHREAD_NUMBER_OF_SERIAL_BUFFER                  (1U)
+#define OPENTHREAD_NUMBER_OF_SERIAL_BUFFER                  (8U)
 /**< sizeof in bytes the two first members of she serial structure */
 #define OPENTHREAD_SIZEOF_LENGTH_AND_FREEBUFF               (4U)
 #ifdef MODULE_OPENTHREAD_NCP_FTD
