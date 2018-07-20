@@ -30,7 +30,7 @@
 
 #define NACTIVESOCKS 1
 #define SEND_BUF_LEN 2310
-#define RECV_BUF_LEN 100
+#define RECV_BUF_LEN 10
 #define REASS_BMP_LEN ((RECV_BUF_LEN + 7) >> 3)
 
 struct buffers {
@@ -41,7 +41,7 @@ struct buffers {
 };
 static struct buffers buffer_pool[NACTIVESOCKS];
 
-#define NPASSIVESOCKS 1
+#define NPASSIVESOCKS 0
 #define ACCEPT_QUEUE_LEN 4
 #define ACCEPT_QUEUE_SHIFT 2
 
