@@ -44,7 +44,7 @@ static msg_t _queue[OPENTHREAD_EVENT_QUEUE_LEN];
 static kernel_pid_t _event_pid;
 
 static otInstance *sInstance;
-static bool otTaskPending = false;
+extern volatile bool otTaskPending;
 
 /* For border router application; indicates message received over serial. */
 void br_on_serial(void);
@@ -60,23 +60,35 @@ kernel_pid_t openthread_get_event_pid(void) {
 }
 
 /* OpenThread will call this when switching state from empty tasklet to non-empty tasklet. */
+/* samkumar: the OpenThread lock will be held when calling this function, so it
+ * is safe to read/write otTaskPending. */
 void otTaskletsSignalPending(otInstance *aInstance) {
     (void) aInstance;
-    /* 1) Triggered in OpenThread Event Thread: just indicator update */
-    if (thread_getpid() == openthread_get_event_pid()) {
-        otTaskPending = true;
-        msg_t msg;
-        msg.type = OPENTHREAD_TASK_MSG_TYPE_EVENT;
-        msg_try_send(&msg, openthread_get_task_pid());
-    /* 2) Triggered in OpenThread Task Thread: do nothing */
-    } else if (thread_getpid() == openthread_get_task_pid()) {
-        ;
-    /* 3) Triggered in another thread (application): message passing */
-    } else {
-        msg_t msg;
-        msg.type = OPENTHREAD_TASK_MSG_TYPE_EVENT;
-        msg_send(&msg, openthread_get_task_pid());
+
+    /*
+     * If triggered in the task thread, do nothing. The task thread will
+     * not go to sleep until there are no pending tasklets.
+     */
+    if (thread_getpid() == openthread_get_task_pid()) {
+        return;
     }
+
+    /*
+     * Otherwise, check if the task thread has already been signalled. If so,
+     * we don't need to do anything. The task thread will service this at the
+     * next opportunity.
+     */
+    if (otTaskPending) {
+        return;
+    }
+
+    /* Signal the task thread to service this. */
+    otTaskPending = true;
+
+    msg_t msg;
+    msg.type = OPENTHREAD_TASK_MSG_TYPE_EVENT;
+    msg.content.value = 0;
+    msg_send(&msg, openthread_get_task_pid());
 }
 
 /* OpenThread Event Thread

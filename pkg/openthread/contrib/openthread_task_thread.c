@@ -31,6 +31,8 @@
 static msg_t _queue[OPENTHREAD_TASK_QUEUE_LEN];
 static kernel_pid_t _task_pid;
 
+volatile bool otTaskPending = false;
+
 /* get OpenThread Task Thread pid */
 kernel_pid_t openthread_get_task_pid(void) {
     return _task_pid;
@@ -63,6 +65,13 @@ static void *_openthread_task_thread(void *arg) {
             case OPENTHREAD_TASK_MSG_TYPE_EVENT:
                 /* Process OpenThread tasks (pre-processing a sending packet) */
                 DEBUG("\not_task: OPENTHREAD_TASK_MSG_TYPE_EVENT received\n");
+
+                /*
+                 * Before releasing the coarse mutex, set this variable to indicate
+                 * that this thread may need to be signalled again to process additional
+                 * tasks.
+                 */
+                otTaskPending = false;
                 break;
 #ifdef MODULE_OPENTHREAD_FTD
             case OPENTHREAD_MICROTIMER_MSG_TYPE_EVENT:
@@ -99,6 +108,7 @@ static void *_openthread_task_thread(void *arg) {
 #endif
             otTaskletsProcess(openthread_get_instance());
         }
+
         openthread_unlock_coarse_mutex();
 
         /* Stack overflow check */
