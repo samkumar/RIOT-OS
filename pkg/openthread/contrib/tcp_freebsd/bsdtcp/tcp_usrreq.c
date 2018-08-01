@@ -146,8 +146,16 @@ tcp6_connect(struct tcpcb *tp, struct sockaddr_in6 *nam)
 		/*error = in6_pcbbind(inp, (struct sockaddr *)0, td->td_ucred);
 		if (error)
 			goto out;*/
-		error = EINVAL; // First, the socket must be bound
+		error = EINVAL; // The port must be bound
 		goto out;
+	}
+	if (memcmp(&tp->laddr, &in6addr_any, sizeof(tp->laddr)) == 0) {
+		const struct in6_addr* source = get_source_ipv6_address(&nam->sin6_addr); // choose address dynamically
+		if (source == NULL) {
+			error = EINVAL;
+			goto out;
+		}
+		memcpy(&tp->laddr, source, sizeof(tp->laddr));
 	}
 	error = in6_pcbconnect(/*inp*/tp, nam/*, td->td_ucred*/);
 	if (error != 0)

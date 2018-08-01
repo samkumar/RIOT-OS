@@ -72,6 +72,7 @@ struct ip6_packet {
 };
 
 int gnrc_tcp_freebsd_init(void);
+const struct in6_addr* get_source_ipv6_address(const struct in6_addr* peer);
 
 /*
  * Structure and functions for TCP checksum.

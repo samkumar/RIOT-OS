@@ -464,6 +464,11 @@ const struct in6_addr* get_default_ipv6_address(void) {
     return (const struct in6_addr*) otThreadGetMeshLocalEid(openthread_get_instance());
 }
 
+const struct in6_addr* get_source_ipv6_address(const struct in6_addr* peer) {
+    const otNetifAddress* source = otIp6SelectSourceAddress(openthread_get_instance(), (const otIp6Address*) peer);
+    return (const struct in6_addr*) &source->mAddress;
+}
+
 error_t asock_bind_impl(int asockid, const struct in6_addr* address, uint16_t port)
 {
     error_t rv;
@@ -474,9 +479,6 @@ error_t asock_bind_impl(int asockid, const struct in6_addr* address, uint16_t po
     tcbs[asockid].lport = 0;
     if (port == 0 || gnrc_tcp_freebsd_portisfree(port)) {
         tcbs[asockid].lport = port;
-        if (memcmp(address, &in6addr_any, sizeof(struct in6_addr)) == 0) {
-            address = get_default_ipv6_address();
-        }
         memcpy(&tcbs[asockid].laddr, address, sizeof(struct in6_addr));
         rv = SUCCESS;
         goto done;
@@ -609,7 +611,7 @@ error_t asock_abort_impl(int asockid)
 otMessage* new_message(void)
 {
     otInstance* instance = openthread_get_instance();
-    otMessage* message = otIp6NewMessageForTransport(instance, true);
+    otMessage* message = otIp6NewMessageForTransport(instance, false);
     if (message == NULL) {
         printf("Message allocation failed for TCP\n");
     }
