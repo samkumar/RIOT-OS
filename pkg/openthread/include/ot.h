@@ -51,10 +51,12 @@ extern "C" {
 #define OPENTHREAD_TX_FAIL_RADIO_BUSY                       (0x223A)
 /**< event for link retransmission timer */
 #define OPENTHREAD_LINK_RETRY_TIMEOUT                       (0x223B)
+/**< event for REthos ISR processing */
+#define OPENTHREAD_RETHOS_ISR_EVENT                         (0x223C)
 /**< event indicating an OT_JOB message */
 #define OPENTHREAD_JOB_MSG_TYPE_EVENT                       (0x2241)
 /**< number of serial reception buffer */
-#define OPENTHREAD_NUMBER_OF_SERIAL_BUFFER                  (8U)
+#define OPENTHREAD_NUMBER_OF_SERIAL_BUFFER                  (2U)
 /**< sizeof in bytes the two first members of she serial structure */
 #define OPENTHREAD_SIZEOF_LENGTH_AND_FREEBUFF               (4U)
 #ifdef MODULE_OPENTHREAD_NCP_FTD

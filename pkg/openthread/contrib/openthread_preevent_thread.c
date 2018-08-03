@@ -17,11 +17,12 @@
  */
 
 #include "ot.h"
+#include "rethos.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
-#define OPENTHREAD_PREEVENT_QUEUE_LEN (1)
+#define OPENTHREAD_PREEVENT_QUEUE_LEN (2)
 static msg_t _queue[OPENTHREAD_PREEVENT_QUEUE_LEN];
 static kernel_pid_t _preevent_pid;
 
@@ -30,7 +31,7 @@ kernel_pid_t openthread_get_preevent_pid(void) {
     return _preevent_pid;
 }
 
-/* OpenThread Preevent Thread 
+/* OpenThread Preevent Thread
  * This thread receives event messages directly from interrupt handlers (timer and radio) and
  * delivers them to OpenThread Event Thread. Even though we have OpenThread Event Thread to
  * process events, this additional thread is necessary for safe operation.
@@ -49,9 +50,13 @@ kernel_pid_t openthread_get_preevent_pid(void) {
  *
  * The msg_queue size of this thread can be bounded by the number of event types it handles, '2'.
  * 1) OpenThread exposes only one timer to RIOT at a time.
- * 2) OpenThread does not send a packet before receiving tx_complete event for the previous packet. 
+ * 2) OpenThread does not send a packet before receiving tx_complete event for the previous packet.
+ *
+ * We also process REthos in this thread.
 **/
+bool rethos_queued = false;
 static void *_openthread_preevent_thread(void *arg) {
+    int state;
     _preevent_pid = thread_getpid();
 
     msg_init_queue(_queue, OPENTHREAD_PREEVENT_QUEUE_LEN);
@@ -67,6 +72,14 @@ static void *_openthread_preevent_thread(void *arg) {
                 DEBUG("ot_preevent: OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT received\n");
                 msg.type = OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT;
                 msg_send(&msg, openthread_get_event_pid());
+                break;
+            case OPENTHREAD_RETHOS_ISR_EVENT:
+                /* Service REthos ISR. */
+                DEBUG("ot_preevent: OPENTHREAD_RETHOS_ISR_EVENT received\n");
+                state = irq_disable();
+                rethos_queued = false;
+                irq_restore(state);
+                rethos_service_isr(msg.content.ptr);
                 break;
         }
 

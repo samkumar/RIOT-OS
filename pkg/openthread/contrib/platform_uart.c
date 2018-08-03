@@ -24,9 +24,16 @@
 #include "openthread/types.h"
 #include "openthread/platform/uart.h"
 #include "ot.h"
+#include "rethos.h"
+
+ethos_t rethos;
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
+
+#ifndef RETHOS_CHANNEL_WPANTUND
+#define RETHOS_CHANNEL_WPANTUND 12
+#endif
 
 #ifdef UART_NUMOF
 #define OPENTHREAD_UART_DEV                 UART_DEV(0)
@@ -83,7 +90,7 @@ static void uart_handler(void* arg, char c)  {
             msg_t msg;
             msg.type = OPENTHREAD_SERIAL_MSG_TYPE_EVENT;
             msg.content.ptr = gSerialMessage[currentSerialBufferNumber];
-            msg_send_int(&msg, openthread_get_event_pid());
+            msg_send(&msg, openthread_get_event_pid());
         }
         else {
             gSerialMessage[currentSerialBufferNumber]->serial_buffer_status = OPENTHREAD_SERIAL_BUFFER_STATUS_FREE;
@@ -141,36 +148,64 @@ static void uart_handler(void* arg, char c) {
 #endif /* MODULE_OPENTHREAD_NCP_FTD */
 #endif
 
+static void wpantund_message_callback(ethos_t *dev, uint8_t channel, uint8_t *data, uint16_t length) {
+    /* It may be possible to heavily optimize this. */
+    for (uint16_t i = 0; i != length; i++) {
+        uart_handler(NULL, data[i]);
+    }
+}
+
+static rethos_handler_t wpantund_message_h = {.channel = RETHOS_CHANNEL_WPANTUND, .cb = wpantund_message_callback};
+
+extern bool rethos_queued;
+void rethos_schedule_isr(ethos_t* dev) {
+    if (rethos_queued) {
+        return;
+    }
+    rethos_queued = true;
+
+    msg_t msg;
+    msg.type = OPENTHREAD_RETHOS_ISR_EVENT;
+    msg.content.ptr = dev;
+    msg_send(&msg, openthread_get_preevent_pid());
+}
+
 /* OpenThread will call this for enabling UART (required for OpenThread's CLI)*/
 otError otPlatUartEnable(void)
 {
-#ifdef UART_NUMOF
     for (uint8_t i = 0; i < OPENTHREAD_NUMBER_OF_SERIAL_BUFFER; i++) {
         gSerialMessage[i] = (serial_msg_t*) &gSerialBuff[i];
         gSerialMessage[i]->serial_buffer_status = OPENTHREAD_SERIAL_BUFFER_STATUS_FREE;
     }
-    uart_init(OPENTHREAD_UART_DEV, OPENTHREAD_UART_BAUDRATE, (uart_rx_cb_t) uart_handler, NULL);
-#endif
+
+    ethos_params_t p;
+    p.uart      = RETHOS_UART;
+    p.baudrate  = RETHOS_BAUDRATE;
+    p.buf       = NULL;
+    p.bufsize   = 0;
+    p.call_rethos_service_isr_from_thread = rethos_schedule_isr;
+    rethos_setup(&rethos, &p);
+
+    rethos_register_handler(&rethos, &wpantund_message_h);
+
     return OT_ERROR_NONE;
 }
 
 /* OpenThread will call this for disabling UART */
 otError otPlatUartDisable(void)
 {
-#ifdef UART_NUMOF
-    uart_poweroff(OPENTHREAD_UART_DEV);
-#endif
+    /* Not easy to do this with REthos, so I'm not going to try. */
+    assert(false);
     return OT_ERROR_NONE;
 }
 
 /* OpenThread will call this for sending data through UART */
 otError otPlatUartSend(const uint8_t *aBuf, uint16_t aBufLength)
 {
-#ifdef UART_NUMOF
-    uart_write(OPENTHREAD_UART_DEV, aBuf, aBufLength);
+    rethos_send_frame(&rethos, aBuf, aBufLength, RETHOS_CHANNEL_WPANTUND, RETHOS_FRAME_TYPE_DATA);
 
-    /* Tell OpenThread the sending of UART is done */
+    /* Tell OpenThread the sending over UART is done */
     otPlatUartSendDone();
-#endif
+
     return OT_ERROR_NONE;
 }
