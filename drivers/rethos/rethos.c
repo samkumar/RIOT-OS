@@ -90,6 +90,7 @@ static void process_frame(ethos_t *dev, struct rethos_recv_ctx* r)
         {
             if (r->rx_frame_type == RETHOS_FRAME_TYPE_ACK)
             {
+                DEBUG("[rethos] ACK for seq = %d (expecting %d, %d)\n", r->rx_seqno, dev->rexmit_seqno, dev->rexmit_acked);
                 if (r->rx_seqno == dev->rexmit_seqno)
                 {
                     dev->rexmit_acked = true;
@@ -108,12 +109,13 @@ static void process_frame(ethos_t *dev, struct rethos_recv_ctx* r)
                      */
                     if (dev->received_data)
                     {
-                        rethos_send_ack_frame(dev, r->rx_seqno);
+                        rethos_send_ack_frame(dev, dev->last_rcvd_seqno);
                     }
                 }
                 else
                 {
                     /* Retransmit the last data frame we sent. */
+                    DEBUG("[rethos] Retransmitting %d due to NACK\n", (int) dev->rexmit_seqno);
                     rethos_rexmit_data_frame(dev);
                 }
             }
@@ -274,6 +276,7 @@ static void ethos_isr(void *arg, uint8_t c)
 // This is called from a thread to service (all) pending interrupts
 void rethos_service_isr(ethos_t* dev)
 {
+    mutex_lock(&dev->out_mutex);
     int state = irq_disable();
     if (dev->nack_ready) {
         dev->nack_ready = false;
@@ -293,11 +296,13 @@ void rethos_service_isr(ethos_t* dev)
     if (dev->rexmit_ready) {
         dev->rexmit_ready = false;
         if (!dev->rexmit_acked) {
+            DEBUG("[rethos] Retransmitting %d due to timeout\n", (int) dev->rexmit_seqno);
             rethos_rexmit_data_frame(dev);
-            xtimer_set(&rexmit_timer, (uint32_t) RETHOS_REXMIT_MICROS);
+            // rexmit timer is already scheduled by rethos_rexmit_data_frame
         }
     }
     irq_restore(state);
+    mutex_unlock(&dev->out_mutex);
 }
 
 static void _write_escaped(uart_t uart, uint8_t c)
@@ -363,18 +368,14 @@ void _start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen, uint8
 
 void rethos_start_frame_seqno_norexmit(ethos_t* dev, const uint8_t* data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type)
 {
-    if (!irq_is_in()) {
-        mutex_lock(&dev->out_mutex);
-    }
+    mutex_lock(&dev->out_mutex);
 
     _start_frame_seqno(dev, data, thislen, channel, seqno, frame_type);
 }
 
 void rethos_start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen, uint8_t channel, uint16_t seqno, uint8_t frame_type)
 {
-    if (!irq_is_in()) {
-        mutex_lock(&dev->out_mutex);
-    }
+    mutex_lock(&dev->out_mutex);
 
     /* Store this data, in case we need to retransmit it. */
     dev->rexmit_seqno = seqno;
@@ -386,6 +387,12 @@ void rethos_start_frame_seqno(ethos_t* dev, const uint8_t* data, size_t thislen,
     _start_frame_seqno(dev, data, thislen, channel, seqno, frame_type);
 }
 
+void rethos_start_frame(ethos_t *dev, const uint8_t *data, size_t thislen, uint8_t channel, uint8_t frame_type)
+{
+    uint16_t seqno = ++(dev->txseq);
+    rethos_start_frame_seqno(dev, data, thislen, channel, seqno, frame_type);
+}
+
 void ethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, unsigned channel)
 {
     rethos_send_frame(dev, data, len, channel, RETHOS_FRAME_TYPE_DATA);
@@ -394,20 +401,20 @@ void ethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, unsigned ch
 void rethos_send_frame(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint8_t frame_type)
 {
     rethos_start_frame(dev, data, len, channel, frame_type);
-    rethos_end_frame(dev);
+    rethos_end_frame(dev, true);
 }
 
 /* We need to copy this because, apparently, both rethos_send_frame and rethos_start_frame are public... */
 void rethos_send_frame_seqno(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint16_t seqno, uint8_t frame_type)
 {
     rethos_start_frame_seqno(dev, data, len, channel, seqno, frame_type);
-    rethos_end_frame(dev);
+    rethos_end_frame(dev, true);
 }
 
 void rethos_send_frame_seqno_norexmit(ethos_t *dev, const uint8_t *data, size_t len, uint8_t channel, uint16_t seqno, uint8_t frame_type)
 {
     rethos_start_frame_seqno_norexmit(dev, data, len, channel, seqno, frame_type);
-    rethos_end_frame(dev);
+    rethos_end_frame(dev, false);
 }
 
 void rethos_rexmit_data_frame(ethos_t* dev)
@@ -423,12 +430,6 @@ void rethos_send_ack_frame(ethos_t* dev, uint16_t seqno)
 void rethos_send_nack_frame(ethos_t* dev)
 {
     rethos_send_frame_seqno_norexmit(dev, NULL, 0, RETHOS_CHANNEL_CONTROL, 0, RETHOS_FRAME_TYPE_NACK);
-}
-
-void rethos_start_frame(ethos_t *dev, const uint8_t *data, size_t thislen, uint8_t channel, uint8_t frame_type)
-{
-    uint16_t seqno = ++(dev->txseq);
-    rethos_start_frame_seqno(dev, data, thislen, channel, seqno, frame_type);
 }
 
 void rethos_continue_frame(ethos_t *dev, const uint8_t *data, size_t thislen)
@@ -452,7 +453,7 @@ void rethos_continue_frame(ethos_t *dev, const uint8_t *data, size_t thislen)
     }
 }
 
-void rethos_end_frame(ethos_t *dev)
+void rethos_end_frame(ethos_t *dev, bool schedule_rexmit)
 {
     uint16_t cksum = fletcher16_fin(dev->flsum1, dev->flsum2);
     uart_write(dev->uart, _end_frame, 2);
@@ -461,15 +462,13 @@ void rethos_end_frame(ethos_t *dev)
     dev->stats_tx_frames += 1;
 
     /* Enable retransmission and set the rexmit timer */
-    if (dev->rexmit_numbytes <= RETHOS_TX_BUF_SZ) {
+    if (schedule_rexmit && dev->rexmit_numbytes <= RETHOS_TX_BUF_SZ) {
         dev->rexmit_acked = false;
         rexmit_timer.arg = dev;
         xtimer_set(&rexmit_timer, (uint32_t) RETHOS_REXMIT_MICROS);
     }
 
-    if (!irq_is_in()) {
-        mutex_unlock(&dev->out_mutex);
-    }
+    mutex_unlock(&dev->out_mutex);
 }
 
 void rethos_register_handler(ethos_t *dev, rethos_handler_t *handler)

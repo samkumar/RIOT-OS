@@ -95,7 +95,7 @@ so that implies that even the preamble needs to be escaped when written
 
 
 /* Retransmit interval in microseconds. */
-#define RETHOS_REXMIT_MICROS 100000L
+#define RETHOS_REXMIT_MICROS 10000L
 
 /** @} */
 
@@ -278,7 +278,7 @@ void rethos_continue_frame(ethos_t *dev, const uint8_t *data, size_t thislen);
  * @param[in]   thislen     nr of bytes to send on this invocation
  * @param[in]   frame_type  frame type to use
  */
-void rethos_end_frame(ethos_t *dev);
+void rethos_end_frame(ethos_t *dev, bool schedule_rexmit);
 
 
 
