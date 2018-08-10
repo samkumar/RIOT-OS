@@ -94,8 +94,8 @@ struct {
 /* Stats timeout is 15 seconds. Type is struct timespec. */
 #define STATS_TIMEOUT {(time_t) 5, 0L}
 
-/* Retransmission timeout is 100 ms. Type is struct timespec. */
-#define REXMIT_TIMEOUT {(time_t) 0, 100000000L}
+/* Retransmission timeout is 40 ms. Type is struct timespec. */
+#define REXMIT_TIMEOUT {(time_t) 0, 40000000L}
 
 const struct itimerspec stats_timer_spec = { STATS_TIMEOUT, STATS_TIMEOUT };
 const struct itimerspec rexmit_timer_spec = { REXMIT_TIMEOUT, REXMIT_TIMEOUT };
@@ -347,6 +347,7 @@ typedef struct {
     size_t rexmit_numbytes;
     uint8_t rexmit_frame[MTU];
     bool rexmit_acked;
+    uint32_t rexmit_count;
 
     /* Keeps track of whether anything has been sent yet. */
     bool received_data_frame;
@@ -423,7 +424,7 @@ static serial_event_t _serial_handle_byte(serial_t *serial, char c)
 
     switch (serial->state) {
         case WAIT_FRAMESTART:
-            fprintf(stderr, "Got stray byte %c\n", c);
+            fprintf(stderr, "Got stray byte %x\n", c);
             break;
         case WAIT_FRAMETYPE:
             serial->frametype = (uint8_t) c;
@@ -572,6 +573,7 @@ void rethos_send_data_frame(serial_t* serial, const uint8_t* data, size_t datale
     serial->rexmit_numbytes = datalen;
     memcpy(serial->rexmit_frame, data, datalen);
     serial->rexmit_acked = false;
+    serial->rexmit_count = 0;
 
     _send_frame(serial, data, datalen, channel, seqno, RETHOS_FRAME_TYPE_DATA);
 
@@ -934,7 +936,19 @@ int main(int argc, char *argv[])
             if (domain_sockets[i].client_socket == -1) {
                 FD_SET(domain_sockets[i].server_socket, &readfds);
                 UPDATE_MAX_FD(domain_sockets[i].server_socket);
-            } else {
+            } else if (serial.rexmit_acked || serial.rexmit_count >= 3) {
+                /*
+                 * If an ACK is expected from the serial, then these
+                 * sockets are not added. This ensures that the unACKed
+                 * frame can be retransmitted without be overwritten
+                 * with the next frame, even under high load.
+                 *
+                 * After three ACK-less retransmissions, however, we
+                 * may choose to just move on and overwrite it. This
+                 * is implemented so that the processes that have
+                 * connected to REthos don't block if the MCU is
+                 * disconnected.
+                 */
                 FD_SET(domain_sockets[i].client_socket, &readfds);
                 UPDATE_MAX_FD(domain_sockets[i].client_socket);
             }
@@ -964,6 +978,7 @@ int main(int argc, char *argv[])
             rexmit_fired = 0;
 
             if (!serial.rexmit_acked) {
+                serial.rexmit_count++;
                 rethos_rexmit_data_frame(&serial);
             }
         }
@@ -1003,8 +1018,7 @@ int main(int argc, char *argv[])
                                  * the last packet we received.
                                  */
                                 if (serial.rexmit_acked) {
-                                    if (serial.received_data_frame)
-                                    {
+                                    if (serial.received_data_frame) {
                                         rethos_send_ack_frame(&serial, serial.last_rcvd_seqno);
                                     }
                                 } else {
@@ -1015,6 +1029,7 @@ int main(int argc, char *argv[])
                                 if (serial.in_seqno == serial.rexmit_seqno) {
                                     /* Mark the frame to be retransmitted as having been ACKed so we don't retransmit it on timeout. */
                                     serial.rexmit_acked = true;
+                                    serial.rexmit_count = 0;
 
                                     /* Cancel the pending rexmit timer. */
                                     if (timer_settime(rexmit_timer, 0, &cancel_timer_spec, NULL) == -1) {
@@ -1046,7 +1061,7 @@ int main(int argc, char *argv[])
                             printf("Got an empty frame on channel %d: dropping frame\n", serial.channel);
                             goto serial_done;
                         } else {
-                            printf("Got a frame on channel %d\n", serial.channel);
+                            printf("Got a frame on channel %d (length = %d)\n", serial.channel, serial.numbytes);
                         }
 
                         if (serial.channel == STDIN_CHANNEL) {
