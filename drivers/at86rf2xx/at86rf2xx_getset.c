@@ -480,7 +480,7 @@ static inline void _set_state(at86rf2xx_t *dev, uint8_t state, uint8_t cmd)
      */
     if (state != AT86RF2XX_STATE_RX_AACK_ON) {
         while (at86rf2xx_get_status(dev) != state) {
-            at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_STATE, cmd);    
+            at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_STATE, cmd);
         }
     }
     /* Although RX_AACK_ON state doesn't get read back,
@@ -556,6 +556,8 @@ uint8_t at86rf2xx_set_state(at86rf2xx_t *dev, uint8_t state)
     } else {
         _set_state(dev, state, state);
     }
+
+    DEBUG("[at86rf2xx] state: 0x%x -> 0x%x\n", old_state, state);
 
     return old_state;
 }

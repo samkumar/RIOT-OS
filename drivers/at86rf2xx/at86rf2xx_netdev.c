@@ -48,7 +48,17 @@ static void _isr(netdev_t *netdev);
 static int _get(netdev_t *netdev, netopt_t opt, void *val, size_t max_len);
 static int _set(netdev_t *netdev, netopt_t opt, const void *val, size_t len);
 
-static volatile bool sending = false;
+/*
+ * We use this to properly direct events to threads in interrupt context.
+ * 0 means that no send operation is taking place, so interrupt is for a
+ * receive operation.
+ * 1 means that a send operation is being prepared, so no interrupt here can be
+ * valid; only way this could even happen is a delayed receive interrupt.
+ * 2 means that a send operation is underway, so the interrupt could be for the
+ * send operation (or possibly a delayed interrupt from a receive).
+ */
+volatile uint8_t radio_send_state = 0;
+volatile uint8_t irq_status = 0;
 
 const netdev_driver_t at86rf2xx_driver = {
     .send = _send,
@@ -62,14 +72,29 @@ const netdev_driver_t at86rf2xx_driver = {
 static void _irq_handler(void *arg)
 {
     netdev_t *dev = (netdev_t *) arg;
+    irq_status = at86rf2xx_reg_read(arg, AT86RF2XX_REG__IRQ_STATUS);
 
     if (dev->event_callback) {
 #ifdef MODULE_OPENTHREAD
-        if (sending) {
-            sending = false;
-            dev->event_callback(dev, NETDEV_EVENT_ISR2);
-        } else {
-            dev->event_callback(dev, NETDEV_EVENT_ISR);
+        switch (radio_send_state) {
+            case 0:
+                /* No send operation is in progress. */
+                dev->event_callback(dev, NETDEV_EVENT_ISR);
+                break;
+            case 1:
+                /*
+                 * Oops, we received a packet but have already committed to
+                 * sending another one... so we have no choice but to drop
+                 * the packet we received (since we might have overwritten it).
+                 */
+                break;
+            case 2:
+                /* Send operation is underway. */
+                dev->event_callback(dev, NETDEV_EVENT_ISR2);
+                break;
+            default:
+                assert(false);
+                break;
         }
 #else
         dev->event_callback(dev, NETDEV_EVENT_ISR);
@@ -87,7 +112,7 @@ static int _init(netdev_t *netdev)
     gpio_clear(dev->params.sleep_pin);
     gpio_init(dev->params.reset_pin, GPIO_OUT);
     gpio_set(dev->params.reset_pin);
-    gpio_init_int(dev->params.int_pin, GPIO_IN, GPIO_RISING, _irq_handler, dev);
+    gpio_init_int(dev->params.int_pin, GPIO_IN, GPIO_HIGH, _irq_handler, dev);
 
     /* reset device to default values and put it into RX state */
     at86rf2xx_reset(dev);
@@ -113,14 +138,12 @@ static int _send(netdev_t *netdev, const struct iovec *vector, unsigned count)
     size_t len = 0;
 
     /* When an RX_END event happens while executing this function, this event is
-     * processed after this function ends, misinterpreted as a TX_END event 
+     * processed after this function ends, misinterpreted as a TX_END event
      */
     bool state_transition = at86rf2xx_tx_prepare(dev);
     if (!state_transition) {
         return -1;
     }
-
-    sending = true;
 
     /* load packet data into FIFO */
     for (unsigned i = 0; i < count; i++, ptr++) {
@@ -574,19 +597,40 @@ static void _isr(netdev_t *netdev)
     uint8_t state;
     uint8_t trac_status;
 
+    assert(radio_send_state != 1);
+
     /* If transceiver is sleeping register access is impossible and frames are
      * lost anyway, so return immediately.
      */
-    state = at86rf2xx_get_status(dev);
-    if (state == AT86RF2XX_STATE_SLEEP) {
+    if (dev->state == AT86RF2XX_STATE_SLEEP) {
+        DEBUG("[at86rf2xx] skipping service due to sleep (thread = %d)\n", sched_active_pid);
         return;
     }
 
     /* read (consume) device status */
-    irq_mask = at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_STATUS);
+    unsigned irq_state = irq_disable();
+    irq_mask = irq_status;
+    irq_status = 0;
+    irq_restore(irq_state);
+
+    /*
+     * If we are busy sending, then we ended up here by mistake, due to a
+     * delayed interrupt after a receive. We need to read the status again,
+     * even though we just checked if the radio is asleep, because even if the
+     * radio was busy then, the sending could have finished before we read the
+     * status register; in that case, reading it would have cleared the
+     * interrupt, obligating us to handle the finished send right now.
+     */
+    state = at86rf2xx_get_status(dev);
+    if (state == AT86RF2XX_STATE_BUSY_TX_ARET) {
+        DEBUG("[at86rf2xx] skipping delayed receive interrupt: irq_mask = 0x%x, thread = %d\n", irq_mask, sched_active_pid);
+        return;
+    }
 
     trac_status = at86rf2xx_reg_read(dev, AT86RF2XX_REG__TRX_STATE) &
                   AT86RF2XX_TRX_STATE_MASK__TRAC;
+
+    DEBUG("[at86rf2xx] t=%d, irq=0x%x, st=0x%x, dev->st=0x%x, trac=0x%x, cb=%p\n", sched_active_pid, irq_mask, state, dev->state, trac_status, netdev->event_callback);
 
     if (irq_mask & AT86RF2XX_IRQ_STATUS_MASK__RX_START) {
         netdev->event_callback(netdev, NETDEV_EVENT_RX_STARTED);
@@ -610,23 +654,34 @@ static void _isr(netdev_t *netdev)
         }
         else if (state == AT86RF2XX_STATE_TX_ARET_ON ||
                  state == AT86RF2XX_STATE_BUSY_TX_ARET) {
+#ifdef MODULE_OPENTHREAD
+            /*
+             * Normally we would need to disable interrupts here, but the only
+             * reason we're here is that we just finished sending (not a delayed
+             * interrupt after a receive operation). Furthermore, we know that
+             * openthread only has one outstanding send at a time. So, we don't
+             * have to disable interrupts when setting radio_send_state.
+             */
+            assert(radio_send_state == 2);
+            radio_send_state = 0;
+#endif
             /* check for more pending TX calls and return to idle state if
              * there are none */
-            assert(dev->pending_tx != 0);
+            assert(dev->pending_tx == 1);
             if ((--dev->pending_tx) == 0) {
 #if MODULE_GNRC_LASMAC
 #if LEAF_NODE
-				/* Wake up for a while when receiving an ACK with pending bit */
-				if (trac_status == AT86RF2XX_TRX_STATE__TRAC_SUCCESS_DATA_PENDING) {
-	                dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;		
-				}
+                /* Wake up for a while when receiving an ACK with pending bit */
+                if (trac_status == AT86RF2XX_TRX_STATE__TRAC_SUCCESS_DATA_PENDING) {
+                    dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;
+                }
 #endif
 #endif
 #if MODULE_OPENTHREAD_MTD
-				/* Wake up for a while when receiving an ACK with pending bit */
-				if (trac_status == AT86RF2XX_TRX_STATE__TRAC_SUCCESS_DATA_PENDING) {
-	                dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;		      
-				} else {
+                /* Wake up for a while when receiving an ACK with pending bit */
+                if (trac_status == AT86RF2XX_TRX_STATE__TRAC_SUCCESS_DATA_PENDING) {
+                    dev->idle_state = AT86RF2XX_STATE_RX_AACK_ON;
+                } else {
                     dev->idle_state = AT86RF2XX_STATE_SLEEP;
                 }
 #endif

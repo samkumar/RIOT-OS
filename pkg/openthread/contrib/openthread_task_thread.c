@@ -27,11 +27,12 @@
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
-#define OPENTHREAD_TASK_QUEUE_LEN      (4)
+#define OPENTHREAD_TASK_QUEUE_LEN      (8)
 static msg_t _queue[OPENTHREAD_TASK_QUEUE_LEN];
 static kernel_pid_t _task_pid;
 
 volatile bool otTaskPending = false;
+volatile bool otSendDonePending = false;
 
 /* get OpenThread Task Thread pid */
 kernel_pid_t openthread_get_task_pid(void) {
@@ -82,9 +83,14 @@ static void *_openthread_task_thread(void *arg) {
                 otPlatAlarmMicroFired(openthread_get_instance());
                 break;
 #endif
-            case OPENTHREAD_NETDEV_MSG_TYPE_EVENT:
+            case OPENTHREAD_NETDEV_TASK_MSG_TYPE_EVENT:
                 /* Received an event from radio driver */
-                DEBUG("\not_event: OPENTHREAD_NETDEV_MSG_TYPE_EVENT received\n");
+                {
+                    unsigned state = irq_disable();
+                    otSendDonePending = false;
+                    irq_restore(state);
+                }
+                DEBUG("\not_task: OPENTHREAD_NETDEV_TASK_MSG_TYPE_EVENT received\n");
                 //printf("\nfin->");
                 //msg.type = OPENTHREAD_NETDEV_MSG_TYPE_EVENT;
                 //msg_send(&msg, openthread_get_event_pid());
@@ -93,12 +99,16 @@ static void *_openthread_task_thread(void *arg) {
                 mutex_unlock(openthread_get_radio_mutex());
                 break;
             case OPENTHREAD_TX_FAIL_RADIO_BUSY:
-                DEBUG("\not_event: OPENTHREAD_TX_FAIL_RADIO_BUSY\n");
+                DEBUG("\not_task: OPENTHREAD_TX_FAIL_RADIO_BUSY\n");
                 sent_pkt(openthread_get_instance(), NETDEV_EVENT_TX_MEDIUM_BUSY);
                 break;
             case OPENTHREAD_LINK_RETRY_TIMEOUT:
-                DEBUG("\not_event: OPENTHREAD_LINK_RETRY_TIMEOUT\n");
+                DEBUG("\not_task: OPENTHREAD_LINK_RETRY_TIMEOUT\n");
                 sent_pkt(openthread_get_instance(), NETDEV_EVENT_TX_FAIL);
+                break;
+            default:
+                printf("\not_task: unhandled event of type 0x%x, 0x%x\n", msg.type, (unsigned int) msg.content.value);
+                assert(false);
                 break;
         }
         while(otTaskletsArePending(openthread_get_instance())) {

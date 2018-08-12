@@ -52,22 +52,12 @@ static mutex_t coarse_mutex = MUTEX_INIT;
 
 static char ot_task_thread_stack[THREAD_STACKSIZE_DEFAULT+4];
 static char ot_event_thread_stack[THREAD_STACKSIZE_DEFAULT+1000+4];
-static char ot_preevent_thread_stack[THREAD_STACKSIZE_IDLE+4];
 
 void openthread_event_thread_overflow_check(void) {
     // if (ot_event_thread_stack[0] != 0x42 || ot_event_thread_stack[1] != 0xA3 ||
     //     ot_event_thread_stack[2] != 0x7B || ot_event_thread_stack[3] != 0x22) {
     //     while(1) {
     //         printf("event stack overflow!!\n");
-    //     }
-    // }
-}
-
-void openthread_preevent_thread_overflow_check(void) {
-    // if (ot_preevent_thread_stack[0] != 0x11 || ot_preevent_thread_stack[1] != 0x73 ||
-    //     ot_preevent_thread_stack[2] != 0xBF || ot_preevent_thread_stack[3] != 0xD2) {
-    //     while(1) {
-    //         printf("preevent stack overflow!!\n");
     //     }
     // }
 }
@@ -120,9 +110,9 @@ xtimer_t* openthread_get_millitimer(void) {
 static void _millitimer_cb(void* arg) {
     msg_t msg;
 	msg.type = OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT;
-	if (msg_send(&msg, openthread_get_preevent_pid()) <= 0) {
-        //assert(false);
-        printf("ot_preevent: possibly lost timer interrupt.\n");
+	if (msg_send(&msg, openthread_get_event_pid()) <= 0) {
+        printf("ot_event: possibly lost timer interrupt.\n");
+        assert(false);
     }
 }
 
@@ -143,53 +133,70 @@ static void _microtimer_cb(void* arg) {
 }
 #endif
 
+extern volatile bool otSendDonePending;
+extern volatile bool otRecvDonePending;
+
 /* Interupt handler for OpenThread event thread */
 /* NOTE: the coarse_mutex must be held by the _caller_ of this function. */
 static void _event_cb(netdev_t *dev, netdev_event_t event) {
     switch (event) {
         case NETDEV_EVENT_ISR:
             {
-                msg_t msg;
-                msg.type = OPENTHREAD_NETDEV_MSG_TYPE_EVENT;
-                msg.content.ptr = dev;
-#ifdef MODULE_OPENTHREAD_FTD
-                unsigned irq_state = irq_disable();
-                ((at86rf2xx_t *)dev)->pending_irq++;
-                irq_restore(irq_state);
-#endif
-                if (msg_send(&msg, openthread_get_event_pid()) <= 0) {
-                    printf("ot_event: possibly lost radio interrupt.\n");
-#ifdef MODULE_OPENTHREAD_FTD
+                if (!otRecvDonePending) {
+                    msg_t msg;
+                    msg.type = OPENTHREAD_NETDEV_MSG_TYPE_EVENT;
+                    msg.content.ptr = dev;
+    #ifdef MODULE_OPENTHREAD_FTD
                     unsigned irq_state = irq_disable();
-                    ((at86rf2xx_t *)dev)->pending_irq--;
+                    ((at86rf2xx_t *)dev)->pending_irq++;
                     irq_restore(irq_state);
-#endif
+    #endif
+                    if (msg_send(&msg, openthread_get_event_pid()) <= 0) {
+                        printf("ot_event: possibly lost radio interrupt.\n");
+    #ifdef MODULE_OPENTHREAD_FTD
+                        unsigned irq_state = irq_disable();
+                        ((at86rf2xx_t *)dev)->pending_irq--;
+                        irq_restore(irq_state);
+    #endif
+                        // Event thread queue should NEVER be full...
+                        assert(false);
+                    } else {
+                        otRecvDonePending = true;
+                    }
                 }
                 break;
             }
         case NETDEV_EVENT_ISR2:
             {
-                msg_t msg;
-                msg.type = OPENTHREAD_NETDEV_MSG_TYPE_EVENT;
-                msg.content.ptr = dev;
-                if (msg_send(&msg, openthread_get_task_pid()) <= 0) {
-                    //assert(false);
-                    printf("ot_task: possibly lost radio interrupt.\n");
+                /* Make sure that this is in the task queue at most once. */
+                if (!otSendDonePending) {
+                    msg_t msg;
+                    msg.type = OPENTHREAD_NETDEV_TASK_MSG_TYPE_EVENT;
+                    msg.content.ptr = dev;
+                    if (msg_send(&msg, openthread_get_task_pid()) <= 0) {
+                        printf("ot_task: possibly lost radio interrupt.\n");
+
+                        // Task thread queue should NEVER be full...
+                        assert(false);
+                    } else {
+                        otSendDonePending = true;
+                    }
                 }
                 break;
             }
         case NETDEV_EVENT_RX_COMPLETE:
-            //assert(thread_get_pid() == openthread_get_event_pid());
+            assert(sched_active_pid == openthread_get_event_pid());
             recv_pkt(openthread_get_instance(), dev);
             break;
         case NETDEV_EVENT_TX_COMPLETE:
         case NETDEV_EVENT_TX_COMPLETE_DATA_PENDING:
         case NETDEV_EVENT_TX_NOACK:
         case NETDEV_EVENT_TX_MEDIUM_BUSY:
-            //assert(thread_get_pid() == openthread_get_event_pid());
+            assert(sched_active_pid == openthread_get_task_pid());
             sent_pkt(openthread_get_instance(), event);
             break;
         default:
+            assert(false);
             break;
     }
 }
@@ -225,10 +232,6 @@ void openthread_bootstrap(void)
     // ot_event_thread_stack[1] = 0xA3;
     // ot_event_thread_stack[2] = 0x7B;
     // ot_event_thread_stack[3] = 0x22;
-    // ot_preevent_thread_stack[0] = 0x11;
-    // ot_preevent_thread_stack[1] = 0x73;
-    // ot_preevent_thread_stack[2] = 0xBF;
-    // ot_preevent_thread_stack[3] = 0xD2;
     // ot_task_thread_stack[0] = 0x1E;
     // ot_task_thread_stack[1] = 0x90;
     // ot_task_thread_stack[2] = 0x0C;
@@ -255,8 +258,6 @@ void openthread_bootstrap(void)
     gnrc_tcp_freebsd_init();
 
     /* init three threads for openthread */
-    openthread_preevent_init(ot_preevent_thread_stack, sizeof(ot_preevent_thread_stack),
-                         THREAD_PRIORITY_MAIN - 3, "openthread_preevent");
     openthread_task_init(ot_task_thread_stack, sizeof(ot_task_thread_stack),
                          THREAD_PRIORITY_MAIN - 1, "openthread_task");
     openthread_event_init(ot_event_thread_stack, sizeof(ot_event_thread_stack),

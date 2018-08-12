@@ -106,7 +106,7 @@ static netopt_enable_t _is_promiscuous(void)
     netopt_enable_t en;
 
     _dev->driver->get(_dev, NETOPT_PROMISCUOUSMODE, &en, sizeof(en));
-    return en == NETOPT_ENABLE ? true : false;;
+    return en == NETOPT_ENABLE ? true : false;
 }
 
 /* set the state of promiscuous mode */
@@ -272,6 +272,9 @@ otError otPlatRadioGetTransmitPower(otInstance *aInstance, int8_t *aPower)
     return OT_ERROR_NONE;
 }
 
+volatile uint32_t radio_tx_cnt = 0; // for assertions
+volatile int radio_send_rv = 0; // for debugging in case an assertion fails
+
 /* OpenThread will call this for transmitting a packet*/
 otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
 {
@@ -293,23 +296,35 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
     DEBUG("\n");*/
 
     mutex_lock(openthread_get_radio_mutex());
+    assert(radio_tx_cnt == 0);
+    radio_tx_cnt++;
     //printf("try->");
     //_set_channel(aPacket->mChannel);
     /* send packet though netdev */
     int success = _dev->driver->send(_dev, &pkt, 1);
+    radio_send_rv = success;
     //printf("done %d\n", success);
     if (success == -1) {
-        /* Fail to send since the transceiver is busy (receiving).
+        /*
+        * Fail to send since the transceiver is busy (receiving).
          * Retry in a little bit.
          */
         if (_get_state() != NETOPT_STATE_RX) {
             _set_idle();
         }
 
+        assert(!irq_is_in() && sched_active_pid == openthread_get_task_pid());
+
+        // samkumar: Is this always invoked from the task thread? If not,
+        // we need to revise this msg_send_to_self call.
+
         msg_t fail_msg;
         fail_msg.type = OPENTHREAD_TX_FAIL_RADIO_BUSY;
         success = msg_send_to_self(&fail_msg);
         assert(success == 1);
+    } else {
+        assert(success == pkt.iov_len);
+        br_on_tx();
     }
 
     mutex_unlock(openthread_get_radio_mutex());
@@ -480,16 +495,19 @@ static inline void _create_fake_ack_frame(bool ackPending)
 /* NOTE: the coarse_mutex must be held by the _caller_ of this function. */
 void sent_pkt(otInstance *aInstance, netdev_event_t event)
 {
+    assert(radio_tx_cnt == 1);
     /* Tell OpenThread transmission is done depending on the NETDEV event */
     switch (event) {
         case NETDEV_EVENT_TX_COMPLETE:
             DEBUG("TX_COMPLETE\n");
             _create_fake_ack_frame(false);
+            radio_tx_cnt--;
             otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_COMPLETE_DATA_PENDING:
             DEBUG("TX_COMPLETE_DATA_PENDING\n");
             _create_fake_ack_frame(true);
+            radio_tx_cnt--;
             otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_NOACK:
@@ -506,13 +524,17 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
 #endif
             /* fallthrough intentional in #else case */
         case NETDEV_EVENT_TX_FAIL:
+            radio_tx_cnt--;
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_NO_ACK);
             break;
         case NETDEV_EVENT_TX_MEDIUM_BUSY:
             DEBUG("TX_MEDIUM_BUSY\n");
+            radio_tx_cnt--;
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_CHANNEL_ACCESS_FAILURE);
             break;
         default:
+            printf("sent_pkt: unknown event 0x%x\n", event);
+            assert(false);
             break;
     }
 }
