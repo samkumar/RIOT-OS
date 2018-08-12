@@ -37,6 +37,7 @@
  * @brief Array holding one pre-initialized mutex for each SPI device
  */
 static mutex_t locks[SPI_NUMOF];
+static unsigned irq_state[SPI_NUMOF];
 
 /**
  * @brief   Shortcut for accessing the used SPI SERCOM device
@@ -71,6 +72,7 @@ void spi_init(spi_t bus)
 
     /* initialize the device lock */
     mutex_init(&locks[bus]);
+    irq_state[bus] = 0;
 
     /* configure pins and their muxes */
     spi_init_pins(bus);
@@ -115,7 +117,11 @@ void spi_init_pins(spi_t bus)
 int spi_acquire(spi_t bus, spi_cs_t cs, spi_mode_t mode, spi_clk_t clk)
 {
     /* get exclusive access to the device */
-    mutex_lock(&locks[bus]);
+    if (!irq_is_in()) {
+        mutex_lock(&locks[bus]);
+    }
+    irq_state[bus] = irq_disable();
+
     /* power on the device */
     poweron(bus);
 
@@ -149,7 +155,10 @@ int spi_acquire(spi_t bus, spi_cs_t cs, spi_mode_t mode, spi_clk_t clk)
 void spi_release(spi_t bus)
 {
     /* release access to the device */
-    mutex_unlock(&locks[bus]);
+    irq_restore(irq_state[bus]);
+    if (!irq_is_in()) {
+        mutex_unlock(&locks[bus]);
+    }
 }
 
 void spi_transfer_bytes(spi_t bus, spi_cs_t cs, bool cont,

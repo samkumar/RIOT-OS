@@ -174,23 +174,34 @@ size_t at86rf2xx_send(at86rf2xx_t *dev, uint8_t *data, size_t len)
     return len;
 }
 
+extern volatile uint8_t radio_send_state;
+
 bool at86rf2xx_tx_prepare(at86rf2xx_t *dev)
 {
-    uint8_t state;
-
+    uint8_t old_state;
     dev->pending_tx++;
 
 #ifdef MODULE_OPENTHREAD_FTD
-    state = at86rf2xx_get_status(dev);
-    if (state == AT86RF2XX_STATE_BUSY_RX_AACK ||
-        state == AT86RF2XX_STATE_BUSY_TX_ARET) {
+    uint8_t new_state;
+
+    /* First, check if the radio busy (common failure case). */
+    old_state = at86rf2xx_get_status(dev);
+    assert(old_state != AT86RF2XX_STATE_TX_ARET_ON);
+    if (old_state == AT86RF2XX_STATE_BUSY_RX_AACK ||
+        old_state == AT86RF2XX_STATE_BUSY_TX_ARET) {
         /* We should NOT send right now. This CSMA attempt should fail. */
+        DEBUG("[at86rf2xx] radio is busy (0x%x), failing\n", old_state);
         dev->pending_tx--;
         return false;
     }
 
+    /*
+     * Second, check if there is a pending RX interrupt to service (common
+     * failure case).
+     */
     int irq_state = irq_disable();
     if (dev->pending_irq != 0) {
+        DEBUG("[at86rf2xx] pending_irq exists (#1), failing\n");
         irq_restore(irq_state);
         dev->pending_tx--;
         /*
@@ -203,43 +214,75 @@ bool at86rf2xx_tx_prepare(at86rf2xx_t *dev)
     }
     irq_restore(irq_state);
 
-    at86rf2xx_set_state(dev, AT86RF2XX_STATE_TX_ARET_ON);
-    if (at86rf2xx_get_status(dev) != AT86RF2XX_STATE_TX_ARET_ON) {
+    /*
+     * Now, try to transition to TX state.
+     */
+    at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_STATE, AT86RF2XX_STATE_TX_ARET_ON);
+    do {
+        new_state = at86rf2xx_get_status(dev);
+    } while (new_state == AT86RF2XX_STATE_IN_PROGRESS);
+
+    /*
+     * Third, check if the radio started receiving a packet right before we
+     * could transition to the TX state (uncommon failure case).
+     */
+    if (new_state != AT86RF2XX_STATE_TX_ARET_ON) {
         /*
          * This means we transitioned to a busy state at the very last
          * minute. Fail this CSMA attempt.
          */
+        DEBUG("[at86rf2xx] new_state is 0x%x, reverting to 0x%x\n", new_state, old_state);
+        at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_STATE, old_state);
         dev->pending_tx--;
         return false;
     }
+    dev->state = new_state;
+    DEBUG("[at86rf2xx] send: 0x%x -> 0x%x\n", old_state, new_state);
 
     /*
-     * Check for pending interrupts one last time. After this, no receive
-     * interrupt can happen, because we are in TX_ARET_ON.
+     * Fourth, check that a packet was not just finished being received before
+     * we switched to TX mode (uncommon failure case).
+     * After this, no receive interrupt can happen, because we are in TX state.
+     *
+     * Note: that last part isn't actually true, because there is apparently a
+     * 9 us delay between reception being completed and the receive interrupt
+     * being delivered. So a packet could *technically* be sitting the frame
+     * buffer, and the radio could have switched to TX_ARET_ON, only for the
+     * receive interrupt to fire later. If it fires before we initiate the send,
+     * we safely drop the packet and clear the pending interrupt. If it fires
+     * sometime after that, we take care to properly detect it and prevent it
+     * from overflowing the task thread's queue.
      */
     irq_state = irq_disable();
     if (dev->pending_irq != 0) {
+        DEBUG("[at86rf2xx] pending_irq exists (#2), failing\n");
         irq_restore(irq_state);
-        at86rf2xx_set_state(dev, state);
+        at86rf2xx_set_state(dev, old_state);
         dev->pending_tx--;
-        /*
-         * As above, we return false if there is a pending interrupt.
-         */
+        /* As above, we return false if there is a pending interrupt. */
         return false;
     }
+    /*
+     * This makes sure that if we get a delayed receive interrupt in between
+     * now and actually initiating the send, that the packet will be dropped in
+     * the interrupt handler. It's a partial mitigation to the "9 us" issue
+     * mentioned above.
+     */
+    assert(radio_send_state == 0);
+    radio_send_state = 1;
     irq_restore(irq_state);
 #else
     /* make sure ongoing transmissions are finished */
     do {
-        state = at86rf2xx_get_status(dev);
-    } while (state == AT86RF2XX_STATE_BUSY_RX_AACK ||
-             state == AT86RF2XX_STATE_BUSY_TX_ARET);
+        old_state = at86rf2xx_get_status(dev);
+    } while (old_state == AT86RF2XX_STATE_BUSY_RX_AACK ||
+             old_state == AT86RF2XX_STATE_BUSY_TX_ARET);
 
     at86rf2xx_set_state(dev, AT86RF2XX_STATE_TX_ARET_ON);
 #endif
 
-    if (state != AT86RF2XX_STATE_TX_ARET_ON) {
-        dev->idle_state = state;
+    if (old_state != AT86RF2XX_STATE_TX_ARET_ON) {
+        dev->idle_state = old_state;
     }
 
     dev->tx_frame_len = IEEE802154_FCS_LEN;
@@ -275,8 +318,14 @@ void at86rf2xx_tx_exec(at86rf2xx_t *dev)
 #endif
 
     /* trigger sending of pre-loaded frame */
+    unsigned state = irq_disable();
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_STATE,
                         AT86RF2XX_TRX_STATE__TX_START);
+#ifdef MODULE_OPENTHREAD
+    radio_send_state = 2;
+#endif
+    irq_restore(state);
+    DEBUG("[at86rf2xx] TX_EXEC\n");
     if (netdev->event_callback &&
         (dev->netdev.flags & AT86RF2XX_OPT_TELL_TX_START)) {
         netdev->event_callback(netdev, NETDEV_EVENT_TX_STARTED);

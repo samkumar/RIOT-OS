@@ -76,6 +76,21 @@ static mutex_t locks[] = {
 #endif
 };
 
+static unsigned irq_state[] = {
+#if I2C_0_EN
+    [I2C_0] = 0,
+#endif
+#if I2C_1_EN
+    [I2C_1] = 0,
+#endif
+#if I2C_2_EN
+    [I2C_2] = 0
+#endif
+#if I2C_3_EN
+    [I2C_3] = 0
+#endif
+};
+
 int i2c_init_master(i2c_t dev, i2c_speed_t speed)
 {
     SercomI2cm *I2CSercom = 0;
@@ -226,7 +241,10 @@ int i2c_acquire(i2c_t dev)
     if (dev >= I2C_NUMOF) {
         return -1;
     }
-    mutex_lock(&locks[dev]);
+    if (!irq_is_in()) {
+        mutex_lock(&locks[dev]);
+    }
+    irq_state[dev] = irq_disable();
     return 0;
 }
 
@@ -235,7 +253,10 @@ int i2c_release(i2c_t dev)
     if (dev >= I2C_NUMOF) {
         return -1;
     }
-    mutex_unlock(&locks[dev]);
+    irq_restore(irq_state[dev]);
+    if (!irq_is_in()) {
+        mutex_unlock(&locks[dev]);
+    }
     return 0;
 }
 

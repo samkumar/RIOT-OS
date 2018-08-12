@@ -120,9 +120,9 @@ xtimer_t* openthread_get_millitimer(void) {
 static void _millitimer_cb(void* arg) {
     msg_t msg;
 	msg.type = OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT;
-	if (msg_send(&msg, openthread_get_preevent_pid()) <= 0) {
-        //assert(false);
+	if (msg_send(&msg, openthread_get_event_pid()) <= 0) {
         printf("ot_preevent: possibly lost timer interrupt.\n");
+        assert(false);
     }
 }
 
@@ -143,53 +143,70 @@ static void _microtimer_cb(void* arg) {
 }
 #endif
 
+extern volatile bool otSendDonePending;
+extern volatile bool otRecvDonePending;
+
 /* Interupt handler for OpenThread event thread */
 /* NOTE: the coarse_mutex must be held by the _caller_ of this function. */
 static void _event_cb(netdev_t *dev, netdev_event_t event) {
     switch (event) {
         case NETDEV_EVENT_ISR:
             {
-                msg_t msg;
-                msg.type = OPENTHREAD_NETDEV_MSG_TYPE_EVENT;
-                msg.content.ptr = dev;
-#ifdef MODULE_OPENTHREAD_FTD
-                unsigned irq_state = irq_disable();
-                ((at86rf2xx_t *)dev)->pending_irq++;
-                irq_restore(irq_state);
-#endif
-                if (msg_send(&msg, openthread_get_event_pid()) <= 0) {
-                    printf("ot_event: possibly lost radio interrupt.\n");
-#ifdef MODULE_OPENTHREAD_FTD
+                if (!otRecvDonePending) {
+                    msg_t msg;
+                    msg.type = OPENTHREAD_NETDEV_MSG_TYPE_EVENT;
+                    msg.content.ptr = dev;
+    #ifdef MODULE_OPENTHREAD_FTD
                     unsigned irq_state = irq_disable();
-                    ((at86rf2xx_t *)dev)->pending_irq--;
+                    ((at86rf2xx_t *)dev)->pending_irq++;
                     irq_restore(irq_state);
-#endif
+    #endif
+                    if (msg_send(&msg, openthread_get_event_pid()) <= 0) {
+                        printf("ot_event: possibly lost radio interrupt.\n");
+    #ifdef MODULE_OPENTHREAD_FTD
+                        unsigned irq_state = irq_disable();
+                        ((at86rf2xx_t *)dev)->pending_irq--;
+                        irq_restore(irq_state);
+    #endif
+                        // Event thread queue should NEVER be full...
+                        assert(false);
+                    } else {
+                        otRecvDonePending = true;
+                    }
                 }
                 break;
             }
         case NETDEV_EVENT_ISR2:
             {
-                msg_t msg;
-                msg.type = OPENTHREAD_NETDEV_MSG_TYPE_EVENT;
-                msg.content.ptr = dev;
-                if (msg_send(&msg, openthread_get_task_pid()) <= 0) {
-                    //assert(false);
-                    printf("ot_task: possibly lost radio interrupt.\n");
+                /* Make sure that this is in the task queue at most once. */
+                if (!otSendDonePending) {
+                    msg_t msg;
+                    msg.type = OPENTHREAD_NETDEV_TASK_MSG_TYPE_EVENT;
+                    msg.content.ptr = dev;
+                    if (msg_send(&msg, openthread_get_task_pid()) <= 0) {
+                        printf("ot_task: possibly lost radio interrupt.\n");
+
+                        // Task thread queue should NEVER be full...
+                        assert(false);
+                    } else {
+                        otSendDonePending = true;
+                    }
                 }
                 break;
             }
         case NETDEV_EVENT_RX_COMPLETE:
-            //assert(thread_get_pid() == openthread_get_event_pid());
+            assert(sched_active_pid == openthread_get_event_pid());
             recv_pkt(openthread_get_instance(), dev);
             break;
         case NETDEV_EVENT_TX_COMPLETE:
         case NETDEV_EVENT_TX_COMPLETE_DATA_PENDING:
         case NETDEV_EVENT_TX_NOACK:
         case NETDEV_EVENT_TX_MEDIUM_BUSY:
-            //assert(thread_get_pid() == openthread_get_event_pid());
+            assert(sched_active_pid == openthread_get_task_pid());
             sent_pkt(openthread_get_instance(), event);
             break;
         default:
+            assert(false);
             break;
     }
 }

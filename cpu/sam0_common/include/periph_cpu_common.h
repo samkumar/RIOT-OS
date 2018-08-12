@@ -76,7 +76,9 @@ typedef uint32_t gpio_t;
 typedef enum {
     GPIO_FALLING = 2,       /**< emit interrupt on falling flank */
     GPIO_RISING = 1,        /**< emit interrupt on rising flank */
-    GPIO_BOTH = 3           /**< emit interrupt on both flanks */
+    GPIO_BOTH = 3,          /**< emit interrupt on both flanks */
+    GPIO_HIGH = 4,          /**< emit interrupt on high level */
+    GPIO_LOW = 5,           /**< emit interrupt on low level */
 } gpio_flank_t;
 /** @} */
 #endif /* ndef DOXYGEN */

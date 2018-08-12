@@ -54,6 +54,8 @@ otInstance* openthread_get_instance(void) {
     return sInstance;
 }
 
+volatile bool otRecvDonePending = false;
+
 /* get OpenThread Event Thread pid */
 kernel_pid_t openthread_get_event_pid(void) {
     return _event_pid;
@@ -148,15 +150,22 @@ static void *_openthread_event_thread(void *arg) {
         switch (msg.type) {
             case OPENTHREAD_NETDEV_MSG_TYPE_EVENT:
                 /* Received an event from radio driver */
+                {
+                    unsigned irq_state = irq_disable();
+                    otRecvDonePending = false;
+                    irq_restore(irq_state);
+                }
                 DEBUG("\not_event: OPENTHREAD_NETDEV_MSG_TYPE_EVENT received\n");
                 /* Wait until the task thread finishes accessing the shared resoure (radio) */
                 mutex_lock(openthread_get_radio_mutex());
                 openthread_get_netdev()->driver->isr(openthread_get_netdev());
                 mutex_unlock(openthread_get_radio_mutex());
 #ifdef MODULE_OPENTHREAD_FTD
-                unsigned state = irq_disable();
-                ((at86rf2xx_t *)openthread_get_netdev())->pending_irq--;
-                irq_restore(state);
+                {
+                    unsigned irq_state = irq_disable();
+                    ((at86rf2xx_t *)openthread_get_netdev())->pending_irq--;
+                    irq_restore(irq_state);
+                }
 #endif
                 break;
             case OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT:
@@ -178,6 +187,10 @@ static void *_openthread_event_thread(void *arg) {
                 job = msg.content.ptr;
                 reply.content.value = ot_exec_command(sInstance, job->command, job->arg, job->answer);
                 msg_reply(&msg, &reply);
+                break;
+            default:
+                printf("\not_event: unhandled event of type 0x%x, 0x%x\n", msg.type, (unsigned int) msg.content.value);
+                assert(false);
                 break;
         }
 

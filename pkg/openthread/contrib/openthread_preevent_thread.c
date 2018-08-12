@@ -22,7 +22,7 @@
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
-#define OPENTHREAD_PREEVENT_QUEUE_LEN (2)
+#define OPENTHREAD_PREEVENT_QUEUE_LEN (1)
 static msg_t _queue[OPENTHREAD_PREEVENT_QUEUE_LEN];
 static kernel_pid_t _preevent_pid;
 
@@ -32,29 +32,9 @@ kernel_pid_t openthread_get_preevent_pid(void) {
 }
 
 /* OpenThread Preevent Thread
- * This thread receives event messages directly from interrupt handlers (timer and radio) and
- * delivers them to OpenThread Event Thread. Even though we have OpenThread Event Thread to
- * process events, this additional thread is necessary for safe operation.
- *
- * Note that RIOT's message delivery from an interrupt handler to a thread is failed when
- * the thread's msg_queue is full, while that from a thread to another thread is safe even when
- * the receiving thread's msg_queue is full thanks to backpressure.
- *
- * Thus, sending all types of event messages directly from interrupt handlers to Event Thread
- * can miss important events. Specifically, when the radio receives many packets and
- * Event Thread's msg_queue is full of received packets, timer or tx_complete event can be
- * dropped, resulting in malfunction.
- *
- * Given that this thread manages urgent requests and does a very simple job, it preempts both
- * OpenThread Event Thread and OpenThread Task Thread.
- *
- * The msg_queue size of this thread can be bounded by the number of event types it handles, '2'.
- * 1) OpenThread exposes only one timer to RIOT at a time.
- * 2) OpenThread does not send a packet before receiving tx_complete event for the previous packet.
- *
- * We also process REthos in this thread.
+ * This thread is used exclusively for REthos.
 **/
-bool rethos_queued = false;
+volatile bool rethos_queued = false;
 static void *_openthread_preevent_thread(void *arg) {
     int state;
     _preevent_pid = thread_getpid();
@@ -67,12 +47,6 @@ static void *_openthread_preevent_thread(void *arg) {
     while (1) {
         msg_receive(&msg);
         switch (msg.type) {
-            case OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT:
-                /* Tell event_thread a time event was received */
-                DEBUG("ot_preevent: OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT received\n");
-                msg.type = OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT;
-                msg_send(&msg, openthread_get_event_pid());
-                break;
             case OPENTHREAD_RETHOS_ISR_EVENT:
                 /* Service REthos ISR. */
                 DEBUG("ot_preevent: OPENTHREAD_RETHOS_ISR_EVENT received\n");
@@ -80,6 +54,9 @@ static void *_openthread_preevent_thread(void *arg) {
                 rethos_queued = false;
                 irq_restore(state);
                 rethos_service_isr(msg.content.ptr);
+                break;
+            default:
+                assert(false);
                 break;
         }
 

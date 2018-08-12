@@ -157,7 +157,7 @@ static void wpantund_message_callback(ethos_t *dev, uint8_t channel, uint8_t *da
 
 static rethos_handler_t wpantund_message_h = {.channel = RETHOS_CHANNEL_WPANTUND, .cb = wpantund_message_callback};
 
-extern bool rethos_queued;
+extern volatile bool rethos_queued;
 void rethos_schedule_isr(ethos_t* dev) {
     if (rethos_queued) {
         return;
@@ -187,6 +187,8 @@ otError otPlatUartEnable(void)
         gSerialMessage[i] = (serial_msg_t*) &gSerialBuff[i];
         gSerialMessage[i]->serial_buffer_status = OPENTHREAD_SERIAL_BUFFER_STATUS_FREE;
     }
+
+    /* Start REthos thread. */
 
     ethos_params_t p;
     p.uart      = RETHOS_UART;
