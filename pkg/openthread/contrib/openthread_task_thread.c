@@ -27,7 +27,7 @@
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
-#define OPENTHREAD_TASK_QUEUE_LEN      (4)
+#define OPENTHREAD_TASK_QUEUE_LEN      (8)
 static msg_t _queue[OPENTHREAD_TASK_QUEUE_LEN];
 static kernel_pid_t _task_pid;
 
@@ -37,6 +37,9 @@ volatile bool otTaskPending = false;
 kernel_pid_t openthread_get_task_pid(void) {
     return _task_pid;
 }
+
+/* Implemented in platform_uart.c. */
+void handle_rethos_ack(void);
 
 /* OpenThread Task Thread
  * OpenThread posts tasks when sending a packet. This task thread processes these tasks,
@@ -99,6 +102,10 @@ static void *_openthread_task_thread(void *arg) {
             case OPENTHREAD_LINK_RETRY_TIMEOUT:
                 DEBUG("\not_event: OPENTHREAD_LINK_RETRY_TIMEOUT\n");
                 sent_pkt(openthread_get_instance(), NETDEV_EVENT_TX_FAIL);
+                break;
+            case OPENTHREAD_RETHOS_ACK_EVENT:
+                DEBUG("\not_task: OPENTHREAD_RETHOS_ACK_EVENT\n");
+                handle_rethos_ack();
                 break;
         }
         while(otTaskletsArePending(openthread_get_instance())) {

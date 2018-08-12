@@ -53,6 +53,8 @@ extern "C" {
 #define OPENTHREAD_LINK_RETRY_TIMEOUT                       (0x223B)
 /**< event for REthos ISR processing */
 #define OPENTHREAD_RETHOS_ISR_EVENT                         (0x223C)
+/**< event for REthos ACK processing */
+#define OPENTHREAD_RETHOS_ACK_EVENT                         (0x223D)
 /**< event indicating an OT_JOB message */
 #define OPENTHREAD_JOB_MSG_TYPE_EVENT                       (0x2241)
 /**< number of serial reception buffer */

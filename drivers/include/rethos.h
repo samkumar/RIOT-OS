@@ -138,6 +138,7 @@ struct rethos_recv_ctx {
  */
 typedef struct ethos {
     void (*schedule_service_isr)(struct ethos* dev); /**< callback to schedule service of REthos ISR */
+    void (*on_ack)(struct ethos* dev, uint8_t channel); /**< callback invoked when an outstanding message is ACKed. */
     uart_t uart;            /**< UART device the to use */
 
     line_state_t state;     /**< Line status variable */
@@ -194,6 +195,7 @@ typedef struct {
     uint8_t *buf;           /**< buffer for incoming packets */
     size_t bufsize;         /**< size of ethos_params_t::buf */
     void (*call_rethos_service_isr_from_thread)(ethos_t* dev); /**< callback to schedule service of REthos ISR */
+    void (*on_ack_callback)(ethos_t* dev, uint8_t channel); /**< callback invoked when an outstanding message is ACKed. */
 } ethos_params_t;
 
 /**

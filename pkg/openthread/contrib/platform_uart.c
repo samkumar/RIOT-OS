@@ -170,6 +170,16 @@ void rethos_schedule_isr(ethos_t* dev) {
     msg_send(&msg, openthread_get_preevent_pid());
 }
 
+/* This executes on the preevent thread with interrupts disabled. */
+void rethos_on_ack(ethos_t* dev, uint8_t channel) {
+    (void) channel;
+
+    msg_t msg;
+    msg.type = OPENTHREAD_RETHOS_ACK_EVENT;
+    msg.content.ptr = dev;
+    msg_send(&msg, openthread_get_task_pid());
+}
+
 /* OpenThread will call this for enabling UART (required for OpenThread's CLI)*/
 otError otPlatUartEnable(void)
 {
@@ -184,6 +194,7 @@ otError otPlatUartEnable(void)
     p.buf       = NULL;
     p.bufsize   = 0;
     p.call_rethos_service_isr_from_thread = rethos_schedule_isr;
+    p.on_ack_callback = rethos_on_ack;
     rethos_setup(&rethos, &p);
 
     rethos_register_handler(&rethos, &wpantund_message_h);
@@ -202,10 +213,16 @@ otError otPlatUartDisable(void)
 /* OpenThread will call this for sending data through UART */
 otError otPlatUartSend(const uint8_t *aBuf, uint16_t aBufLength)
 {
+    //printf("Sending REthos frame of length %d\n", (int) aBufLength);
     rethos_send_frame(&rethos, aBuf, aBufLength, RETHOS_CHANNEL_WPANTUND, RETHOS_FRAME_TYPE_DATA);
 
     /* Tell OpenThread the sending over UART is done */
-    otPlatUartSendDone();
+    //otPlatUartSendDone();
 
     return OT_ERROR_NONE;
+}
+
+void handle_rethos_ack(void) {
+    /* Tell OpenThread the sending over UART is done */
+    otPlatUartSendDone();
 }

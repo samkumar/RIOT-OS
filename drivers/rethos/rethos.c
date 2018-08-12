@@ -95,6 +95,9 @@ static void process_frame(ethos_t *dev, struct rethos_recv_ctx* r)
                 {
                     dev->rexmit_acked = true;
                     xtimer_remove(&rexmit_timer);
+                    if (dev->on_ack != NULL) {
+                        dev->on_ack(dev, dev->rexmit_channel);
+                    }
                 }
             }
             else if (r->rx_frame_type == RETHOS_FRAME_TYPE_NACK)
@@ -488,6 +491,7 @@ void rethos_register_handler(ethos_t *dev, rethos_handler_t *handler)
 void rethos_setup(ethos_t *dev, const ethos_params_t *params)
 {
     dev->schedule_service_isr = params->call_rethos_service_isr_from_thread;
+    dev->on_ack = params->on_ack_callback;
     dev->uart = params->uart;
     dev->state = SM_WAIT_FRAMESTART;
     dev->recv_ctx_index = 0;
