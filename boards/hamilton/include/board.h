@@ -34,6 +34,9 @@
 extern "C" {
 #endif
 
+/* samkumar: setting XTIMER_OVERHEAD to 0 makes xtimer more stable. */
+#define XTIMER_OVERHEAD 0
+
 /**
  * Define the nominal CPU core clock in this board
  */
@@ -58,7 +61,7 @@ extern "C" {
 
 #define XTIMER_BACKOFF                 30  /* ticks: Threshold to determine spin or not
                                               It takes 150~200us to get the current time */
-#define XTIMER_OVERHEAD                6   /* ticks: How much earlier does a timer expires? */
+//#define XTIMER_OVERHEAD                6   /* ticks: How much earlier does a timer expires? */
 #define XTIMER_ISR_BACKOFF             20
 #define XTIMER_PERIODIC_RELATIVE       100
 #endif
