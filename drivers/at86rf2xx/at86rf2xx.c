@@ -47,9 +47,9 @@ void at86rf2xx_setup(at86rf2xx_t *dev, const at86rf2xx_params_t *params)
     /* radio state is P_ON when first powered-on */
     dev->state = AT86RF2XX_STATE_P_ON;
     dev->pending_tx = 0;
-#ifdef MODULE_OPENTHREAD_FTD
+//#ifdef MODULE_OPENTHREAD_FTD
     dev->pending_irq = 0;
-#endif
+//#endif
 }
 
 void at86rf2xx_reset(at86rf2xx_t *dev)
@@ -117,7 +117,7 @@ void at86rf2xx_reset(at86rf2xx_t *dev)
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_CTRL_0, tmp);
 
     at86rf2xx_set_option(dev, AT86RF2XX_OPT_CSMA, true);
-#if MODULE_OPENTHREAD_FTD
+#if MODULE_OPENTHREAD_FTD || MODULE_OPENTHREAD_MTD
     /* software CSMA */
     at86rf2xx_set_max_retries(dev, 0);
     at86rf2xx_set_csma_max_retries(dev, 0);
@@ -181,7 +181,7 @@ bool at86rf2xx_tx_prepare(at86rf2xx_t *dev)
     uint8_t old_state;
     dev->pending_tx++;
 
-#ifdef MODULE_OPENTHREAD_FTD
+#if defined(MODULE_OPENTHREAD_FTD) || defined(MODULE_OPENTHREAD_MTD)
     uint8_t new_state;
 
     /* First, check if the radio busy (common failure case). */

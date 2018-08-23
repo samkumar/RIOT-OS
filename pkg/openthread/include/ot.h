@@ -206,14 +206,14 @@ otInstance* openthread_get_instance(void);
  */
 xtimer_t* openthread_get_millitimer(void);
 
-#ifdef MODULE_OPENTHREAD_FTD
+//#ifdef MODULE_OPENTHREAD_FTD
 /**
  * @brief   get microtimer of OpenThread.
  *
  * @return  microtimer of OpenThread
  */
 xtimer_t* openthread_get_microtimer(void);
-#endif
+//#endif
 
 /**
  * @brief   get netdev of OpenThread.

@@ -67,6 +67,10 @@ size_t cbuf_size(struct cbufhead* chdr) {
     return chdr->size - 1;
 }
 
+bool cbuf_empty(struct cbufhead* chdr) {
+    return (chdr->w_index == chdr->r_index);
+}
+
 size_t cbuf_write(struct cbufhead* chdr, const void* data, off_t data_offset, size_t data_len, cbuf_copier_t copy_from) {
     size_t free_space = cbuf_free_space(chdr);
     uint8_t* buf_data;

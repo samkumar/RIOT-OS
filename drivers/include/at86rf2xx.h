@@ -188,9 +188,9 @@ typedef struct {
     /* Only radios with the XAH_CTRL_2 register support frame retry reporting */
     uint8_t tx_retries;                 /**< Number of NOACK retransmissions */
 #endif
-#ifdef MODULE_OPENTHREAD_FTD
+//#ifdef MODULE_OPENTHREAD_FTD
     uint8_t pending_irq;
-#endif
+//#endif
     /** @} */
 } at86rf2xx_t;
 

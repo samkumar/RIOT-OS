@@ -220,6 +220,9 @@ tcp_state_change(struct tcpcb *tp, int newstate)
 #endif
     DEBUG("Socket %d: %s --> %s\n", tp->index, tcpstates[tp->t_state], tcpstates[newstate]);
 	tp->t_state = newstate;
+
+    // samkumar: may need to do other actions too...
+    on_state_change(tp, newstate);
 #if 0
 	TCP_PROBE6(state__change, NULL, tp, NULL, tp, NULL, pstate);
 #endif

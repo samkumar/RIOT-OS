@@ -19,9 +19,9 @@
 #include <assert.h>
 
 #include "openthread/tasklet.h"
-#ifdef MODULE_OPENTHREAD_FTD
+//#ifdef MODULE_OPENTHREAD_FTD
 #include "openthread/platform/alarm-micro.h"
-#endif
+//#endif
 #include "ot.h"
 
 #define ENABLE_DEBUG (0)
@@ -74,7 +74,7 @@ static void *_openthread_task_thread(void *arg) {
                  */
                 otTaskPending = false;
                 break;
-#ifdef MODULE_OPENTHREAD_FTD
+//#ifdef MODULE_OPENTHREAD_FTD
             case OPENTHREAD_MICROTIMER_MSG_TYPE_EVENT:
                 /* Tell OpenThread a microsec time event was received (CSMA timer)
                  * It checks the current time and executes callback functions of
@@ -82,7 +82,7 @@ static void *_openthread_task_thread(void *arg) {
                 DEBUG("\not_task: OPENTHREAD_MICROTIMER_MSG_TYPE_EVENT received\n");
                 otPlatAlarmMicroFired(openthread_get_instance());
                 break;
-#endif
+//#endif
             case OPENTHREAD_NETDEV_TASK_MSG_TYPE_EVENT:
                 /* Received an event from radio driver */
                 {
@@ -112,10 +112,10 @@ static void *_openthread_task_thread(void *arg) {
                 break;
         }
         while(otTaskletsArePending(openthread_get_instance())) {
-#ifdef MODULE_OPENTHREAD_FTD
+//#ifdef MODULE_OPENTHREAD_FTD
             /* Call this function just in case a timer event is missed */
             otPlatAlarmMicroFired(openthread_get_instance());
-#endif
+//#endif
             otTaskletsProcess(openthread_get_instance());
         }
 

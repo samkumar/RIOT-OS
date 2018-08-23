@@ -21,9 +21,9 @@
 #include <stdint.h>
 
 #include "openthread/platform/alarm-milli.h"
-#ifdef MODULE_OPENTHREAD_FTD
+//#ifdef MODULE_OPENTHREAD_FTD
 #include "openthread/platform/alarm-micro.h"
-#endif
+//#endif
 #include "ot.h"
 #include "msg.h"
 #include "xtimer.h"
@@ -44,10 +44,13 @@ static uint32_t long_cnt = 0;
 void otPlatAlarmMilliStartAt(otInstance *aInstance, uint32_t aT0, uint32_t aDt)
 {
     DEBUG("otPlatAlarmMilliStartAt: aT0: %" PRIu32 ", aDT: %" PRIu32 "\n", aT0, aDt);
-    
-    if (aDt > 0) {
+    xtimer_t* millitimer = openthread_get_millitimer();
+    if (aDt == 0) {
+        xtimer_remove(millitimer);
+        millitimer->callback(NULL);
+    } else {
         uint32_t dt = aDt * US_PER_MS;
-        xtimer_set(openthread_get_millitimer(), dt);
+        xtimer_set(millitimer, dt);
     }
 }
 
@@ -62,7 +65,7 @@ void otPlatAlarmMilliStop(otInstance *aInstance)
 uint32_t otPlatAlarmMilliGetNow(void)
 {
     uint32_t now = xtimer_now_usec() / US_PER_MS;
-    /* With the same unit32_t type, microsec timer overflows faster than millisec timer. 
+    /* With the same unit32_t type, microsec timer overflows faster than millisec timer.
      * This mismatch should be handled here */
     if (prev > now) {
         long_cnt++;
@@ -73,7 +76,7 @@ uint32_t otPlatAlarmMilliGetNow(void)
     return now;
 }
 
-#ifdef MODULE_OPENTHREAD_FTD
+//#ifdef MODULE_OPENTHREAD_FTD
 /**
  * Set the alarm to fire at @p aDt microseconds after @p aT0.
  *
@@ -84,14 +87,13 @@ uint32_t otPlatAlarmMilliGetNow(void)
 void otPlatAlarmMicroStartAt(otInstance *aInstance, uint32_t aT0, uint32_t aDt)
 {
     DEBUG("otPlatAlarmMicroStartAt: aT0: %" PRIu32 ", aDT: %" PRIu32 "\n", aT0, aDt);
-    if (aDt <= 1) {
-        xtimer_remove(openthread_get_microtimer());
-        msg_t msg;
-        msg.type = OPENTHREAD_MICROTIMER_MSG_TYPE_EVENT;
-        msg_try_send(&msg, openthread_get_task_pid());
+    xtimer_t* microtimer = openthread_get_microtimer();
+    if (aDt <= 200) {
+        xtimer_remove(microtimer);
+        microtimer->callback(NULL);
     }
     else {
-        xtimer_set(openthread_get_microtimer(), aDt);
+        xtimer_set(microtimer, aDt);
     }
 }
 
@@ -109,4 +111,4 @@ uint32_t otPlatAlarmMicroGetNow(void)
     DEBUG("otPlatAlarmMicroGetNow: %" PRIu32 "\n", now);
     return now;
 }
-#endif
+//#endif

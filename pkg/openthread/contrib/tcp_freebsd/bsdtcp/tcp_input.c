@@ -1869,9 +1869,14 @@ tcp_do_segment(struct ip6_hdr* ip6, struct tcphdr *th, otMessage* msg,
                 poppedbytes = cbuf_pop(&tp->sendbuf, acked);
 				KASSERT(poppedbytes == acked, ("More bytes were acked than are in the send buffer"));
 				//*freedentries += ntraversed;
-                if (freebefore == 0 && poppedbytes > 0) {
-					*signals |= SIG_SENDBUF_NOTFULL;
-				}
+                if (poppedbytes > 0) {
+                    if (freebefore == 0) {
+                        *signals |= SIG_SENDBUF_NOTFULL;
+                    }
+                    if (cbuf_empty(&tp->sendbuf)) {
+                        *signals |= SIG_SENDBUF_EMPTY;
+                    }
+                }
 				if (SEQ_GT(tp->snd_una, tp->snd_recover) &&
 				    SEQ_LEQ(th->th_ack, tp->snd_recover))
 					tp->snd_recover = th->th_ack - 1;
@@ -2946,8 +2951,13 @@ process_ACK:
             size_t freebefore = cbuf_free_space(&tp->sendbuf);
             poppedbytes = cbuf_pop(&tp->sendbuf, usedspace);
 			KASSERT(poppedbytes == usedspace, ("Could not fully empty send buffer"));
-            if (freebefore == 0 && poppedbytes > 0) {
-                *signals |= SIG_SENDBUF_NOTFULL;
+            if (poppedbytes > 0) {
+                if (freebefore == 0) {
+                    *signals |= SIG_SENDBUF_NOTFULL;
+                }
+                if (cbuf_empty(&tp->sendbuf)) {
+                    *signals |= SIG_SENDBUF_EMPTY;
+                }
             }
 			ourfinisacked = 1;
 		} else {
@@ -2958,8 +2968,13 @@ process_ACK:
             size_t freebefore = cbuf_free_space(&tp->sendbuf);
             uint32_t poppedbytes = cbuf_pop(&tp->sendbuf, acked);
 			KASSERT(poppedbytes == acked, ("Could not remove acked bytes from send buffer"));
-            if (freebefore == 0 && poppedbytes > 0) {
-                *signals |= SIG_SENDBUF_NOTFULL;
+            if (poppedbytes > 0) {
+                if (freebefore == 0) {
+                    *signals |= SIG_SENDBUF_NOTFULL;
+                }
+                if (cbuf_empty(&tp->sendbuf)) {
+                    *signals |= SIG_SENDBUF_EMPTY;
+                }
             }
 			tp->snd_wnd -= acked;
 			ourfinisacked = 0;

@@ -60,6 +60,7 @@
 #define SIG_RECVBUF_NOTEMPTY 0x02
 #define SIG_RCVD_FIN         0x04
 #define SIG_SENDBUF_NOTFULL  0x08
+#define SIG_SENDBUF_EMPTY    0x10
 
 #define GNRC_TCP_FREEBSD_NUM_TIMERS (GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS * TIMERS_PER_ACTIVE_SOCKET)
 
@@ -102,6 +103,7 @@ void stop_timer(struct tcpcb* tcb, uint8_t timer_id);
 struct tcpcb* accept_ready(struct tcpcb_listen* tpl);
 bool accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struct in6_addr* addr, uint16_t port);
 void connection_lost(struct tcpcb* tcb, uint8_t errnum);
+void on_state_change(struct tcpcb* tcb, int newstate);
 uint16_t get_tcp_checksum(const gnrc_pktsnip_t *ip6snip, const gnrc_pktsnip_t** snips);
 
 /*

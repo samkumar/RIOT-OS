@@ -306,7 +306,7 @@ static const spi_conf_t spi_config[] = {
  * @{
  */
 /* Anemometer does not go to sleep. */
-#define PM_BLOCKER_INITIAL { .val_u32 = 0x01010101 }
+#define PM_BLOCKER_INITIAL { .val_u32 = 0x00000000 }
 /** @} */
 
 #ifdef __cplusplus

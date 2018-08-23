@@ -6,6 +6,7 @@
    of TCP segments. Don't mix and match the functions unless you know what
    you're doing! */
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -34,6 +35,7 @@ size_t cbuf_pop(struct cbufhead* chdr, size_t numbytes);
 size_t cbuf_used_space(struct cbufhead* chdr);
 size_t cbuf_free_space(struct cbufhead* chdr);
 size_t cbuf_size(struct cbufhead* chdr);
+bool cbuf_empty(struct cbufhead* chdr);
 
 size_t cbuf_reass_write(struct cbufhead* chdr, size_t offset, const void* data, off_t data_offset, size_t numbytes, uint8_t* bitmap, size_t* firstindex, cbuf_copier_t copy_from);
 size_t cbuf_reass_merge(struct cbufhead* chdr, size_t numbytes, uint8_t* bitmap);

@@ -157,13 +157,13 @@ static void *_openthread_event_thread(void *arg) {
                 mutex_lock(openthread_get_radio_mutex());
                 openthread_get_netdev()->driver->isr(openthread_get_netdev());
                 mutex_unlock(openthread_get_radio_mutex());
-#ifdef MODULE_OPENTHREAD_FTD
+//ifdef MODULE_OPENTHREAD_FTD
                 {
                     unsigned irq_state = irq_disable();
                     ((at86rf2xx_t *)openthread_get_netdev())->pending_irq--;
                     irq_restore(irq_state);
                 }
-#endif
+//#endif
                 break;
             case OPENTHREAD_MILLITIMER_MSG_TYPE_EVENT:
                 /* Tell OpenThread a millisec time event was received */

@@ -324,7 +324,7 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
         assert(success == 1);
     } else {
         assert(success == pkt.iov_len);
-        br_on_tx();
+        //printf("Transmitting %d\n", (int) (xtimer_now_usec64() / 1000));
     }
 
     mutex_unlock(openthread_get_radio_mutex());
@@ -337,13 +337,13 @@ otRadioCaps otPlatRadioGetCaps(otInstance *aInstance)
 {
     //DEBUG("openthread: otPlatRadioGetCaps\n");
 #if MODULE_AT86RF231 | MODULE_AT86RF233
-#ifdef MODULE_OPENTHREAD_FTD
+// #ifdef MODULE_OPENTHREAD_FTD
     /* radio drivers do not support retransmission and CSMA for better performance */
     return OT_RADIO_CAPS_ACK_TIMEOUT;
-#else
-    /* radio drivers should handle retransmission and CSMA to minimize CPU run */
-    return OT_RADIO_CAPS_ACK_TIMEOUT | OT_RADIO_CAPS_TRANSMIT_RETRIES | OT_RADIO_CAPS_CSMA_BACKOFF;
-#endif
+// #else
+//     /* radio drivers should handle retransmission and CSMA to minimize CPU run */
+//     return OT_RADIO_CAPS_ACK_TIMEOUT | OT_RADIO_CAPS_TRANSMIT_RETRIES | OT_RADIO_CAPS_CSMA_BACKOFF;
+// #endif
 #else
     return OT_RADIO_CAPS_NONE;
 #endif
@@ -502,12 +502,14 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
             DEBUG("TX_COMPLETE\n");
             _create_fake_ack_frame(false);
             radio_tx_cnt--;
+            //printf("Done transmitting (success) %d\n", (int) (xtimer_now_usec64() / 1000));
             otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_COMPLETE_DATA_PENDING:
             DEBUG("TX_COMPLETE_DATA_PENDING\n");
             _create_fake_ack_frame(true);
             radio_tx_cnt--;
+            //printf("Done transmitting (pending) %d\n", (int) (xtimer_now_usec64() / 1000));
             otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_NOACK:
@@ -525,11 +527,13 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
             /* fallthrough intentional in #else case */
         case NETDEV_EVENT_TX_FAIL:
             radio_tx_cnt--;
+            //printf("Done transmitting (no ack) %d\n", (int) (xtimer_now_usec64() / 1000));
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_NO_ACK);
             break;
         case NETDEV_EVENT_TX_MEDIUM_BUSY:
             DEBUG("TX_MEDIUM_BUSY\n");
             radio_tx_cnt--;
+            //printf("Done transmitting (csma fail) %d\n", (int) (xtimer_now_usec64() / 1000));
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_CHANNEL_ACCESS_FAILURE);
             break;
         default:

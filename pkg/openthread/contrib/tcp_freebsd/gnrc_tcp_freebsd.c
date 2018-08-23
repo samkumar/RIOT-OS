@@ -67,12 +67,14 @@ mutex_t tcp_lock = MUTEX_INIT;
  */
 struct tcpcb tcbs[GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS];
 struct tcpcb_listen tcbls[GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS];
+uint8_t tcp_poll_state[1 + ((GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS-1) >> 2)]; //two bits per TCB
 
 /**
- * @brief    Timers used for TCP. Each active socket requires four timers.
+ * @brief    Timers used for TCP. Each active socket requires four timers, plus
+ *           one to control the polling frequency.
  */
 static struct task_sched tcp_timer_sched;
-struct task tcp_timers[GNRC_TCP_FREEBSD_NUM_TIMERS];
+struct task tcp_timers[GNRC_TCP_FREEBSD_NUM_TIMERS + GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS];
 
 /**
  * @brief   Allocate memory for the TCP thread's stack
@@ -87,40 +89,131 @@ static char _timer_stack[GNRC_TCP_FREEBSD_STACK_SIZE/* + THREAD_EXTRA_STACKSIZE_
 static char _timer_stack[GNRC_TCP_FREEBSD_STACK_SIZE];
 #endif
 
+#define TCP_FAST_POLL_MILLISECONDS (100)
+#define TCP_SLOW_POLL_MILLISECONDS (10000)
+
+#define TCP_NO_POLL 0x0
+#define TCP_SLOW_POLL 0x1
+#define TCP_FAST_POLL 0x2
+
+#define TCP_MIN_POLL_DELAY_MILLISECONDS 16
+
+static uint32_t tcp_get_poll_delay_milliseconds(int index) {
+    struct tcpcb* tp = &tcbs[index];
+    if (tp->t_srtt == 0) {
+        // No RTT estimate? Then start after 16 ms.
+        return TCP_MIN_POLL_DELAY_MILLISECONDS;
+    }
+    int srtt_minus_4rttvar_milliseconds = ((tp->t_srtt >> (TCP_RTT_SHIFT - TCP_DELTA_SHIFT)) - tp->t_rttvar) >> TCP_DELTA_SHIFT;
+    int half_rtt_milliseconds = tp->t_srtt >> (TCP_RTT_SHIFT + 1);
+
+    int poll_delay_milliseconds;
+    if (srtt_minus_4rttvar_milliseconds < half_rtt_milliseconds) {
+        poll_delay_milliseconds = srtt_minus_4rttvar_milliseconds;
+    } else {
+        poll_delay_milliseconds = half_rtt_milliseconds;
+    }
+
+    if (poll_delay_milliseconds < TCP_MIN_POLL_DELAY_MILLISECONDS) {
+        poll_delay_milliseconds = TCP_MIN_POLL_DELAY_MILLISECONDS;
+    }
+    return (uint32_t) poll_delay_milliseconds;
+}
+
+static int current_poll_state = TCP_NO_POLL;
+static uint8_t tcp_get_poll_state(int index) {
+    return (tcp_poll_state[index >> 2] >> ((index & 0x3) << 1)) & 0x3;
+}
+static void _update_tcp_poll_state(void) {
+    uint8_t new_state = TCP_NO_POLL;
+    for (int i = 0; i != GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
+        uint8_t state = tcp_get_poll_state(i);
+        if (state > new_state) {
+            new_state = state;
+        }
+    }
+    if (new_state != current_poll_state) {
+        printf("[tcp] Switching poll state: %d -> %d\n", current_poll_state, new_state);
+        current_poll_state = new_state;
+        switch (current_poll_state) {
+            case TCP_NO_POLL:
+                otThreadSetMaxPollInterval(openthread_get_instance(), 0);
+                break;
+            case TCP_SLOW_POLL:
+                otThreadSetMaxPollInterval(openthread_get_instance(), TCP_SLOW_POLL_MILLISECONDS);
+                break;
+            case TCP_FAST_POLL:
+                otThreadSetMaxPollInterval(openthread_get_instance(), TCP_FAST_POLL_MILLISECONDS);
+                break;
+        }
+    }
+}
+static void tcp_set_poll_state(int index, uint8_t state) {
+    uint8_t byte = tcp_poll_state[index >> 2];
+    uint8_t shift = (index & 0x3) << 1;
+    uint8_t masked = byte & (0xFF << shift);
+
+    if (cancel_task(&tcp_timer_sched, GNRC_TCP_FREEBSD_NUM_TIMERS + index) != 0) {
+        DEBUG("cancel_task failed!\n");
+    }
+
+    if (masked == (state << shift)) {
+        return;
+    }
+    tcp_poll_state[index >> 2] = (byte ^ masked) | (state << shift);
+    _update_tcp_poll_state();
+}
+
+static void tcp_fast_poll_timed(int index) {
+    uint32_t poll_delay_milliseconds = tcp_get_poll_delay_milliseconds(index);
+    printf("Delaying for %d milliseconds\n", (int) poll_delay_milliseconds);
+    if (sched_task(&tcp_timer_sched, GNRC_TCP_FREEBSD_NUM_TIMERS + index, poll_delay_milliseconds * 1000) != 0) {
+        DEBUG("sched_task failed!\n");
+    }
+}
+
 static void _handle_timer(int timer_id)
 {
     struct tcpcb* tp;
     DEBUG("Timer %d fired!\n", timer_id);
-    assert((timer_id >> 2) < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
-
-    tp = &tcbs[timer_id >> 2];
-    timer_id &= 0x3;
 
     openthread_lock_coarse_mutex();
     mutex_lock(&tcp_lock);
+    if (timer_id < GNRC_TCP_FREEBSD_NUM_TIMERS) {
+        // TCP timer
 
-    switch (timer_id) {
-    case TOS_DELACK:
-        DEBUG("Delayed ACK\n");
-        tcp_timer_delack(tp);
-        break;
-    case TOS_REXMT: // Also include persist case
-        if (tcp_timer_active(tp, TT_REXMT)) {
-            DEBUG("Retransmit\n");
-            tcp_timer_rexmt(tp);
-        } else {
-            DEBUG("Persist\n");
-            tcp_timer_persist(tp);
+        assert((timer_id >> 2) < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS);
+
+        tp = &tcbs[timer_id >> 2];
+        timer_id &= 0x3;
+
+        switch (timer_id) {
+        case TOS_DELACK:
+            DEBUG("Delayed ACK\n");
+            tcp_timer_delack(tp);
+            break;
+        case TOS_REXMT: // Also include persist case
+            if (tcp_timer_active(tp, TT_REXMT)) {
+                DEBUG("Retransmit\n");
+                tcp_timer_rexmt(tp);
+            } else {
+                DEBUG("Persist\n");
+                tcp_timer_persist(tp);
+            }
+            break;
+        case TOS_KEEP:
+            DEBUG("Keep\n");
+            tcp_timer_keep(tp);
+            break;
+        case TOS_2MSL:
+            DEBUG("2MSL\n");
+            tcp_timer_2msl(tp);
+            break;
         }
-        break;
-    case TOS_KEEP:
-        DEBUG("Keep\n");
-        tcp_timer_keep(tp);
-        break;
-    case TOS_2MSL:
-        DEBUG("2MSL\n");
-        tcp_timer_2msl(tp);
-        break;
+
+    } else {
+        // Poll timer
+        tcp_set_poll_state(timer_id - GNRC_TCP_FREEBSD_NUM_TIMERS, TCP_FAST_POLL);
     }
 
     mutex_unlock(&tcp_lock);
@@ -151,6 +244,10 @@ void handle_signals(struct tcpcb* tp, uint8_t signals)
 
     if (signals & SIG_SENDBUF_NOTFULL) {
         event_sendReady((uint8_t) tp->index);
+    }
+
+    if (signals & SIG_SENDBUF_EMPTY) {
+        tcp_set_poll_state(tp->index, TCP_NO_POLL);
     }
 }
 
@@ -208,6 +305,31 @@ bool accepted_connection(struct tcpcb_listen* tpl, struct tcpcb* accepted, struc
     mutex_lock(&tcp_lock);
 
     return accepted_successfully;
+}
+
+/**
+ * Called when a TCB transitions to a new state.
+ */
+void on_state_change(struct tcpcb* tp, int newstate) {
+    /* Update polling state. */
+    switch (newstate) {
+        case TCP6S_SYN_SENT:
+        case TCP6S_SYN_RECEIVED:
+        case TCP6S_FIN_WAIT_1:
+        case TCP6S_FIN_WAIT_2:
+        case TCP6S_CLOSING:
+        case TCP6S_CLOSE_WAIT:
+        case TCP6S_LAST_ACK:
+            tcp_set_poll_state(tp->index, TCP_FAST_POLL);
+            break;
+        case TCP6S_ESTABLISHED:
+        case TCP6S_CLOSED:
+            tcp_set_poll_state(tp->index, TCP_NO_POLL);
+            break;
+        case TCP6S_TIME_WAIT:
+            tcp_set_poll_state(tp->index, TCP_SLOW_POLL);
+            break;
+    }
 }
 
 int sent_pkts = 0;
@@ -395,7 +517,7 @@ int gnrc_tcp_freebsd_init(void)
         tcp_timer_sched.coalesce_shift = 64;
         tcp_timer_sched.max_coalesce_time_delta = 0; // no coalescence for now
         tcp_timer_sched.tasks = tcp_timers;
-        tcp_timer_sched.num_tasks = GNRC_TCP_FREEBSD_NUM_TIMERS;
+        tcp_timer_sched.num_tasks = GNRC_TCP_FREEBSD_NUM_TIMERS + GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS;
         tcp_timer_sched.thread_stack = _timer_stack;
         tcp_timer_sched.thread_stack_size = sizeof(_timer_stack);
         tcp_timer_sched.thread_priority = GNRC_TCP_FREEBSD_PRIO;
@@ -405,15 +527,16 @@ int gnrc_tcp_freebsd_init(void)
 
         /* Additional initialization work for TCP. */
         tcp_init();
-        for (i = 0; i < GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
+        for (i = 0; i != GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
             tcbs[i].index = i;
             initialize_tcb(&tcbs[i], NULL, 0, NULL, 0, NULL, 0, NULL);
         }
-        for (i = 0; i < GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS; i++) {
+        for (i = 0; i != GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS; i++) {
             tcbls[i].t_state = TCPS_CLOSED;
             tcbls[i].index = i;
             tcbls[i].lport = 0;
         }
+        memset(tcp_poll_state, 0x00, sizeof(tcp_poll_state));
     //}
     return _packet_pid;
 }
@@ -527,7 +650,7 @@ error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* send
     error_t rv;
     struct tcpcb* tp = &tcbs[asockid];
     mutex_lock(&tcp_lock);
-    if (tp->t_state != TCPS_CLOSED) { // This is a check that I added
+    if (tp->t_state != TCP6S_CLOSED) { // This is a check that I added
         rv = EISCONN;
         goto done;
     }
@@ -550,7 +673,12 @@ error_t asock_send_impl(int asockid, const uint8_t* data, size_t len, int moreto
     struct tcpcb* tp = &tcbs[asockid];
     openthread_lock_coarse_mutex();
     mutex_lock(&tcp_lock);
+    bool was_empty = cbuf_empty(&tp->sendbuf);
     rv = (error_t) tcp_usr_send(tp, moretocome, data, len, bytessent);
+    if (was_empty && !cbuf_empty(&tp->sendbuf)) {
+        printf("rtt = %d, rttvar = %d\n", tp->t_srtt >> TCP_RTT_SHIFT, tp->t_rttvar >> TCP_RTTVAR_SHIFT);
+        tcp_fast_poll_timed(asockid);
+    }
     mutex_unlock(&tcp_lock);
     openthread_unlock_coarse_mutex();
     return rv;

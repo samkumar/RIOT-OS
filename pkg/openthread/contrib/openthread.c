@@ -36,17 +36,17 @@
 
 static xtimer_t ot_millitimer;
 volatile bool pending_millitimer_event = false;
-#ifdef MODULE_OPENTHREAD_FTD
+//#ifdef MODULE_OPENTHREAD_FTD
 static xtimer_t ot_microtimer;
 volatile bool pending_microtimer_event = false;
-#endif
+//#endif
 
 #ifdef MODULE_AT86RF2XX     /* is mutual exclusive with above ifdef */
 #define OPENTHREAD_NETIF_NUMOF        (sizeof(at86rf2xx_params) / sizeof(at86rf2xx_params[0]))
 static at86rf2xx_t at86rf2xx_dev;
 #endif
 
-static mutex_t radio_mutex = MUTEX_INIT;
+mutex_t radio_mutex = MUTEX_INIT;
 static mutex_t buffer_mutex = MUTEX_INIT;
 static mutex_t coarse_mutex = MUTEX_INIT;
 
@@ -116,7 +116,7 @@ static void _millitimer_cb(void* arg) {
     }
 }
 
-#ifdef MODULE_OPENTHREAD_FTD
+//#ifdef MODULE_OPENTHREAD_FTD
 /* get OpenThread timer */
 xtimer_t* openthread_get_microtimer(void) {
     return &ot_microtimer;
@@ -127,11 +127,11 @@ static void _microtimer_cb(void* arg) {
     msg_t msg;
 	msg.type = OPENTHREAD_MICROTIMER_MSG_TYPE_EVENT;
 	if (msg_send(&msg, openthread_get_task_pid()) <= 0) {
-        //assert(false);
+        assert(false);
         printf("ot_task: possibly lost timer interrupt.\n");
     }
 }
-#endif
+//#endif
 
 extern volatile bool otSendDonePending;
 extern volatile bool otRecvDonePending;
@@ -146,18 +146,18 @@ static void _event_cb(netdev_t *dev, netdev_event_t event) {
                     msg_t msg;
                     msg.type = OPENTHREAD_NETDEV_MSG_TYPE_EVENT;
                     msg.content.ptr = dev;
-    #ifdef MODULE_OPENTHREAD_FTD
+//    #ifdef MODULE_OPENTHREAD_FTD
                     unsigned irq_state = irq_disable();
                     ((at86rf2xx_t *)dev)->pending_irq++;
                     irq_restore(irq_state);
-    #endif
+//    #endif
                     if (msg_send(&msg, openthread_get_event_pid()) <= 0) {
                         printf("ot_event: possibly lost radio interrupt.\n");
-    #ifdef MODULE_OPENTHREAD_FTD
+//    #ifdef MODULE_OPENTHREAD_FTD
                         unsigned irq_state = irq_disable();
                         ((at86rf2xx_t *)dev)->pending_irq--;
                         irq_restore(irq_state);
-    #endif
+//    #endif
                         // Event thread queue should NEVER be full...
                         assert(false);
                     } else {
@@ -224,9 +224,9 @@ void openthread_bootstrap(void)
 
     /* set openthread timer callback */
     ot_millitimer.callback = _millitimer_cb;
-#ifdef MODULE_OPENTHREAD_FTD
+//#ifdef MODULE_OPENTHREAD_FTD
     ot_microtimer.callback = _microtimer_cb;
-#endif
+//#endif
 
     // ot_event_thread_stack[0] = 0x42;
     // ot_event_thread_stack[1] = 0xA3;
