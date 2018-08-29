@@ -101,6 +101,7 @@ tcp_setpersist(struct tcpcb *tp)
 		tp->t_rxtshift++;
 }
 
+extern uint32_t totalRexmitCnt;
  /*
  * Tcp output routine: figure out what should be sent and send it.
  */
@@ -1283,6 +1284,11 @@ memsendfail:
 		th->th_seq = htonl(p->rxmit);
 		p->rxmit += len;
 		tp->sackhint.sack_bytes_rexmit += len;
+	}
+
+	/* samkumar: Check if this is a retransmission. */
+	if (len > 0 && !tcp_timer_active(tp, TT_PERSIST) && ntohl(th->th_seq) < tp->snd_max) {
+		totalRexmitCnt++;
 	}
 
 	th->th_ack = htonl(tp->rcv_nxt);

@@ -35,6 +35,9 @@
 #include "ot.h"
 #include "random.h"
 
+extern uint32_t radioLinkTx;
+extern uint32_t radioLinkRx;
+
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
@@ -503,6 +506,7 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
             _create_fake_ack_frame(false);
             radio_tx_cnt--;
             //printf("Done transmitting (success) %d\n", (int) (xtimer_now_usec64() / 1000));
+            radioLinkTx++;
             otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_COMPLETE_DATA_PENDING:
@@ -510,6 +514,7 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
             _create_fake_ack_frame(true);
             radio_tx_cnt--;
             //printf("Done transmitting (pending) %d\n", (int) (xtimer_now_usec64() / 1000));
+            radioLinkTx++;
             otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_NOACK:
@@ -559,6 +564,8 @@ void recv_pkt(otInstance *aInstance, netdev_t *dev)
         res = -1;
         goto exit;
     }
+
+    radioLinkRx++;
 
     /* Openthread needs a packet length with FCS included,
      * OpenThread do not use the data so we don't need to calculate FCS */

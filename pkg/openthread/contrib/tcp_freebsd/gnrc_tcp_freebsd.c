@@ -100,25 +100,31 @@ static char _timer_stack[GNRC_TCP_FREEBSD_STACK_SIZE];
 #define TCP_MIN_POLL_DELAY_MILLISECONDS 16
 
 static uint32_t tcp_get_poll_delay_milliseconds(int index) {
-    struct tcpcb* tp = &tcbs[index];
-    if (tp->t_srtt == 0) {
-        // No RTT estimate? Then start after 16 ms.
-        return TCP_MIN_POLL_DELAY_MILLISECONDS;
-    }
-    int srtt_minus_4rttvar_milliseconds = ((tp->t_srtt >> (TCP_RTT_SHIFT - TCP_DELTA_SHIFT)) - tp->t_rttvar) >> TCP_DELTA_SHIFT;
-    int half_rtt_milliseconds = tp->t_srtt >> (TCP_RTT_SHIFT + 1);
+    // struct tcpcb* tp = &tcbs[index];
+    // if (tp->t_srtt == 0) {
+    //     // No RTT estimate? Then start after 16 ms.
+    //     return TCP_MIN_POLL_DELAY_MILLISECONDS;
+    // }
+    // int srtt_minus_4rttvar_milliseconds = ((tp->t_srtt >> (TCP_RTT_SHIFT - TCP_DELTA_SHIFT)) - tp->t_rttvar) >> TCP_DELTA_SHIFT;
+    // int half_rtt_milliseconds = tp->t_srtt >> (TCP_RTT_SHIFT + 1);
+    //
+    // int poll_delay_milliseconds;
+    // if (srtt_minus_4rttvar_milliseconds < half_rtt_milliseconds) {
+    //     poll_delay_milliseconds = srtt_minus_4rttvar_milliseconds;
+    // } else {
+    //     poll_delay_milliseconds = half_rtt_milliseconds;
+    // }
+    //
+    // if (poll_delay_milliseconds < TCP_MIN_POLL_DELAY_MILLISECONDS) {
+    //     poll_delay_milliseconds = TCP_MIN_POLL_DELAY_MILLISECONDS;
+    // }
+    // return (uint32_t) poll_delay_milliseconds;
 
-    int poll_delay_milliseconds;
-    if (srtt_minus_4rttvar_milliseconds < half_rtt_milliseconds) {
-        poll_delay_milliseconds = srtt_minus_4rttvar_milliseconds;
-    } else {
-        poll_delay_milliseconds = half_rtt_milliseconds;
-    }
-
-    if (poll_delay_milliseconds < TCP_MIN_POLL_DELAY_MILLISECONDS) {
-        poll_delay_milliseconds = TCP_MIN_POLL_DELAY_MILLISECONDS;
-    }
-    return (uint32_t) poll_delay_milliseconds;
+    /*
+     * For the benchmarks against CoAP, just wait the fast poll interval
+     * before beginning to poll.
+     */
+    return TCP_FAST_POLL_MILLISECONDS;
 }
 
 static int current_poll_state = TCP_NO_POLL;
@@ -338,8 +344,8 @@ void on_state_change(struct tcpcb* tp, int newstate) {
     }
 }
 
-int sent_pkts = 0;
-int recv_pkts = 0;
+extern uint32_t transportPacketsSent;
+extern uint32_t transportPacketsReceived;
 int bad_cksum_pkts = 0;
 
 /**
@@ -405,7 +411,7 @@ void tcp_freebsd_receive(void* iphdr, otMessage* message, otMessageInfo* info)
         goto done;
     }
 
-    recv_pkts++;
+    transportPacketsReceived++;
 
     sport = th->th_sport; // network byte order
     dport = th->th_dport; // network byte order
@@ -674,7 +680,7 @@ done:
     return rv;
 }
 
-error_t asock_send_impl(int asockid, const uint8_t* data, size_t len, int moretocome, size_t* bytessent)
+error_t asock_send_impl(int asockid, const uint8_t* data, size_t len, int moretocome, size_t* bytessent, bool* wasempty)
 {
     error_t rv;
     struct tcpcb* tp = &tcbs[asockid];
@@ -760,7 +766,7 @@ void free_message(otMessage* pkt) {
 void send_message(otMessage* pkt, otMessageInfo* info)
 {
     DEBUG("Sending TCP message: %p %p, payload_size = %d\n", pkt, info, otMessageGetLength(pkt));
-    sent_pkts++;
+    transportPacketsSent++;
     otInstance* instance = openthread_get_instance();
     otIp6SendAsTransport(instance, pkt, info, 6);
 }

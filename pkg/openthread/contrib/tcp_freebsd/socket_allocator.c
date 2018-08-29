@@ -253,14 +253,14 @@ int bsdtcp_listen(int fd)
     return psock_listen_impl(fd);
 }
 
-int bsdtcp_send(int fd, const void* data, size_t len, size_t* bytessent)
+int bsdtcp_send(int fd, const void* data, size_t len, size_t* bytessent, bool* wasempty)
 {
     bool passive;
     fd = decode_fd(fd, &passive);
     if (fd == -1 || passive) {
         return EBADF;
     }
-    return asock_send_impl(fd, data, len, 0, bytessent);
+    return asock_send_impl(fd, data, len, 0, bytessent, wasempty);
 }
 
 int bsdtcp_receive(int fd, uint8_t* buffer, size_t length, size_t* numbytes)

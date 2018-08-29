@@ -220,6 +220,7 @@ cc_conn_init(struct tcpcb *tp)
     printf("TCP CC_INIT %u %d %d\n", (unsigned int) get_micros(), (int) tp->snd_cwnd, (int) tp->snd_ssthresh);
 }
 
+extern uint32_t timeoutRexmitCnt;
 void inline
 cc_cong_signal(struct tcpcb *tp, struct tcphdr *th, uint32_t type)
 {
@@ -248,6 +249,8 @@ cc_cong_signal(struct tcpcb *tp, struct tcphdr *th, uint32_t type)
 		tp->snd_ssthresh = max(2, min(tp->snd_wnd, tp->snd_cwnd) / 2 /
 		    tp->t_maxseg) * tp->t_maxseg;
 		tp->snd_cwnd = tp->t_maxseg;
+
+        timeoutRexmitCnt++;
 #ifdef INSTRUMENT_TCP
         printf("TCP CC_RTO %u %d %d\n", (unsigned int) get_micros(), (int) tp->snd_cwnd, (int) tp->snd_ssthresh);
 #endif

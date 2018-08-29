@@ -669,6 +669,8 @@ int sock_tcp_freebsd_recv(sock_tcp_freebsd_t *conn, void *data, size_t max_len)
  * Otherwise, the TCP stack is provided a reference to the buffer, with no
  * extra space.
  */
+extern uint32_t sendBatchSliding;
+extern uint32_t sendBatch;
 int sock_tcp_freebsd_send(sock_tcp_freebsd_t *conn, const void* data, size_t len)
 {
     int error = 0;
@@ -682,15 +684,26 @@ int sock_tcp_freebsd_send(sock_tcp_freebsd_t *conn, const void* data, size_t len
 
     const uint8_t* buffer = data;
 
+    bool firstTry = true;
+
     while (len > 0) {
         /*
          * Try sending the data, and see if we can send all of it.
          */
         size_t bytessent;
-        error = bsdtcp_send(conn->sfields.active.asock, buffer, len, &bytessent);
+        bool wasempty;
+        error = bsdtcp_send(conn->sfields.active.asock, buffer, len, &bytessent, &wasempty);
         if (error != 0) {
             goto unlockreturn;
         }
+
+        if (firstTry) {
+            if (!wasempty) {
+                sendBatchSliding++;
+            }
+            sendBatch++;
+        }
+        firstTry = false;
 
         buffer += bytessent;
         len -= bytessent;

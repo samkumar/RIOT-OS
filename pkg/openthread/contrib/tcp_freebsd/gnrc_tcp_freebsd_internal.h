@@ -118,7 +118,7 @@ error_t asock_bind_impl(int asockid, const struct in6_addr* addr, uint16_t port)
 error_t psock_bind_impl(int psockid, const struct in6_addr* addr, uint16_t port);
 error_t psock_listen_impl(int psockid);
 error_t asock_connect_impl(int asockid, struct sockaddr_in6* addr, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
-error_t asock_send_impl(int asockid, const uint8_t* data, size_t len, int moretocome, size_t* status);
+error_t asock_send_impl(int asockid, const uint8_t* data, size_t len, int moretocome, size_t* status, bool* wasempty);
 error_t asock_receive_impl(int asockid, uint8_t* buffer, uint32_t len, size_t* bytesrcvd);
 error_t asock_shutdown_impl(int asockid, bool shut_rd, bool shut_wr);
 error_t psock_close_impl(int psockid);

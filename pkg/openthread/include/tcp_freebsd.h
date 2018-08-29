@@ -59,7 +59,7 @@ int bsdtcp_set_ctx(int fd, void* newctx);
 int bsdtcp_bind(int fd, const struct in6_addr* address, uint16_t port);
 int bsdtcp_connect(int fd, struct sockaddr_in6* faddrport, uint8_t* sendbuf, size_t sendbuflen, uint8_t* recvbuf, size_t recvbuflen, uint8_t* reassbmp);
 int bsdtcp_listen(int fd);
-int bsdtcp_send(int fd, const void* data, size_t length, size_t* bytessent);
+int bsdtcp_send(int fd, const void* data, size_t length, size_t* bytessent, bool* wasempty);
 int bsdtcp_receive(int fd, uint8_t* buffer, size_t length, size_t* numbytes);
 int bsdtcp_shutdown(int fd, int how);
 int bsdtcp_close(int fd);
