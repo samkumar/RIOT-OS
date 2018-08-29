@@ -75,6 +75,7 @@ uint8_t tcp_poll_state[1 + ((GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS-1) >> 2)]; //tw
  */
 static struct task_sched tcp_timer_sched;
 struct task tcp_timers[GNRC_TCP_FREEBSD_NUM_TIMERS + GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS];
+bool fast_poll_scheduled[GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS];
 
 /**
  * @brief   Allocate memory for the TCP thread's stack
@@ -153,6 +154,7 @@ static void tcp_set_poll_state(int index, uint8_t state) {
     uint8_t shift = (index & 0x3) << 1;
     uint8_t masked = byte & (0xFF << shift);
 
+    fast_poll_scheduled[index] = false;
     if (cancel_task(&tcp_timer_sched, GNRC_TCP_FREEBSD_NUM_TIMERS + index) != 0) {
         DEBUG("cancel_task failed!\n");
     }
@@ -167,6 +169,7 @@ static void tcp_set_poll_state(int index, uint8_t state) {
 static void tcp_fast_poll_timed(int index) {
     uint32_t poll_delay_milliseconds = tcp_get_poll_delay_milliseconds(index);
     printf("Delaying for %d milliseconds\n", (int) poll_delay_milliseconds);
+    fast_poll_scheduled[index] = true;
     if (sched_task(&tcp_timer_sched, GNRC_TCP_FREEBSD_NUM_TIMERS + index, poll_delay_milliseconds * 1000) != 0) {
         DEBUG("sched_task failed!\n");
     }
@@ -213,7 +216,10 @@ static void _handle_timer(int timer_id)
 
     } else {
         // Poll timer
-        tcp_set_poll_state(timer_id - GNRC_TCP_FREEBSD_NUM_TIMERS, TCP_FAST_POLL);
+        int asockid = timer_id - GNRC_TCP_FREEBSD_NUM_TIMERS;
+        if (fast_poll_scheduled[asockid]) {
+            tcp_set_poll_state(asockid, TCP_FAST_POLL);
+        }
     }
 
     mutex_unlock(&tcp_lock);
@@ -530,6 +536,7 @@ int gnrc_tcp_freebsd_init(void)
         for (i = 0; i != GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS; i++) {
             tcbs[i].index = i;
             initialize_tcb(&tcbs[i], NULL, 0, NULL, 0, NULL, 0, NULL);
+            fast_poll_scheduled[i] = false;
         }
         for (i = 0; i != GNRC_TCP_FREEBSD_NUM_PASSIVE_SOCKETS; i++) {
             tcbls[i].t_state = TCPS_CLOSED;
@@ -676,7 +683,7 @@ error_t asock_send_impl(int asockid, const uint8_t* data, size_t len, int moreto
     bool was_empty = cbuf_empty(&tp->sendbuf);
     rv = (error_t) tcp_usr_send(tp, moretocome, data, len, bytessent);
     if (was_empty && !cbuf_empty(&tp->sendbuf)) {
-        printf("rtt = %d, rttvar = %d\n", tp->t_srtt >> TCP_RTT_SHIFT, tp->t_rttvar >> TCP_RTTVAR_SHIFT);
+        //printf("rtt = %d, rttvar = %d\n", tp->t_srtt >> TCP_RTT_SHIFT, tp->t_rttvar >> TCP_RTTVAR_SHIFT);
         tcp_fast_poll_timed(asockid);
     }
     mutex_unlock(&tcp_lock);
