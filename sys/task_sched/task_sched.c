@@ -201,21 +201,23 @@ static int _sched_task(struct task_sched* sched, int taskid, bool cancel,
      * event fires (unless we're in the precessing loop; then we'll check
      * anyway, so don't bother with sending a message).
      */
-    if (!sched->_in_process_loop && sched->_first != -1
+    if (!sched->_in_process_loop
         && (sched->_first == taskid || oldfirst == taskid)) {
 
         xtimer_remove(&sched->_timer);
 
-        // If the next event is sufficiently close, just fire it.
-        if (0 <= (int64_t) (now - sched->tasks[sched->_first]._min_exec_time)) {
-            DEBUG("Firing immediately\n");
-            msg_try_send(&expired, sched->_pid);
-        } else {
-            uint64_t delay_to_first = (uint64_t)
-                (sched->tasks[sched->_first]._req_exec_time - now);
-            DEBUG("Scheduled in %d milliseconds\n", (int) (delay_to_first / 1000));
-            xtimer_set_msg64(&sched->_timer, delay_to_first, &expired,
-                             sched->_pid);
+        if (sched->_first != -1) {
+            // If the next event is sufficiently close, just fire it.
+            if (0 <= (int64_t) (now - sched->tasks[sched->_first]._min_exec_time)) {
+                DEBUG("Firing immediately\n");
+                msg_try_send(&expired, sched->_pid);
+            } else {
+                uint64_t delay_to_first = (uint64_t)
+                    (sched->tasks[sched->_first]._req_exec_time - now);
+                DEBUG("Scheduled in %d milliseconds\n", (int) (delay_to_first / 1000));
+                xtimer_set_msg64(&sched->_timer, delay_to_first, &expired,
+                                 sched->_pid);
+            }
         }
     }
 
