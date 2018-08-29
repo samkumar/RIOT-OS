@@ -142,9 +142,6 @@ static int _msg_send(msg_t *m, kernel_pid_t target_pid, bool block, unsigned sta
         }
         else {
             newstatus = STATUS_SEND_BLOCKED;
-if (me->pid == 5) {
-    printf("weird!!\n");
-}
         }
 
         sched_set_status((thread_t*) me, newstatus);

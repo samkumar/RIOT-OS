@@ -59,7 +59,7 @@ enum tcp_subr_consts {
 
 enum tcp_timer_consts {
 //    V_tcp_v6pmtud_blackhole_mss = FRAMECAP_6LOWPAN - sizeof(struct ip6_hdr) - sizeof(struct tcphdr), // Doesn't matter unless blackhole_detect is 1.
-    tcp_rexmit_drop_options = 1, // drop options after a few retransmits
+    tcp_rexmit_drop_options = 0, // drop options after a few retransmits
     always_keepalive = 1,
 };
 
