@@ -140,7 +140,7 @@ static void _update_tcp_poll_state(void) {
         }
     }
     if (new_state != current_poll_state) {
-        printf("[tcp] Switching poll state: %d -> %d\n", current_poll_state, new_state);
+        DEBUG("[tcp] Switching poll state: %d -> %d\n", current_poll_state, new_state);
         current_poll_state = new_state;
         switch (current_poll_state) {
             case TCP_NO_POLL:
@@ -174,7 +174,7 @@ static void tcp_set_poll_state(int index, uint8_t state) {
 
 static void tcp_fast_poll_timed(int index) {
     uint32_t poll_delay_milliseconds = tcp_get_poll_delay_milliseconds(index);
-    printf("Delaying for %d milliseconds\n", (int) poll_delay_milliseconds);
+    DEBUG("Delaying for %d milliseconds\n", (int) poll_delay_milliseconds);
     fast_poll_scheduled[index] = true;
     if (sched_task(&tcp_timer_sched, GNRC_TCP_FREEBSD_NUM_TIMERS + index, poll_delay_milliseconds * 1000) != 0) {
         DEBUG("sched_task failed!\n");
