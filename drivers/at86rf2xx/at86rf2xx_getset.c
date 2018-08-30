@@ -94,7 +94,7 @@ static const uint8_t dbm_to_tx_pow[] = {0x0f, 0x0f, 0x0f, 0x0e, 0x0e, 0x0e,
 #endif
 
 #ifdef RADIO_DUTYCYCLE_MONITOR
-static uint32_t prev = 0;
+uint32_t radio_dutycycle_prev = 0;
 #endif
 
 uint16_t at86rf2xx_get_addr_short(at86rf2xx_t *dev)
@@ -525,33 +525,33 @@ uint8_t at86rf2xx_set_state(at86rf2xx_t *dev, uint8_t state)
     else if (old_state == AT86RF2XX_STATE_SLEEP) {
         DEBUG("at86rf2xx: waking up from sleep mode\n");
 #ifdef RADIO_DUTYCYCLE_MONITOR
-        if (prev == 0) {
-            prev = xtimer_now().ticks32;
+        if (radio_dutycycle_prev == 0) {
+            radio_dutycycle_prev = xtimer_now().ticks32;
         } else {
             uint32_t now = xtimer_now().ticks32;
-            radioOffTime += (now - prev);
-            prev = now;
+            radioOffTime += (now - radio_dutycycle_prev);
+            radio_dutycycle_prev = now;
         }
 #endif
         at86rf2xx_assert_awake(dev);
     }
 
     if (state == AT86RF2XX_STATE_SLEEP) {
-#ifdef RADIO_DUTYCYCLE_MONITOR
-        if (prev == 0) {
-            prev = xtimer_now().ticks32;
-        } else {
-            uint32_t now = xtimer_now().ticks32;
-            radioOnTime += (now - prev);
-            prev = now;
-        }
-#endif
         /* First go to TRX_OFF */
         at86rf2xx_set_state(dev, AT86RF2XX_STATE_FORCE_TRX_OFF);
         /* Discard all IRQ flags, framebuffer is lost anyway */
         at86rf2xx_reg_read(dev, AT86RF2XX_REG__IRQ_STATUS);
         /* Go to SLEEP mode from TRX_OFF */
         gpio_set(dev->params.sleep_pin);
+#ifdef RADIO_DUTYCYCLE_MONITOR
+        if (radio_dutycycle_prev == 0) {
+            radio_dutycycle_prev = xtimer_now().ticks32;
+        } else {
+            uint32_t now = xtimer_now().ticks32;
+            radioOnTime += (now - radio_dutycycle_prev);
+            radio_dutycycle_prev = now;
+        }
+#endif
         dev->state = state;
     } else {
         _set_state(dev, state, state);

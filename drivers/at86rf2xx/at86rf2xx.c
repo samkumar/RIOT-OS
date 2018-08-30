@@ -31,6 +31,7 @@
 #include "at86rf2xx_registers.h"
 #include "at86rf2xx_internal.h"
 #include "at86rf2xx_netdev.h"
+#include "xtimer.h"
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -174,6 +175,10 @@ size_t at86rf2xx_send(at86rf2xx_t *dev, uint8_t *data, size_t len)
     return len;
 }
 
+#ifdef RADIO_DUTYCYCLE_MONITOR
+extern uint32_t radio_dutycycle_prev;
+#endif
+
 extern volatile uint8_t radio_send_state;
 
 bool at86rf2xx_tx_prepare(at86rf2xx_t *dev)
@@ -217,6 +222,12 @@ bool at86rf2xx_tx_prepare(at86rf2xx_t *dev)
     /*
      * Now, try to transition to TX state.
      */
+#ifdef RADIO_DUTYCYCLE_MONITOR
+    uint32_t transitionStartTime = 0;
+    if (old_state == AT86RF2XX_STATE_SLEEP) {
+        transitionStartTime = xtimer_now().ticks32;
+    }
+#endif
     at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_STATE, AT86RF2XX_STATE_TX_ARET_ON);
     do {
         new_state = at86rf2xx_get_status(dev);
@@ -235,6 +246,24 @@ bool at86rf2xx_tx_prepare(at86rf2xx_t *dev)
         at86rf2xx_reg_write(dev, AT86RF2XX_REG__TRX_STATE, old_state);
         dev->pending_tx--;
         return false;
+    }
+    /*
+     * We have transitioned state, so keep track of radio duty cycle.
+     * This is probably not needed, since OpenThread will put is in listen
+     * mode before sending. But, it's good to have anyway, just in case.
+     */
+    if (old_state == AT86RF2XX_STATE_SLEEP) {
+        DEBUG("at86rf2xx: waking up from sleep mode\n");
+#ifdef RADIO_DUTYCYCLE_MONITOR
+        assert(transitionStartTime != 0);
+        if (radio_dutycycle_prev == 0) {
+            radio_dutycycle_prev = transitionStartTime;
+        } else {
+            uint32_t now = transitionStartTime;
+            radioOffTime += (now - radio_dutycycle_prev);
+            radio_dutycycle_prev = now;
+        }
+#endif
     }
     dev->state = new_state;
     DEBUG("[at86rf2xx] send: 0x%x -> 0x%x\n", old_state, new_state);
