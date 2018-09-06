@@ -42,6 +42,24 @@
 
 msg_t expired = { 0, 0, { 0 } };
 
+static void _sched_timer(struct task_sched* sched, uint64_t now) {
+    xtimer_remove(&sched->_timer);
+
+    if (sched->_first != -1) {
+        // If the next event is sufficiently close, just fire it.
+        if (-TASK_SCHED_MIN_TOLERANCE <= (int64_t) (now - sched->tasks[sched->_first]._min_exec_time)) {
+            DEBUG("Firing immediately\n");
+            msg_try_send(&expired, sched->_pid);
+        } else {
+            uint64_t delay_to_first = (uint64_t)
+                (sched->tasks[sched->_first]._req_exec_time - now);
+            DEBUG("Scheduled in %d milliseconds\n", (int) (delay_to_first / 1000));
+            xtimer_set_msg64(&sched->_timer, delay_to_first, &expired,
+                             sched->_pid);
+        }
+    }
+}
+
 void* _task_sched(void* arg)
 {
     struct task_sched* sched = arg;
@@ -59,7 +77,7 @@ void* _task_sched(void* arg)
         sched->_in_process_loop = true;
 
         while (sched->_first != -1
-                && 0 <= (int64_t) (xtimer_now_usec64() - sched->tasks[sched->_first]._min_exec_time)) {
+                && -TASK_SCHED_MIN_TOLERANCE <= (int64_t) (xtimer_now_usec64() - sched->tasks[sched->_first]._min_exec_time)) {
             int taskid = sched->_first;
             struct task* t = &sched->tasks[sched->_first];
 
@@ -80,12 +98,7 @@ void* _task_sched(void* arg)
         }
 
         /* Schedule the next timer, if any. */
-        xtimer_remove(&sched->_timer);
-        if (sched->_first != -1) {
-            uint64_t until_next = (uint64_t)
-                (sched->tasks[sched->_first]._req_exec_time - xtimer_now_usec64());
-            xtimer_set_msg64(&sched->_timer, until_next, &expired, sched->_pid);
-        }
+        _sched_timer(sched, xtimer_now_usec64());
 
         sched->_in_process_loop = false;
         mutex_unlock(&sched->_lock);
@@ -203,22 +216,7 @@ static int _sched_task(struct task_sched* sched, int taskid, bool cancel,
      */
     if (!sched->_in_process_loop
         && (sched->_first == taskid || oldfirst == taskid)) {
-
-        xtimer_remove(&sched->_timer);
-
-        if (sched->_first != -1) {
-            // If the next event is sufficiently close, just fire it.
-            if (0 <= (int64_t) (now - sched->tasks[sched->_first]._min_exec_time)) {
-                DEBUG("Firing immediately\n");
-                msg_try_send(&expired, sched->_pid);
-            } else {
-                uint64_t delay_to_first = (uint64_t)
-                    (sched->tasks[sched->_first]._req_exec_time - now);
-                DEBUG("Scheduled in %d milliseconds\n", (int) (delay_to_first / 1000));
-                xtimer_set_msg64(&sched->_timer, delay_to_first, &expired,
-                                 sched->_pid);
-            }
-        }
+        _sched_timer(sched, now);
     }
 
     mutex_unlock(&sched->_lock);

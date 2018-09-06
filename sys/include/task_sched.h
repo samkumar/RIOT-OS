@@ -33,6 +33,8 @@
 #include <stdint.h>
 #include <xtimer.h>
 
+#define TASK_SCHED_MIN_TOLERANCE 500
+
 struct task {
     /* All fields are for internal use by the task_sched module. */
     uint64_t _min_exec_time;
