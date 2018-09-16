@@ -511,7 +511,7 @@ static void link_delay_timeout(void* arg) {
             link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
             link_retry_msg.content.value = 0;
             link_retry_in_queue = true;
-            if (msg_send_int(&link_retry_msg, openthread_get_task_pid()) == 0) {
+            if (msg_send(&link_retry_msg, openthread_get_task_pid()) == 0) {
                 /* Should not happen! */
                 assert(false);
                 for (;;) {}
@@ -588,14 +588,14 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
             {
                 uint32_t link_delay;
                 if (current_packet_is_indirect) {
-                    link_delay = random_uint32_range(0, OPENTHREAD_CONFIG_LINK_RETRY_DELAY_DIRECT);
+                    link_delay = random_uint32_range(200, OPENTHREAD_CONFIG_LINK_RETRY_DELAY_DIRECT);
                 } else {
-                    link_delay = random_uint32_range(0, OPENTHREAD_CONFIG_LINK_RETRY_DELAY_INDIRECT);
+                    link_delay = random_uint32_range(200, OPENTHREAD_CONFIG_LINK_RETRY_DELAY_INDIRECT);
                 }
                 link_retry_timer.callback = link_delay_timeout;
                 unsigned state = irq_disable();
-                xtimer_set(&link_retry_timer, link_delay);
                 link_retry_timer_pending = true;
+                xtimer_set(&link_retry_timer, link_delay);
                 irq_restore(state);
             }
             break;
