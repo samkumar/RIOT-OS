@@ -494,6 +494,57 @@ static inline void _create_fake_ack_frame(bool ackPending)
     sAckFrame.mRssi = OT_RADIO_RSSI_INVALID;
 }
 
+#ifdef OPENTHREAD_CONFIG_LINK_RETRY_DELAY
+static xtimer_t link_retry_timer;
+static volatile bool link_retry_timer_pending = false;
+static void link_delay_timeout(void* arg) {
+    (void) arg;
+    msg_t link_retry_msg;
+    link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
+    link_retry_msg.content.value = 0;
+    link_retry_timer_pending = false;
+    if (msg_send_int(&link_retry_msg, openthread_get_task_pid()) == 0) {
+        /* Should not happen! */
+        assert(false);
+        for (;;) {}
+    }
+}
+
+volatile uint16_t cancelled_seqno = 0xFFFF;
+volatile bool frame_cancelled = false;
+void cancel_frame(uint8_t dataSequenceNumber) {
+    int state = irq_disable();
+
+    cancelled_seqno = dataSequenceNumber;
+    frame_cancelled = true;
+
+    if (link_retry_timer_pending) {
+        xtimer_remove(&link_retry_timer);
+        irq_restore(state);
+
+        link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
+        link_retry_msg.content.value = 0;
+        link_retry_timer_pending = false;
+        if (msg_send(&link_retry_msg, openthread_get_task_pid()) == 0) {
+            /* Should not happen! */
+            assert(false);
+            for (;;) {}
+        }
+    } else {
+        irq_restore(state);
+    }
+}
+
+bool check_cancelled_frame(uint8_t dataSequenceNumber) {
+    if (frame_cancelled /*&& dataSequenceNumber == canceled_seqno*/) {
+        cancelled_seqno = 0xFFFF;
+        frame_cancelled = false;
+        return true;
+    }
+    return false;
+}
+#endif
+
 /* Called upon TX event */
 /* NOTE: the coarse_mutex must be held by the _caller_ of this function. */
 void sent_pkt(otInstance *aInstance, netdev_event_t event)
@@ -521,11 +572,9 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
             DEBUG("TX_NOACK\n");
 #ifdef OPENTHREAD_CONFIG_LINK_RETRY_DELAY
             {
-
-                link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
-                link_retry_msg.content.value = 0;
                 uint32_t link_delay = random_uint32_range(0, OPENTHREAD_CONFIG_LINK_RETRY_DELAY);
-                xtimer_set_msg(&link_retry_timer, link_delay, &link_retry_msg, openthread_get_task_pid());
+                link_retry_timer.callback = link_delay_timeout;
+                xtimer_set(&link_retry_timer, link_delay);
             }
             break;
 #endif
