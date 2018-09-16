@@ -504,16 +504,18 @@ static volatile bool link_retry_timer_pending = false;
 extern volatile bool link_retry_in_queue;
 static void link_delay_timeout(void* arg) {
     (void) arg;
-    link_retry_timer_pending = false;
-    if (!link_retry_in_queue) {
-        msg_t link_retry_msg;
-        link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
-        link_retry_msg.content.value = 0;
-        link_retry_in_queue = true;
-        if (msg_send_int(&link_retry_msg, openthread_get_task_pid()) == 0) {
-            /* Should not happen! */
-            assert(false);
-            for (;;) {}
+    if (link_retry_timer_pending) {
+        link_retry_timer_pending = false;
+        if (radio_tx_cnt > 0 && !link_retry_in_queue) {
+            msg_t link_retry_msg;
+            link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
+            link_retry_msg.content.value = 0;
+            link_retry_in_queue = true;
+            if (msg_send_int(&link_retry_msg, openthread_get_task_pid()) == 0) {
+                /* Should not happen! */
+                assert(false);
+                for (;;) {}
+            }
         }
     }
 }
@@ -530,7 +532,7 @@ void cancel_frame(uint8_t dataSequenceNumber) {
         xtimer_remove(&link_retry_timer);
         link_retry_timer_pending = false;
 
-        if (!link_retry_in_queue) {
+        if (radio_tx_cnt > 0 && !link_retry_in_queue) {
             msg_t link_retry_msg;
             link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
             link_retry_msg.content.value = 0;
