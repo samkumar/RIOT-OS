@@ -33,6 +33,7 @@ static kernel_pid_t _task_pid;
 
 volatile bool otTaskPending = false;
 volatile bool otSendDonePending = false;
+volatile bool link_retry_in_queue = false;
 
 /* get OpenThread Task Thread pid */
 kernel_pid_t openthread_get_task_pid(void) {
@@ -104,6 +105,11 @@ static void *_openthread_task_thread(void *arg) {
                 break;
             case OPENTHREAD_LINK_RETRY_TIMEOUT:
                 DEBUG("\not_task: OPENTHREAD_LINK_RETRY_TIMEOUT\n");
+                {
+                    unsigned state = irq_disable();
+                    link_retry_in_queue = false;
+                    irq_restore(state);
+                }
                 sent_pkt(openthread_get_instance(), NETDEV_EVENT_TX_FAIL);
                 break;
             default:

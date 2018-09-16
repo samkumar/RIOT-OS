@@ -54,7 +54,6 @@ static uint8_t ack_buf[IEEE802154_ACK_LENGTH];
 
 #ifdef OPENTHREAD_CONFIG_LINK_RETRY_DELAY
 static xtimer_t link_retry_timer;
-static msg_t link_retry_msg;
 #endif
 
 static struct iovec pkt;
@@ -277,6 +276,11 @@ otError otPlatRadioGetTransmitPower(otInstance *aInstance, int8_t *aPower)
 
 volatile uint32_t radio_tx_cnt = 0; // for assertions
 volatile int radio_send_rv = 0; // for debugging in case an assertion fails
+bool current_packet_is_indirect = false;
+
+void set_current_packet_is_indirect(bool value) {
+    current_packet_is_indirect = value;
+}
 
 /* OpenThread will call this for transmitting a packet*/
 otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aPacket)
@@ -497,16 +501,20 @@ static inline void _create_fake_ack_frame(bool ackPending)
 #ifdef OPENTHREAD_CONFIG_LINK_RETRY_DELAY
 static xtimer_t link_retry_timer;
 static volatile bool link_retry_timer_pending = false;
+extern volatile bool link_retry_in_queue;
 static void link_delay_timeout(void* arg) {
     (void) arg;
-    msg_t link_retry_msg;
-    link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
-    link_retry_msg.content.value = 0;
     link_retry_timer_pending = false;
-    if (msg_send_int(&link_retry_msg, openthread_get_task_pid()) == 0) {
-        /* Should not happen! */
-        assert(false);
-        for (;;) {}
+    if (!link_retry_in_queue) {
+        msg_t link_retry_msg;
+        link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
+        link_retry_msg.content.value = 0;
+        link_retry_in_queue = true;
+        if (msg_send_int(&link_retry_msg, openthread_get_task_pid()) == 0) {
+            /* Should not happen! */
+            assert(false);
+            for (;;) {}
+        }
     }
 }
 
@@ -520,19 +528,23 @@ void cancel_frame(uint8_t dataSequenceNumber) {
 
     if (link_retry_timer_pending) {
         xtimer_remove(&link_retry_timer);
-        irq_restore(state);
-
-        link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
-        link_retry_msg.content.value = 0;
         link_retry_timer_pending = false;
-        if (msg_send(&link_retry_msg, openthread_get_task_pid()) == 0) {
-            /* Should not happen! */
-            assert(false);
-            for (;;) {}
+
+        if (!link_retry_in_queue) {
+            msg_t link_retry_msg;
+            link_retry_msg.type = OPENTHREAD_LINK_RETRY_TIMEOUT;
+            link_retry_msg.content.value = 0;
+            link_retry_in_queue = true;
+            irq_restore(state);
+            if (msg_send(&link_retry_msg, openthread_get_task_pid()) == 0) {
+                /* Should not happen! */
+                assert(false);
+                for (;;) {}
+            }
+            return;
         }
-    } else {
-        irq_restore(state);
     }
+    irq_restore(state);
 }
 
 bool check_cancelled_frame(uint8_t dataSequenceNumber) {
@@ -572,9 +584,17 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
             DEBUG("TX_NOACK\n");
 #ifdef OPENTHREAD_CONFIG_LINK_RETRY_DELAY
             {
-                uint32_t link_delay = random_uint32_range(0, OPENTHREAD_CONFIG_LINK_RETRY_DELAY);
+                uint32_t link_delay;
+                if (current_packet_is_indirect) {
+                    link_delay = random_uint32_range(0, OPENTHREAD_CONFIG_LINK_RETRY_DELAY_DIRECT);
+                } else {
+                    link_delay = random_uint32_range(0, OPENTHREAD_CONFIG_LINK_RETRY_DELAY_INDIRECT);
+                }
                 link_retry_timer.callback = link_delay_timeout;
+                unsigned state = irq_disable();
                 xtimer_set(&link_retry_timer, link_delay);
+                link_retry_timer_pending = true;
+                irq_restore(state);
             }
             break;
 #endif
