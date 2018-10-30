@@ -529,7 +529,11 @@ uint8_t at86rf2xx_set_state(at86rf2xx_t *dev, uint8_t state)
             radio_dutycycle_prev = xtimer_now().ticks32;
         } else {
             uint32_t now = xtimer_now().ticks32;
-            radioOffTime += (now - radio_dutycycle_prev);
+            if (now - radio_dutycycle_prev <= 0x80000000u) {
+                radioOffTime += (now - radio_dutycycle_prev);
+            } else {
+                // What to do in this case?
+            }
             radio_dutycycle_prev = now;
         }
 #endif
@@ -548,7 +552,9 @@ uint8_t at86rf2xx_set_state(at86rf2xx_t *dev, uint8_t state)
             radio_dutycycle_prev = xtimer_now().ticks32;
         } else {
             uint32_t now = xtimer_now().ticks32;
-            radioOnTime += (now - radio_dutycycle_prev);
+            if (now - radio_dutycycle_prev <= 0x80000000u) {
+                radioOnTime += (now - radio_dutycycle_prev);
+            }
             radio_dutycycle_prev = now;
         }
 #endif

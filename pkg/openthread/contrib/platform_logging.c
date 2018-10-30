@@ -39,7 +39,7 @@
 
 void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion, const char *aFormat, ...)
 {
-    if (aLogRegion == OT_LOG_REGION_MEM) {
+    if (aLogRegion == OT_LOG_REGION_MEM || aLogRegion == OT_LOG_REGION_MLE) {
 #if OPENTHREAD_ENABLE_CLI_LOGGING
     va_list args;
     va_start(args, aFormat);

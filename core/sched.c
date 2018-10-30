@@ -133,7 +133,12 @@ int __attribute__((used)) sched_run(void)
                 if (active_thread->priority == THREAD_PRIORITY_IDLE) {
                     cpuOffTime += (uint64_t)(now - active_stat->laststart);
                 } else {
-                    cpuOnTime += (uint64_t)(now - active_stat->laststart);
+                    if (now - active_stat->laststart > 0x8000000u) {
+                        // What to do?
+                        //printf("Warning: overflowing by %u\n", active_stat->laststart - now);
+                    } else {
+                        cpuOnTime += (uint64_t)(now - active_stat->laststart);
+                    }
                 }
             }
             if (active_thread->priority != THREAD_PRIORITY_IDLE && 

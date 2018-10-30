@@ -443,6 +443,7 @@ tcp_timer_rexmt(struct tcpcb *tp)
 	 * been acked within retransmit interval.  Back off
 	 * to a longer retransmit interval and retransmit one segment.
 	 */
+        printf("rxtshift is %d\n", (int) tp->t_rxtshift);
 	if (++tp->t_rxtshift > TCP_MAXRXTSHIFT) {
 		tp->t_rxtshift = TCP_MAXRXTSHIFT;
 //		TCPSTAT_INC(tcps_timeoutdrop);
