@@ -41,7 +41,7 @@ struct buffers {
 };
 static struct buffers buffer_pool[NACTIVESOCKS];
 
-#define NPASSIVESOCKS 0
+#define NPASSIVESOCKS 1
 #define ACCEPT_QUEUE_LEN 4
 #define ACCEPT_QUEUE_SHIFT 2
 
