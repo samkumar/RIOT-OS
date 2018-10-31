@@ -497,6 +497,7 @@ int accept(int socket, struct sockaddr *restrict address,
                         res = -1;
                         break;
                     }
+                    ep.family = AF_INET6;
 #endif
                     sa.ss_family = s->domain;
                     sa_len = _ep_to_sockaddr(&ep, &sa);

@@ -28,8 +28,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "mutex.h"
+
 #define ENABLE_DEBUG (0)
 #include "debug.h"
+
+extern mutex_t tcp_lock;
 
 typedef struct asock {
     connectDone_t connectDone;
@@ -114,6 +118,7 @@ int alloc_pfd(void)
     return pfd + GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS;
 }
 
+extern struct tcpcb tcbs[GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS];
 int alloc_afd(void)
 {
     int afd;
@@ -123,7 +128,7 @@ int alloc_afd(void)
         // If that failed, try to get a socket in TIME-WAIT, and end the TIME-WAIT early.
         afd = alloc_fd(activemask, GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS, _active_istimewait);
         if (afd != -1) {
-            asock_abort_impl(afd);
+            tcp_usr_abort(&tcbs[afd]);
         }
     }
     return afd;
@@ -172,6 +177,7 @@ int decode_fd(int rawfd, bool* passive) {
 
 int bsdtcp_active_socket(connectDone_t cd, sendReady_t sr, receiveReady_t rr, connectionLost_t cl, void* ctx)
 {
+    mutex_lock(&tcp_lock);
     int fd = alloc_afd();
     if (fd != -1) {
         active_socket_t* asock = &activesockets[fd];
@@ -181,11 +187,13 @@ int bsdtcp_active_socket(connectDone_t cd, sendReady_t sr, receiveReady_t rr, co
         asock->connectionLost = cl;
         asock->context = ctx;
     }
+    mutex_unlock(&tcp_lock);
     return fd;
 }
 
 int bsdtcp_passive_socket(acceptReady_t ar, acceptDone_t ad, void* ctx)
 {
+    mutex_lock(&tcp_lock);
     int fd = alloc_pfd();
     int decoded_fd = fd - GNRC_TCP_FREEBSD_NUM_ACTIVE_SOCKETS;
     if (fd != -1) {
@@ -194,6 +202,7 @@ int bsdtcp_passive_socket(acceptReady_t ar, acceptDone_t ad, void* ctx)
         psock->acceptDone = ad;
         psock->context = ctx;
     }
+    mutex_unlock(&tcp_lock);
     return fd;
 }
 
