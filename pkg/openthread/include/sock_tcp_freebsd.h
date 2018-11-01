@@ -188,6 +188,7 @@ struct sock_tcp_freebsd {
         struct {
             int asock;
             bool is_connecting;
+            bool got_fin;
             cond_t connect_cond;
             cond_t receive_cond;
             cond_t send_cond;
