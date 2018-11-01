@@ -29,8 +29,8 @@
 #include "debug.h"
 
 #define NACTIVESOCKS 1
-#define SEND_BUF_LEN 3234/*2310*/
-#define RECV_BUF_LEN 10
+#define SEND_BUF_LEN 2311
+#define RECV_BUF_LEN 2311
 #define REASS_BMP_LEN ((RECV_BUF_LEN + 7) >> 3)
 
 struct buffers {
@@ -143,7 +143,6 @@ static void sock_tcp_freebsd_receiveReady(uint8_t ai, int gotfin, void* ctx)
 {
     // ctx might actually be NULL, in which case we just ignore this.
     (void) ai;
-    (void) gotfin;
     sock_tcp_freebsd_t* conn = ctx;
     if (conn == NULL) {
         // We got data on a socket on the accept queue that hasn't been accepted yet
@@ -152,6 +151,9 @@ static void sock_tcp_freebsd_receiveReady(uint8_t ai, int gotfin, void* ctx)
     mutex_lock(&conn->lock);
     assert(conn->hasactive && !conn->haspassive);
     conn->errstat = 0;
+    if (gotfin) {
+        conn->sfields.active.got_fin = true;
+    }
     cond_signal(&conn->sfields.active.receive_cond);
     mutex_unlock(&conn->lock);
 }
@@ -353,6 +355,7 @@ static bool sock_tcp_freebsd_active_set(sock_tcp_freebsd_t* conn, int asock)
         bsdtcp_bind(conn->sfields.active.asock, (struct in6_addr*) &conn->local_addr, conn->local_port);
 
         conn->sfields.active.is_connecting = false;
+        conn->sfields.active.got_fin = false;
         cond_init(&conn->sfields.active.connect_cond);
         cond_init(&conn->sfields.active.receive_cond);
         cond_init(&conn->sfields.active.send_cond);
@@ -641,7 +644,7 @@ int sock_tcp_freebsd_recv(sock_tcp_freebsd_t *conn, void *data, size_t max_len)
 
     conn->errstat = 0;
     error = bsdtcp_receive(conn->sfields.active.asock, data, max_len, &bytes_read);
-    while (bytes_read == 0 && error == 0 && conn->errstat == 0 && !bsdtcp_hasrcvdfin(conn->sfields.active.asock)) {
+    while (bytes_read == 0 && error == 0 && conn->errstat == 0 && !conn->sfields.active.got_fin && !bsdtcp_hasrcvdfin(conn->sfields.active.asock)) {
         cond_wait(&conn->sfields.active.receive_cond, &conn->lock);
         error = bsdtcp_receive(conn->sfields.active.asock, data, max_len, &bytes_read);
     }
