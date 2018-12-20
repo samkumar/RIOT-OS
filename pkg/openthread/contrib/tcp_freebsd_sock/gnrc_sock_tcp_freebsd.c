@@ -29,8 +29,8 @@
 #include "debug.h"
 
 #define NACTIVESOCKS 1
-#define SEND_BUF_LEN 3234/*2310*/
-#define RECV_BUF_LEN 10
+#define SEND_BUF_LEN 924
+#define RECV_BUF_LEN 924
 #define REASS_BMP_LEN ((RECV_BUF_LEN + 7) >> 3)
 
 struct buffers {

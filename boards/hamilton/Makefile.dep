@@ -7,8 +7,8 @@ ifneq (,$(filter saul_default,$(USEMODULE)))
 endif
 
 ifneq (,$(filter auto_init_saul,$(USEMODULE)))
-  USEMODULE += tmp006
-  USEMODULE += hdc1000
+  #USEMODULE += tmp006
+  #USEMODULE += hdc1000
   USEMODULE += fxos8700
   USEMODULE += apds9007
   USEMODULE += ekmb
