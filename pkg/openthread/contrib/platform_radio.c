@@ -528,6 +528,8 @@ void cancel_frame(uint8_t dataSequenceNumber) {
     cancelled_seqno = dataSequenceNumber;
     frame_cancelled = true;
 
+    DEBUG("tx_cnt = %d, pending = %d, in_queue = %d\n",  (int) radio_tx_cnt, (int) link_retry_timer_pending, (int) link_retry_in_queue);
+
     if (link_retry_timer_pending) {
         xtimer_remove(&link_retry_timer);
         link_retry_timer_pending = false;
@@ -583,14 +585,14 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
             otPlatRadioTxDone(aInstance, &sTransmitFrame, &sAckFrame, OT_ERROR_NONE);
             break;
         case NETDEV_EVENT_TX_NOACK:
-            DEBUG("TX_NOACK\n");
+             DEBUG("TX_NOACK\n");
 #ifdef OPENTHREAD_CONFIG_LINK_RETRY_DELAY
             {
                 uint32_t link_delay;
                 if (current_packet_is_indirect) {
-                    link_delay = random_uint32_range(200, OPENTHREAD_CONFIG_LINK_RETRY_DELAY_DIRECT);
+                    link_delay = random_uint32_range(500, OPENTHREAD_CONFIG_LINK_RETRY_DELAY_DIRECT);
                 } else {
-                    link_delay = random_uint32_range(200, OPENTHREAD_CONFIG_LINK_RETRY_DELAY_INDIRECT);
+                    link_delay = random_uint32_range(500, OPENTHREAD_CONFIG_LINK_RETRY_DELAY_INDIRECT);
                 }
                 link_retry_timer.callback = link_delay_timeout;
                 unsigned state = irq_disable();
@@ -603,7 +605,7 @@ void sent_pkt(otInstance *aInstance, netdev_event_t event)
             /* fallthrough intentional in #else case */
         case NETDEV_EVENT_TX_FAIL:
             radio_tx_cnt--;
-            //printf("Done transmitting (no ack) %d\n", (int) (xtimer_now_usec64() / 1000));
+            DEBUG("Done transmitting (no ack) %d\n", (int) (xtimer_now_usec64() / 1000));
             otPlatRadioTxDone(aInstance, &sTransmitFrame, NULL, OT_ERROR_NO_ACK);
             break;
         case NETDEV_EVENT_TX_MEDIUM_BUSY:
