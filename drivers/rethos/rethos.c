@@ -256,8 +256,11 @@ static void ethos_isr(void *arg, uint8_t c)
             sm_frame_start(dev);
             return;
         case RETHOS_FRAME_END:
-            sm_frame_end(dev);
-            return;
+            if (dev->fromstate == SM_IN_FRAME) {
+                sm_frame_end(dev);
+                return;
+            }
+            /* fallthrough intentional */
         default:
             //any other character is invalid
             sm_invalidate(dev);

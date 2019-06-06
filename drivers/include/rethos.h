@@ -56,11 +56,11 @@ so that implies that even the preamble needs to be escaped when written
 #endif
 
 #ifndef RETHOS_TX_BUF_SZ
-#define RETHOS_TX_BUF_SZ 512
+#define RETHOS_TX_BUF_SZ 400
 #endif
 
 #ifndef RETHOS_RX_BUF_SZ
-#define RETHOS_RX_BUF_SZ 512
+#define RETHOS_RX_BUF_SZ 256
 #endif
 
 #ifndef RETHOS_NUM_RX_CONTEXTS

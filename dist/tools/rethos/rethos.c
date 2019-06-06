@@ -92,10 +92,10 @@ struct {
 #define REXMIT_TIMER_TYPE 1
 
 /* Stats timeout is 15 seconds. Type is struct timespec. */
-#define STATS_TIMEOUT {(time_t) 5, 0L}
+#define STATS_TIMEOUT {(time_t) 15, 0L}
 
 /* Retransmission timeout is 40 ms. Type is struct timespec. */
-#define REXMIT_TIMEOUT {(time_t) 0, 40000000L}
+#define REXMIT_TIMEOUT {(time_t) 0, 100000000L}
 
 const struct itimerspec stats_timer_spec = { STATS_TIMEOUT, STATS_TIMEOUT };
 const struct itimerspec rexmit_timer_spec = { REXMIT_TIMEOUT, REXMIT_TIMEOUT };

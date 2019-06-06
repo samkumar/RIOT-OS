@@ -65,7 +65,7 @@ extern "C" {
 #define OPENTHREAD_SIZEOF_LENGTH_AND_FREEBUFF               (4U)
 #ifdef MODULE_OPENTHREAD_NCP_FTD
 /**< sizeof the serial buffer */
-#define OPENTHREAD_SERIAL_BUFFER_SIZE                       OPENTHREAD_SIZEOF_LENGTH_AND_FREEBUFF + 200
+#define OPENTHREAD_SERIAL_BUFFER_SIZE                       OPENTHREAD_SIZEOF_LENGTH_AND_FREEBUFF + 700
 #else
 /**< sizeof the serial buffer */
 #define OPENTHREAD_SERIAL_BUFFER_SIZE                       OPENTHREAD_SIZEOF_LENGTH_AND_FREEBUFF + 100
